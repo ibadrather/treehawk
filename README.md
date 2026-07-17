@@ -2,7 +2,7 @@
 
 **Watches your process tree like a hawk. Run any command and log CPU, RAM & GPU usage of it and all its children.**
 
-[![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main&event=pull_request)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 
 > ⚠️ **Status: M1 usable.** `treehawk run` (cgroup tracking, CPU+RAM at up to 1 kHz, crash-safe Parquet output) and `treehawk report` work end-to-end. GPU metrics, watch mode, event capture, and service mode are still being built — see [Roadmap](#roadmap). Nothing is released yet.
 
