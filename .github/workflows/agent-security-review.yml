@@ -1,0 +1,62 @@
+# Agent-driven PR security review, following uv's automation pattern
+# (https://github.com/astral-sh/uv), reworked to use Claude Code instead of
+# uv's Codex setup.
+#
+# Opt-in: does nothing until you
+#   1. add an ANTHROPIC_API_KEY repository secret, and
+#   2. set a repository variable ENABLE_AGENT_REVIEW=true
+#      (Settings → Secrets and variables → Actions → Variables).
+#
+# Uses the `pull_request` event so secrets are unavailable to forks.
+name: "Agent security review"
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: "security review"
+    if: vars.ENABLE_AGENT_REVIEW == 'true' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Collect pull request context"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-review-event.json
+
+          gh pr diff "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            > .pull-request-review.diff
+
+      - name: "Run security review"
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: '--allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"'
+          prompt: |
+            Follow the instructions in agents/prompts/pull-request-security-review.md
+            for pull request #${{ github.event.pull_request.number }}. Instead of
+            producing the JSON object, post the findings as a single pull request
+            comment with `gh pr comment`: one section per finding with its title,
+            priority, file:line location, and explanation. If there are no
+            actionable findings, post a one-line comment saying the security
+            review found nothing to report.

@@ -1,0 +1,54 @@
+# Agent-driven issue triage, following uv's automation pattern
+# (https://github.com/astral-sh/uv), reworked to use Claude Code instead of
+# uv's Codex setup.
+#
+# Opt-in: does nothing until you
+#   1. add an ANTHROPIC_API_KEY repository secret, and
+#   2. set a repository variable ENABLE_AGENT_TRIAGE=true
+#      (Settings → Secrets and variables → Actions → Variables).
+name: "Agent issue triage"
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    name: "issue triage"
+    if: vars.ENABLE_AGENT_TRIAGE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: "Collect issue context"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue view "$ISSUE_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,labels,createdAt \
+            > .issue-triage-event.json
+
+      - name: "Run triage"
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: '--allowedTools "Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*)"'
+          prompt: |
+            Follow the instructions in agents/prompts/triage-issue.md for issue
+            #${{ github.event.issue.number }}. Instead of producing the JSON
+            object, apply the result directly: add the chosen type label with
+            `gh issue edit --add-label`, and post one concise comment with
+            `gh issue comment` listing the related issues/PRs found (or stating
+            that none were found). Do not close the issue or edit its body.

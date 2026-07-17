@@ -1,5 +1,8 @@
 # Contributing
 
+New to this setup? [docs/CODE.md](docs/CODE.md) explains what each quality file does and why,
+and [docs/AGENTIC.md](docs/AGENTIC.md) explains the agent infrastructure.
+
 Treehawk's coding standards, lint policy, and CI setup are adapted from
 [uv](https://github.com/astral-sh/uv) by [Astral](https://astral.sh) (MIT OR Apache-2.0) — a
 codebase widely regarded as an example of well-run Rust engineering. Where treehawk deviates
@@ -64,6 +67,15 @@ different crate. Keep the dependency tree small — every crate is compile time 
 - Keep `Cargo.lock` committed and up to date (CI builds with `--locked`).
 - One logical change per PR; include tests for behavior changes.
 - Write user-facing text (CLI output, docs) per [STYLE.md](STYLE.md).
+
+## Agentic development
+
+Coding agents (Claude Code, Codex, etc.) working in this repo follow the rules in
+[AGENTS.md](AGENTS.md) — `CLAUDE.md` includes it, so there is one source of truth. Lifecycle
+hooks, automation prompts, and the threat model live in [`agents/`](agents/README.md); the
+`PostToolUse` hook auto-runs `cargo fmt` on agent edits, and opt-in GitHub workflows can triage
+new issues and security-review pull requests. This setup is adapted from uv's, like the rest of
+the standards here.
 
 ## Testing
 
