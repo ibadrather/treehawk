@@ -1,301 +1,111 @@
-# Treehawk — Formal Requirements Specification
+# Treehawk 🦅
 
-**Version:** 0.1 (draft)
-**Status:** Proposal
-**Tool name:** Treehawk — *it watches the process tree like a hawk*
-**Target platform:** Linux (x86_64, aarch64), kernel ≥ 5.4, cgroup v2
+**Watches your process tree like a hawk. Run any command and log CPU, RAM & GPU usage of it and all its children.**
 
-> **Naming note (checked 2026-07-15):** web/GitHub search found no existing software
-> project, CLI, package, or dev-tool company named "Treehawk" (only unrelated
-> non-software uses). Earlier candidates were rejected due to collisions: Prowl
-> (macOS agent orchestrator with a `prowl` CLI, prowlapp.com clients, Prowler cloud
-> security), Remora (TACC's REMORA — an existing command-wrapping resource monitor),
-> Stoat (Revolt chat rebrand, stoat.dev), Saluki (DataDog telemetry toolkit), Holter
-> (holter.sh uptime monitoring), Windhover (Windhover Labs drone software). Before
-> first publication, re-verify and reserve the name on github.com, pypi.org, and
-> crates.io, and register `treehawk` as the binary/package name in all three.
+> ⚠️ **Status: design phase.** This README describes the tool being built. Nothing is released yet — see [Roadmap](#roadmap).
 
 ---
 
-## 1. Purpose
+## Why
 
-Treehawk is a lightweight command-line observability tool for measuring the long-running
-resource behavior (CPU, RAM, GPU, and optionally power) of software under test on Linux. It is designed for
-engineers validating new software (e.g. robotics nodes, ML services) over hours or days,
-where existing tools (`top`, `htop`, `nvidia-smi`) are interactive-only, lossy, or too
-heavy to leave running.
+You're testing new software — a robotics node, an ML service, a data pipeline — and you need to know how it behaves over hours or days: does memory creep, does CPU spike, does the GPU stay busy, what did that helper process it spawned cost you?
 
-Treehawk produces machine-readable time-series logs and exposes a first-class Python API
-so results can be analyzed and visualized in dashboards.
+Existing tools don't fit this job. `top`/`htop` are interactive and don't log. `nvidia-smi` only knows NVIDIA GPUs and misses CPU/RAM. Hand-rolled `psutil` scripts are slow, miss short-lived children, and can't see the GPU at all. Full observability stacks (Prometheus & co.) are heavyweight and per-host, not per-process-tree.
 
-## 2. Goals
+Treehawk is one small, fast binary that does exactly this one thing:
 
-- G1: Track the complete resource footprint of a launched command **including every
-  descendant process it spawns**, with no escapes.
-- G2: Optionally observe the whole system and record only processes that cross
-  configurable resource thresholds.
-- G3: Sample at the highest practical rate with strictly bounded overhead.
-- G4: Produce durable, structured, analysis-friendly output.
-- G5: Be trivially usable: one binary, sane defaults, good `--help`.
-- G6: Support GPUs from any vendor through pluggable backends, and run
-  permanently as a configured system service when desired.
-
-## 3. Non-Goals
-
-- NG1: Not a distributed/cluster monitoring system (single host only).
-- NG2: Not an APM / code-level profiler (no stack sampling, no flamegraphs in v1).
-- NG3: Not a real-time alerting system (logs and reports only in v1).
-- NG4: No Windows/macOS support in v1.
-
-## 4. Terminology
-
-- **Run mode** — Treehawk launches a target command and tracks it plus all descendants.
-- **Watch mode** — Treehawk observes all processes on the system and records those
-  exceeding thresholds.
-- **Session** — one invocation of Treehawk producing one output dataset.
-- **Sample** — one snapshot of one process's metrics at one timestamp.
-
-## 5. Functional Requirements
-
-### 5.1 Process tracking
-
-- FR-1: In run mode, Treehawk SHALL launch the target command exactly as given
-  (`treehawk run -- python3 camera_node.py --arg x`) preserving arguments, environment,
-  working directory, stdio, exit code, and signal forwarding (SIGINT/SIGTERM).
-- FR-2: Treehawk SHALL track all descendant processes of the target, including those
-  created via fork, vfork, clone, posix_spawn, and processes that daemonize
-  (double-fork / reparent to PID 1).
-- FR-3: Descendant containment SHALL be implemented by placing the target in a
-  dedicated cgroup v2, so membership is kernel-guaranteed rather than inferred from
-  the PID tree. When cgroup delegation is unavailable, Treehawk SHALL fall back to
-  PID-tree tracking and print a clear warning about reduced guarantees.
-- FR-4: Treehawk SHALL detect process creation and exit via an event mechanism
-  (eBPF `sched_process_exec`/`exit` tracepoints, or the netlink proc connector as
-  fallback) so that processes shorter than one sampling interval are still recorded
-  with at least their identity, lifetime, and exit status.
-- FR-5: In watch mode (`treehawk watch`), Treehawk SHALL scan all system processes and
-  record any process whose CPU, RAM, or GPU usage exceeds user-defined thresholds
-  (e.g. `--threshold cpu=5% mem=2% gpu=5%`). A process SHALL keep being recorded
-  for a configurable cool-down period after dropping below thresholds, so bursts
-  produce contiguous data.
-- FR-6: Run mode and watch mode SHALL be combinable in one session (track a command
-  and additionally record any other heavy process on the machine).
-
-### 5.2 Metrics
-
-- FR-7: Per process and per sample, Treehawk SHALL collect at minimum:
-  - identity: PID, PPID, cgroup, executable path, full command line, UID, start time;
-  - CPU: utilization (% of one core, derived from utime+stime deltas), user/system
-    split, number of threads, voluntary/involuntary context switches;
-  - memory: RSS, PSS (when readable), swap, virtual size;
-  - GPU (per process, per device): compute/SM utilization, encoder/decoder
-    utilization where available, dedicated GPU memory used.
-- FR-8: GPU support SHALL be vendor-neutral, implemented as pluggable backends
-  behind one common per-process GPU metric schema:
-  - **DRM fdinfo** (`/proc/<pid>/fdinfo`, the kernel's standardized per-process
-    GPU stats interface) SHALL be the primary, generic backend. It covers AMD
-    (amdgpu), Intel (i915/xe), and any other driver implementing the DRM
-    client-stats spec.
-  - **NVML** SHALL be used for NVIDIA discrete GPUs (including
-    `nvmlDeviceGetProcessUtilization`), linked directly as a library — never by
-    shelling out to `nvidia-smi`, which is merely a CLI frontend to NVML.
-  - **Jetson/Tegra** (integrated NVIDIA on aarch64) SHOULD be supported via its
-    sysfs interfaces, since it exposes neither fdinfo nor full NVML.
-  - Backends SHALL be auto-detected per device; absence of a GPU, driver, or
-    backend SHALL degrade gracefully (GPU columns null, no failure), and multiple
-    GPUs of different vendors in one machine SHALL work simultaneously.
-  - *Rationale:* the kernel keeps no GPU accounting in `/proc` scheduler/memory
-    stats, which is why `top` cannot show GPU usage; GPU data exists only in
-    vendor driver interfaces, so these backends are the only route to it.
-- FR-9: Treehawk SHALL additionally record per-sample host context: total CPU
-  utilization, total memory pressure (PSI when available), per-GPU global
-  utilization, temperature, and power draw where exposed. This allows normalizing
-  process behavior against machine load.
-- FR-10: Optional metrics behind flags (off by default to protect overhead budget):
-  per-process disk I/O (`/proc/<pid>/io`), open file-descriptor count, and network
-  bytes where obtainable.
-- FR-26 (optional, `--power` / `power = true` in config): Treehawk SHOULD record
-  host power draw as per-sample host context, from whatever sources the machine
-  exposes, each labeled by measurement domain rather than presented as a single
-  "total" figure:
-  - CPU package and DRAM energy via RAPL (`/sys/class/powercap`, Intel and modern
-    AMD);
-  - GPU power via NVML (`nvmlDeviceGetPowerUsage`) or hwmon (amdgpu);
-  - battery discharge rate via `/sys/class/power_supply` (laptops);
-  - board input power via onboard INA sensors on Jetson (hwmon) — on such
-    platforms this IS effectively total system power.
-  Documentation SHALL state clearly that on ordinary desktops/servers RAPL+GPU
-  underestimates wall power (PSU losses, peripherals); true wall power requires
-  an external meter or BMC (see OQ-5). Absence of all sources SHALL degrade
-  gracefully.
-
-### 5.3 Sampling
-
-- FR-11: The sampling interval SHALL be configurable from 1 ms to 60 s
-  (`--interval 100ms`). Default: 100 ms (10 Hz).
-- FR-12: Treehawk SHALL timestamp every sample with CLOCK_MONOTONIC (for deltas) and
-  record the CLOCK_REALTIME anchor once per session (for wall-clock alignment).
-- FR-13: If a sampling cycle overruns the interval, Treehawk SHALL skip to the next
-  aligned tick (no unbounded queueing) and count overruns in session metadata.
-- FR-14: An adaptive mode MAY reduce the sampling rate for processes that have been
-  idle for a configurable time, restoring full rate on activity.
-
-### 5.4 Output and logging
-
-- FR-15: Treehawk SHALL write samples to an append-only, crash-safe on-disk format.
-  Primary format: Apache Parquet written in rotating chunks (columnar, compressed,
-  directly readable by pandas/polars/DuckDB). Secondary format for debugging and
-  piping: line-delimited JSON (`--format jsonl`) and CSV export.
-- FR-16: A session SHALL be self-describing: a `session.json` manifest containing
-  the exact command, environment hash, host info (kernel, CPU model, GPU model,
-  driver versions), Treehawk version, sampling config, and clock anchors.
-- FR-17: Data SHALL be flushed at a bounded interval (default ≤ 5 s) so that a
-  crash of the target, the host, or Treehawk itself loses at most that window.
-- FR-18: Treehawk SHALL support log rotation and an optional retention cap
-  (`--max-disk 2GB`) for multi-day runs.
-- FR-19: `treehawk report <session>` SHALL print a human-readable summary: per-process
-  peak/mean/p95 CPU, peak RSS, peak GPU memory, lifetime, exit codes, and total
-  session statistics.
-- FR-20: Live view: `treehawk run --live -- <cmd>` MAY render a minimal in-terminal
-  table (top consumers in the tracked set), without affecting logging.
-
-### 5.5 CLI
-
-- FR-21: The CLI SHALL follow standard conventions: subcommands
-  (`run`, `watch`, `report`, `export`, `ls`, `config`, `service`), `--help` on
-  every level, `--version`, meaningful exit codes, and colored output only when
-  attached to a TTY.
-- FR-22: In run mode, Treehawk SHALL exit with the target's exit code so it can wrap
-  commands transparently in CI pipelines.
-- FR-23: Representative invocations:
-
-```
+```bash
 treehawk run -- python3 camera_node.py
-treehawk run --interval 10ms --out ./runs/cam-test -- python3 camera_node.py
-treehawk watch --threshold cpu=10% gpu=5% mem=1GB --duration 8h
-treehawk run --watch-others --threshold cpu=20% -- ./stress_test.sh
-treehawk run --power -- python3 camera_node.py
-treehawk report runs/cam-test
-treehawk export runs/cam-test --format csv
-treehawk config init                # write commented default config
-treehawk service install --user     # enable always-on watch mode via systemd
-treehawk service status
 ```
 
-### 5.6 Python API
+It launches your command, tracks **it and every process it spawns** — even daemonized ones that detach from the parent — and writes a high-rate, timestamped log of CPU, memory, and GPU usage for each of them. When the run ends, you get a dataset you can open in Python.
 
-- FR-24: A Python package (`pip install treehawk`) SHALL provide:
-  - `treehawk.load(path) -> Session` — lazy access to samples as pandas or polars
-    DataFrames (`session.samples`, `session.processes`, `session.host`);
-  - `treehawk.run(cmd, interval=..., on_sample=None) -> Session` — programmatic
-    launching of a monitored command, with an optional streaming callback for
-    live dashboards;
-  - convenience analytics: `session.summary()`, `session.timeline(pid)`,
-    `session.peaks()`.
-- FR-25: Bindings SHALL be native (PyO3/maturin wheels for manylinux, x86_64 and
-  aarch64), not subprocess wrappers, so streaming access has low latency. Reading
-  completed sessions SHALL also work with zero native code (plain Parquet).
+## Key features
 
-### 5.7 Configuration and service mode
+- **No child escapes.** The target runs in a dedicated cgroup, so descendants are tracked by kernel guarantee, not by guessing from the PID tree. Short-lived processes (milliseconds) are caught via exec/exit events.
+- **CPU, RAM, GPU per process.** GPU support is vendor-neutral: AMD & Intel via the kernel's DRM fdinfo interface, NVIDIA via NVML, Jetson/Tegra via sysfs.
+- **Fast and light.** Rust, no runtime deps. Default 10 Hz sampling, configurable up to 1 kHz — or `interval = "max"` to sample as fast as the machine sustains under a self-overhead cap. Budget: < 1 % of one core at defaults; the observer must never disturb the measurement.
+- **Watch mode.** Alternatively monitor the *whole system* and record processes that exceed thresholds (CPU % means % of the whole machine) or match your keywords (`match = ["camera", "slam"]`). Runs until stopped — no timers.
+- **Always-on option.** Ships a systemd unit + TOML config: `treehawk service install` and it starts at boot, records for as long as the machine is up, flushes cleanly at shutdown, and starts a fresh session on the next boot — with bounded disk usage.
+- **Analysis-ready output.** Sessions are Parquet files + a JSON manifest — open them directly with pandas/polars/DuckDB. No custom API needed to read your data.
+- **Keyword labels, not command-line dumps.** Processes are recorded by executable name plus your labels (`--label camera`, or config rules that tag anything matching `*camera*`). Full command lines are opt-in, so tokens and passwords in arguments never end up in logs by accident.
+- **Optional power logging.** CPU package/DRAM via RAPL, GPU power, battery, and Jetson board sensors (`--power`).
 
-- FR-27 (config file): All options settable via CLI flags SHALL also be settable
-  in a TOML configuration file. Lookup order: path given via `--config`, then
-  `~/.config/treehawk/config.toml` (per user), then `/etc/treehawk/config.toml`
-  (system-wide). Precedence: CLI flags > environment variables (`TREEHAWK_*`) >
-  user config > system config > built-in defaults. `treehawk config init` SHALL
-  generate a fully commented default config; `treehawk config show` SHALL print
-  the effective merged configuration and where each value came from.
-- FR-28 (systemd service): Treehawk SHALL ship a systemd unit as part of the
-  installation (packages and `treehawk service install`), so it can run
-  permanently in watch mode configured entirely from the config file:
-  - `treehawk service install|uninstall|status` SHALL install/enable, remove, and
-    report the unit (`treehawk.service`), supporting both system units and user
-    units (`--user`, no root required);
-  - the service SHALL integrate properly with systemd: `Type=notify` readiness
-    via sd_notify, clean SIGTERM shutdown with final flush, structured logs to
-    journald, `Restart=on-failure`;
-  - the shipped unit SHALL apply hardening and self-limiting directives
-    (e.g. `ProtectSystem=strict` with explicit output path, `CPUQuota`,
-    `MemoryMax`) so the observer itself is provably bounded;
-  - session output directories and retention (FR-18) SHALL be config-driven so
-    an always-on service produces rotating, bounded, dated session datasets.
-- FR-29 (service data lifecycle): When running as a service, Treehawk SHALL roll
-  over to a new session at a configurable boundary (e.g. daily or max size) so
-  that long-lived deployments yield analyzable, bounded session files rather
-  than one endless session.
+## Quick start (planned interface)
 
-## 6. Non-Functional Requirements
+```bash
+# Track a command and everything it spawns
+treehawk run --label camera -- python3 camera_node.py
 
-- NFR-1 (overhead): At the default 10 Hz tracking ≤ 50 processes, Treehawk's own CPU
-  usage SHALL be < 1% of one core, and RSS < 50 MB. At 100 Hz / 50 processes it
-  SHALL stay < 5% of one core. Overhead SHALL be measured and published per release.
-- NFR-2 (rate): On reference hardware (4-core x86_64), Treehawk SHALL sustain 1 kHz
-  sampling of a single process tree of ≤ 10 processes without missed ticks.
-- NFR-3 (endurance): A 7-day continuous session SHALL show no unbounded growth in
-  Treehawk's memory or file-descriptor usage.
-- NFR-4 (robustness): Death of the target, races on short-lived PIDs, unreadable
-  `/proc` entries, and GPU driver absence SHALL never crash a session.
-- NFR-5 (privileges): Core functionality SHALL work as an unprivileged user for
-  the user's own processes. Features requiring elevation (eBPF, system-wide PSS,
-  netlink connector) SHALL be optional, auto-detected, and clearly reported.
-- NFR-6 (distribution): Shipped as a single static binary (musl) plus Python
-  wheels; no runtime dependencies beyond glibc/musl and optional GPU drivers.
-- NFR-7 (accuracy): CPU utilization derived from jiffy deltas SHALL be exact with
-  respect to kernel accounting; documentation SHALL state the semantics of every
-  metric (e.g. % of one core vs. % of machine).
-- NFR-8 (compatibility): Output schema SHALL be versioned; the Python API SHALL
-  read all prior schema versions.
+# Higher rate, named output
+treehawk run --interval 10ms --out runs/cam-test -- python3 camera_node.py
 
-## 7. Architecture (informative)
+# Watch the whole machine until stopped, log anything heavy or anything matching "camera"
+treehawk watch --threshold cpu=10% mem=1GB --match camera
 
-- Language: Rust. CLI via `clap`; async runtime not required on the hot path —
-  a dedicated sampling thread with a monotonic ticker keeps jitter low.
-- Data sources: `/proc/<pid>/stat`, `status`, `smaps_rollup`; cgroup v2 stats for
-  the tracked tree; DRM fdinfo (generic), NVML (`nvml-wrapper`, NVIDIA discrete),
-  and Tegra sysfs (Jetson) for GPU; RAPL powercap, hwmon, and power_supply for
-  power; eBPF (`aya` crate) or netlink proc connector for exec/exit events.
-- Writer: double-buffered sample batches handed to a writer thread; Arrow in
-  memory, Parquet chunks on disk (`arrow-rs`/`parquet` crates).
-- Python: PyO3 + maturin; DataFrame interop via Arrow so no copies are needed.
+# Human-readable summary
+treehawk report runs/cam-test
 
-## 8. Milestones (suggested)
+# Always-on service
+treehawk config init
+treehawk service install --user
+```
 
-1. **M1 — Core run mode:** cgroup containment, CPU+RSS sampling, Parquet output,
-   `report`. Usable end-to-end.
-2. **M2 — GPU backends:** DRM fdinfo (AMD/Intel) + NVML (NVIDIA) behind one
-   schema; host GPU context; Jetson backend if hardware available.
-3. **M3 — Watch mode + config:** thresholds, cool-down, combined mode; TOML
-   config file with `config init/show`.
-4. **M4 — Events:** eBPF/netlink exec-exit capture of short-lived processes.
-5. **M5 — Python API + wheels;** streaming callback for live dashboards.
-6. **M6 — Service & power:** systemd units with `service install`, session
-   rollover, optional power metrics (RAPL/hwmon/battery/Jetson INA).
-7. **M7 — Hardening:** overhead benchmarks in CI, 7-day soak test, docs.
+## Analyzing results
 
-## 9. Acceptance Tests (samples)
+Sessions are ordinary Parquet files — no special tooling required:
 
-- AT-1: `treehawk run -- bash -c 'sleep 1 & disown; sleep 2'` records the disowned
-  child despite reparenting.
-- AT-2: A target spawning 100 children of 5 ms each at 10 Hz sampling still yields
-  100 process records with lifetimes and exit codes (via FR-4 events).
-- AT-3: Treehawk's self-CPU measured by an external observer meets NFR-1.
-- AT-4: Killing Treehawk with SIGKILL mid-run leaves a readable dataset missing at
-  most the last flush window (FR-17).
-- AT-5: `treehawk.load()` on a 24 h / 10 Hz / 30-process session opens in < 2 s and
-  filtering by PID returns correct series.
+```python
+import pandas as pd
+df = pd.read_parquet("runs/cam-test/samples.parquet")
+df[df.label == "camera"].plot(x="t", y="cpu_pct")
+```
 
-## 10. Open Questions
+Plus `treehawk report <session>` for a quick terminal summary and `treehawk export --format csv` for everything else. A dedicated Python API (`treehawk.load()`, live streaming into dashboards) is planned, but deferred until the core is solid.
 
-- OQ-1: Should watch mode also record *aggregate* per-cgroup usage (containers,
-  systemd services) in addition to per-process rows?
-- OQ-2: Minimum supported kernel — 5.4 (broad) vs. 5.8+ (simpler eBPF via CO-RE)?
-- OQ-3: Per-process GPU utilization on NVIDIA requires driver accounting support;
-  define fallback semantics (attribute device-level utilization proportionally?).
-- OQ-4: Should `treehawk run` optionally capture target stdout/stderr into the
-  session for correlation with resource spikes?
-- OQ-5: True wall-socket power on desktops/servers: support BMC/IPMI or Redfish
-  sensor polling as an optional power source, or declare external meters out of
-  scope for v1?
-- OQ-6: Which non-systemd init systems (if any) warrant service templates
-  (OpenRC, runit, Docker container deployment as an alternative "always-on"
-  packaging)?
+## How it works (short version)
+
+| Problem | Approach |
+|---|---|
+| Track all descendants, no escapes | Dedicated **cgroup v2** per run (PID-tree fallback without privileges) |
+| Catch 5 ms-lived processes | **eBPF / netlink** exec+exit events, independent of sampling rate |
+| GPU usage per process | **DRM fdinfo** (AMD/Intel), **NVML** (NVIDIA), **sysfs** (Jetson) — the kernel keeps no GPU stats in `/proc`, which is why `top` can't show them |
+| High rate, low jitter | Dedicated sampling thread on a monotonic ticker, Rust, zero-copy Arrow batches |
+| Crash-safe multi-day logs | Rotating Parquet chunks, flushed every ≤ 5 s, size-capped |
+
+## Requirements
+
+- Linux, kernel ≥ 5.4, cgroup v2 (default on all modern distros). eBPF capture of short-lived processes needs kernel ≥ 5.8; older kernels fall back to the netlink proc connector
+- x86_64 or aarch64 — reference platforms: Intel CPU + NVIDIA discrete GPU, and Raspberry Pi 4 (64-bit OS)
+- Optional: GPU driver (NVIDIA ≥ R470 / amdgpu / i915 / xe) for GPU metrics. On Raspberry Pi, GPU metrics are best-effort (v3d fdinfo on recent kernels); CPU/RAM tracking is fully supported
+- No root needed for the core; eBPF event capture and some system-wide metrics need elevated privileges and are auto-detected
+
+## Performance budget
+
+These are release-gated commitments, measured in CI:
+
+- ≤ 1 % of one CPU core and < 50 MB RSS at 10 Hz tracking 50 processes
+- 1 kHz sustained on a small process tree without missed ticks
+- 7-day continuous run with zero growth in memory/file descriptors
+
+## Roadmap
+
+1. **M1** — `run` mode: cgroup tracking, CPU+RAM, Parquet output, `report`
+2. **M2** — GPU backends: NVML first (reference hardware), then DRM fdinfo; Jetson later
+3. **M3** — `watch` mode + config file
+4. **M4** — eBPF/netlink event capture for short-lived processes
+5. **M5** — systemd service mode (boot-to-shutdown recording) + power metrics
+6. **M6** — hardening: overhead benchmarks in CI, multi-day soak test
+7. **Later** — Python package with native bindings + streaming API (Parquet is directly readable in the meantime)
+
+## FAQ
+
+**Why not just use `top`/`htop`?** They're interactive viewers, not loggers, and they can't attribute GPU usage (the kernel exposes no GPU accounting in `/proc` — GPU stats live in vendor drivers).
+
+**Why not `nvidia-smi` in a loop?** It's NVIDIA-only, process-spawning per sample (heavy), misses CPU/RAM, and can't follow a process tree. Treehawk links the underlying NVML library directly instead.
+
+**Why Rust?** Predictable low overhead at high sampling rates (no GC), memory safety for week-long runs, and first-class Python bindings via PyO3.
+
+## License
+
+Dual-licensed under **MIT OR Apache-2.0**, at your option (the Rust ecosystem convention). Currently developed internally; planned to be open-sourced.
