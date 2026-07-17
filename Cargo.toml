@@ -26,5 +26,53 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
+# Lint policy adapted from uv (https://github.com/astral-sh/uv), MIT OR
+# Apache-2.0 — see CONTRIBUTING.md. Deviations from uv's list are commented.
+# CI treats every warning as an error (`-D warnings`), so "warn" here means
+# "blocks merge"; it stays "warn" locally so `cargo check` doesn't stop you
+# mid-experiment.
+[lints.rust]
+unreachable_pub = "warn"
+# uv also sets `unsafe_code = "warn"`; treehawk needs unsafe for libc calls
+# (spawn.rs, manifest.rs), so instead every `unsafe` block must carry a
+# `// SAFETY:` comment explaining why it is sound.
+
 [lints.clippy]
-unwrap_used = "warn"
+pedantic = { level = "warn", priority = -2 }
+undocumented_unsafe_blocks = "warn" # not in uv; replaces their `unsafe_code` ban
+# Allowed pedantic lints
+char_lit_as_u8 = "allow"
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+if_not_else = "allow"
+implicit_hasher = "allow"
+map_unwrap_or = "allow"
+match_same_arms = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+too_many_arguments = "allow"
+too_many_lines = "allow"
+used_underscore_binding = "allow"
+# Not in uv's allow list: metrics math converts kernel counters (u64 ticks,
+# bytes) to f64 rates constantly; these cast lints would drown the signal.
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+# Disallowed restriction lints
+dbg_macro = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+get_unwrap = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+unwrap_used = "warn" # allowed in tests via clippy.toml
+use_self = "warn"
+# uv also warns on `print_stdout` / `print_stderr` / `exit` because all its
+# output goes through an internal printer; treehawk is a plain CLI that
+# prints reports to stdout, so those stay off.

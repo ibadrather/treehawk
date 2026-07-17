@@ -1,0 +1,20 @@
+# Adapted from uv's .pre-commit-config.yaml (https://github.com/astral-sh/uv),
+# MIT OR Apache-2.0.
+#
+# Install once with: `uvx pre-commit install` (or `pipx run pre-commit install`).
+# Runs typos + rustfmt on every commit; CI enforces the same checks.
+fail_fast: true
+
+repos:
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.48.0
+    hooks:
+      - id: typos
+
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: rustfmt
+        language: system
+        types: [rust]

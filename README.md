@@ -114,6 +114,14 @@ overhead checks by hand.
 
 **Why Rust?** Predictable low overhead at high sampling rates (no GC), memory safety for week-long runs, and first-class Python bindings via PyO3.
 
+## Contributing
+
+Coding standards, lint policy, and CI setup are adapted from
+[uv](https://github.com/astral-sh/uv) by [Astral](https://astral.sh) (MIT OR Apache-2.0) — thanks
+to them for keeping exemplary Rust project standards public. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and [STYLE.md](STYLE.md) for user-facing text
+conventions.
+
 ## License
 
 Dual-licensed under **MIT OR Apache-2.0**, at your option (the Rust ecosystem convention). Currently developed internally; planned to be open-sourced.

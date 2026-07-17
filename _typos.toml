@@ -1,0 +1,12 @@
+# Spell-checker configuration for https://github.com/crate-ci/typos,
+# following uv's practice (https://github.com/astral-sh/uv).
+# Runs in CI and via pre-commit. Add false positives below as they appear.
+
+[files]
+extend-exclude = []
+
+[default.extend-identifiers]
+WRONLY = "WRONLY" # POSIX O_WRONLY open flag (rustix OFlags::WRONLY)
+
+[default.extend-words]
+# Example: certifi = "certifi"  # crate/package names that look like typos
