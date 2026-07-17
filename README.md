@@ -2,7 +2,7 @@
 
 **Watches your process tree like a hawk. Run any command and log CPU, RAM & GPU usage of it and all its children.**
 
-> ⚠️ **Status: design phase.** This README describes the tool being built. Nothing is released yet — see [Roadmap](#roadmap).
+> ⚠️ **Status: M1 usable.** `treehawk run` (cgroup tracking, CPU+RAM at up to 1 kHz, crash-safe Parquet output) and `treehawk report` work end-to-end. GPU metrics, watch mode, event capture, and service mode are still being built — see [Roadmap](#roadmap). Nothing is released yet.
 
 ---
 
@@ -90,13 +90,19 @@ These are release-gated commitments, measured in CI:
 
 ## Roadmap
 
-1. **M1** — `run` mode: cgroup tracking, CPU+RAM, Parquet output, `report`
+1. **M1** — `run` mode: cgroup tracking, CPU+RAM, Parquet output, `report` ✅
 2. **M2** — GPU backends: NVML first (reference hardware), then DRM fdinfo; Jetson later
 3. **M3** — `watch` mode + config file
 4. **M4** — eBPF/netlink event capture for short-lived processes
 5. **M5** — systemd service mode (boot-to-shutdown recording) + power metrics
 6. **M6** — hardening: overhead benchmarks in CI, multi-day soak test
 7. **Later** — Python package with native bindings + streaming API (Parquet is directly readable in the meantime)
+
+## Developing & testing
+
+M1 (`run` + `report`) is implemented in Rust — see [TESTING.md](TESTING.md) for
+how to build it, what the test suite covers, and how to run the acceptance and
+overhead checks by hand.
 
 ## FAQ
 
