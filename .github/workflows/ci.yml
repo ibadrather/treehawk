@@ -63,9 +63,18 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
 
   test:
-    name: "tests"
+    name: "tests (${{ matrix.arch }})"
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # aarch64 mirrors the Raspberry Pi / Jetson reference platforms.
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -74,6 +83,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: "tests"
         run: cargo test --locked
+
+  msrv:
+    name: "minimum supported rust version"
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      # Verifies the `rust-version` claim in Cargo.toml; the explicit
+      # `+1.88` overrides the newer toolchain pinned in rust-toolchain.toml.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+      - name: "check with MSRV"
+        run: cargo +1.88 check --locked --all-targets
 
   deny:
     name: "cargo deny"
