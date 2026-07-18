@@ -143,6 +143,17 @@ pub struct PidSample {
     pub pss_kb: Option<u64>,
 }
 
+impl Identity {
+    /// Display name: executable basename, falling back to comm.
+    pub fn exe_name(&self) -> String {
+        self.exe_path
+            .as_deref()
+            .and_then(|p| p.rsplit('/').next())
+            .unwrap_or(&self.comm)
+            .to_string()
+    }
+}
+
 impl PidHandle {
     /// Opens all per-tick fds. Any error means "this PID is gone or off-limits":
     /// the caller skips it this tick (NFR-4).
@@ -204,6 +215,20 @@ impl PidHandle {
             status,
             pss_kb,
         })
+    }
+
+    /// Re-captures comm and exe after the process exec'd (its comm changed).
+    ///
+    /// A descendant first sighted between fork and exec carries its parent's
+    /// image (e.g. `bash` for what becomes `sleep`); this brings the recorded
+    /// identity in line with what actually ran. `exe` is unreadable for
+    /// zombies, so a failed readlink falls back to the new comm via
+    /// [`Identity::exe_name`].
+    pub fn refresh_identity(&mut self, comm: &str) {
+        self.identity.comm = comm.to_string();
+        self.identity.exe_path = std::fs::read_link(format!("/proc/{}/exe", self.pid))
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned());
     }
 
     fn read_pss(&mut self, scratch: &mut Vec<u8>) -> Option<u64> {

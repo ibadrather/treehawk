@@ -124,12 +124,7 @@ fn sampler_thread(
                 let proc_id = next_proc_id;
                 next_proc_id += 1;
                 let id = &handle.identity;
-                let exe_name = id
-                    .exe_path
-                    .as_deref()
-                    .and_then(|p| p.rsplit('/').next())
-                    .unwrap_or(&id.comm)
-                    .to_string();
+                let exe_name = id.exe_name();
                 let row = ProcessRow {
                     proc_id,
                     pid,
@@ -155,6 +150,17 @@ fn sampler_thread(
                 continue;
             };
             if let Ok(s) = handle.sample(want_pss, &mut scratch) {
+                if s.stat.comm != handle.identity.comm {
+                    // Exec after first sight: refresh the identity and re-emit
+                    // the row so the WAL carries the corrected name too (the
+                    // reader keeps the last row per proc_id).
+                    handle.refresh_identity(&s.stat.comm);
+                    if let Some(row) = registry.get_mut(&proc_id) {
+                        row.exe_path.clone_from(&handle.identity.exe_path);
+                        row.exe_name = handle.identity.exe_name();
+                        new_processes.push(row.clone());
+                    }
+                }
                 let (dt_ns, du, ds) = match handle.prev {
                     Some((pu, ps, pt)) => (
                         Some(t.saturating_sub(pt)),

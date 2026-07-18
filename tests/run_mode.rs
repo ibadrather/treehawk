@@ -104,6 +104,29 @@ fn disowned_child_recorded() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// A process first sighted before its exec is re-recorded under the image it
+/// exec'd into, not the fork parent's (the `bash`-caught-pre-exec race that
+/// made `disowned_child_recorded` flake on slow CI runners).
+#[test]
+fn exec_after_first_sight_updates_identity() {
+    let dir = temp_session("exec-rename");
+    // First sight at ~20 ms is guaranteed to see bash; the exec at ~500 ms
+    // must then rename the recorded process.
+    let output = run_target(&dir, "20ms", &["bash", "-c", "sleep 0.5; exec sleep 0.5"]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let report = report_text(&dir);
+    // Only the target row carries an exit code; it must be named sleep.
+    let target_row = report
+        .lines()
+        .find(|l| l.trim_start().starts_with("sleep") && l.split_whitespace().last() == Some("0"));
+    assert!(
+        target_row.is_some(),
+        "target should be recorded under its post-exec name:\n{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// AT-4: `SIGKILLing` treehawk mid-run leaves a readable dataset.
 #[test]
 fn sigkill_leaves_readable_dataset() {
