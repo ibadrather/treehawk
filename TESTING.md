@@ -59,6 +59,12 @@ Notes:
   tracking — the suite still passes, since AT-1's disowned child is caught
   while its parent is alive.
 
+## Testing on devices
+
+For the hardware matrix — Jetson Xavier, Raspberry Pi, and an x86_64 Ubuntu laptop — see
+[docs/device-testing.md](docs/device-testing.md): per-device setup notes, the smoke checklist,
+and what to record.
+
 ## Manual acceptance checks (spec §9)
 
 Build a release binary first:

@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: >
+        Describe the situation where treehawk falls short today. If the feature
+        is already on the roadmap (GPU backends, watch mode, event capture,
+        service mode — see the README), mention which milestone it relates to.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should treehawk do, ideally with an example invocation and expected output.
+    validations:
+      required: true
