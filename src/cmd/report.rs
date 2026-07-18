@@ -19,7 +19,7 @@ use crate::cli::ReportArgs;
 use crate::manifest::Manifest;
 use crate::util::{human_bytes, human_duration};
 
-pub fn report(args: ReportArgs) -> Result<()> {
+pub fn report(args: &ReportArgs) -> Result<()> {
     let dir = &args.session;
     if !dir.join("session.json").exists() {
         bail!(
@@ -31,8 +31,8 @@ pub fn report(args: ReportArgs) -> Result<()> {
     let samples = read_table(dir, "samples")?;
     let processes = read_processes(dir)?;
 
-    let clk_tck = manifest.host.clk_tck as f64;
-    let n_cpus = manifest.host.n_cpus as f64;
+    let clk_tck = f64::from(manifest.host.clk_tck);
+    let n_cpus = f64::from(manifest.host.n_cpus);
 
     let mut stats: HashMap<u32, ProcStats> = HashMap::new();
     for batch in &samples {
@@ -103,7 +103,7 @@ fn accumulate(
 /// All chunks of one table, oldest first, plus any readable WAL tail.
 fn read_table(dir: &Path, prefix: &str) -> Result<Vec<RecordBatch>> {
     let mut chunk_paths: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .map(|e| e.path())
         .filter(|p| {
             p.file_name()
@@ -211,39 +211,36 @@ fn print_summary(
             .unwrap_or_default()
     );
     let interval_ms = manifest.sampling.interval_ns as f64 / 1e6;
-    match &manifest.finished {
-        Some(f) => {
-            let duration =
-                (f.ended_mono_ns
-                    .saturating_sub(manifest.clock_anchor.monotonic_ns)) as f64
-                    / 1e9;
-            println!(
-                "  sampling: {interval_ms} ms interval · {} ticks · {} overruns · {:.1} Hz achieved",
-                f.ticks, f.overruns, f.achieved_rate_hz
-            );
-            println!(
-                "  duration: {} · target exit: {}{}",
-                human_duration(duration),
-                f.target_exit_code
-                    .map(|c| c.to_string())
-                    .unwrap_or_else(|| "unknown".into()),
-                if f.descendants_alive_at_exit > 0 {
-                    format!(
-                        " · {} descendant(s) still alive at exit",
-                        f.descendants_alive_at_exit
-                    )
-                } else {
-                    String::new()
-                }
-            );
-        }
-        None => {
-            println!("  sampling: {interval_ms} ms interval");
-            println!(
-                "  {bold}note:{reset} session was not finalized (crashed or still running); \
-                 data recovered from the active chunk"
-            );
-        }
+    if let Some(f) = &manifest.finished {
+        let duration = (f
+            .ended_mono_ns
+            .saturating_sub(manifest.clock_anchor.monotonic_ns)) as f64
+            / 1e9;
+        println!(
+            "  sampling: {interval_ms} ms interval · {} ticks · {} overruns · {:.1} Hz achieved",
+            f.ticks, f.overruns, f.achieved_rate_hz
+        );
+        println!(
+            "  duration: {} · target exit: {}{}",
+            human_duration(duration),
+            f.target_exit_code
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "unknown".into()),
+            if f.descendants_alive_at_exit > 0 {
+                format!(
+                    " · {} descendant(s) still alive at exit",
+                    f.descendants_alive_at_exit
+                )
+            } else {
+                String::new()
+            }
+        );
+    } else {
+        println!("  sampling: {interval_ms} ms interval");
+        println!(
+            "  {bold}note:{reset} session was not finalized (crashed or still running); \
+             data recovered from the active chunk"
+        );
     }
     println!();
 

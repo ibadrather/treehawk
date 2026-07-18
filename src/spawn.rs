@@ -2,7 +2,7 @@
 //! signal forwarding, and exit-code transparency (FR-1, FR-22).
 
 use std::io;
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -19,17 +19,17 @@ extern "C" fn on_signal(sig: libc::c_int) {
     };
 }
 
-/// Installs SIGINT/SIGTERM handlers *without* SA_RESTART so the wait loop's
+/// Installs SIGINT/SIGTERM handlers *without* `SA_RESTART` so the wait loop's
 /// `waitpid` is interrupted (EINTR) and can forward promptly.
 pub fn install_signal_handlers() -> io::Result<()> {
     // SAFETY: the handler only touches atomics (async-signal-safe).
     unsafe {
         let mut action: libc::sigaction = std::mem::zeroed();
         action.sa_sigaction = on_signal as extern "C" fn(libc::c_int) as usize;
-        libc::sigemptyset(&mut action.sa_mask);
+        libc::sigemptyset(&raw mut action.sa_mask);
         action.sa_flags = 0;
         for sig in [libc::SIGINT, libc::SIGTERM] {
-            if libc::sigaction(sig, &action, std::ptr::null_mut()) != 0 {
+            if libc::sigaction(sig, &raw const action, std::ptr::null_mut()) != 0 {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -47,7 +47,7 @@ pub fn spawn_target(argv: &[String], cgroup_procs: Option<OwnedFd>) -> io::Resul
     let (program, args) = argv.split_first().ok_or(io::ErrorKind::InvalidInput)?;
     let mut command = Command::new(program);
     command.args(args);
-    let raw_procs_fd = cgroup_procs.as_ref().map(|fd| fd.as_raw_fd());
+    let raw_procs_fd = cgroup_procs.as_ref().map(rustix::fd::AsRawFd::as_raw_fd);
     // SAFETY: the hook runs post-fork/pre-exec and only calls async-signal-safe
     // libc functions on data captured by value.
     unsafe {
@@ -83,17 +83,17 @@ impl TargetExit {
     /// shell convention `128 + signal` when signal-killed.
     pub fn exit_code(self) -> u8 {
         match self {
-            TargetExit::Code(c) => c as u8,
-            TargetExit::Signal(s) => (128 + s) as u8,
-            TargetExit::Abandoned => 130,
+            Self::Code(c) => c as u8,
+            Self::Signal(s) => (128 + s) as u8,
+            Self::Abandoned => 130,
         }
     }
 
     pub fn code_for_manifest(self) -> Option<i32> {
         match self {
-            TargetExit::Code(c) => Some(c),
-            TargetExit::Signal(s) => Some(128 + s),
-            TargetExit::Abandoned => None,
+            Self::Code(c) => Some(c),
+            Self::Signal(s) => Some(128 + s),
+            Self::Abandoned => None,
         }
     }
 }
@@ -109,7 +109,7 @@ pub fn wait_target(child: &mut Child) -> io::Result<TargetExit> {
     loop {
         let mut status: libc::c_int = 0;
         // SAFETY: plain waitpid on our own direct child.
-        let ret = unsafe { libc::waitpid(pid, &mut status, 0) };
+        let ret = unsafe { libc::waitpid(pid, &raw mut status, 0) };
         if ret == pid {
             if libc::WIFEXITED(status) {
                 return Ok(TargetExit::Code(libc::WEXITSTATUS(status)));

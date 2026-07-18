@@ -4,13 +4,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::time::{ClockId, clock_gettime};
 
-/// Nanoseconds on CLOCK_MONOTONIC. Every sample is stamped with this (FR-12).
+/// Nanoseconds on `CLOCK_MONOTONIC`. Every sample is stamped with this (FR-12).
 pub fn monotonic_ns() -> u64 {
     let ts = clock_gettime(ClockId::Monotonic);
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
-/// Nanoseconds on CLOCK_REALTIME, for the once-per-session wall-clock anchor (FR-12).
+/// Nanoseconds on `CLOCK_REALTIME`, for the once-per-session wall-clock anchor (FR-12).
 pub fn realtime_ns() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -29,19 +29,26 @@ pub fn utc_timestamp_compact() -> String {
 fn civil_from_unix(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
-    let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+    let (hour, minute, second) = (rem / 3600, (rem % 3600) / 60, rem % 60);
 
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
+    let shifted_days = days + 719_468;
+    let era = shifted_days.div_euclid(146_097);
+    let doe = shifted_days.rem_euclid(146_097);
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
+    let year = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if mo <= 2 { y + 1 } else { y };
-    (y, mo as u32, d as u32, h as u32, mi as u32, s as u32)
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { year + 1 } else { year };
+    (
+        year,
+        month as u32,
+        day as u32,
+        hour as u32,
+        minute as u32,
+        second as u32,
+    )
 }
 
 /// Renders byte counts for human-readable report output.

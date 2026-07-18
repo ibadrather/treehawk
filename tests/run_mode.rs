@@ -104,7 +104,7 @@ fn disowned_child_recorded() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// AT-4: SIGKILLing treehawk mid-run leaves a readable dataset.
+/// AT-4: `SIGKILLing` treehawk mid-run leaves a readable dataset.
 #[test]
 fn sigkill_leaves_readable_dataset() {
     let dir = temp_session("sigkill");

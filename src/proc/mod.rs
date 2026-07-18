@@ -121,7 +121,7 @@ pub struct PidHandle {
     status_fd: OwnedFd,
     smaps: PssState,
     pub identity: Identity,
-    /// Previous tick's (utime, stime, t_mono_ns) for delta computation.
+    /// Previous tick's (utime, stime, `t_mono_ns`) for delta computation.
     pub prev: Option<(u64, u64, u64)>,
 }
 
@@ -188,7 +188,7 @@ impl PidHandle {
         })
     }
 
-    /// Reads this tick's metrics. `want_pss` gates the (pricier) smaps_rollup
+    /// Reads this tick's metrics. `want_pss` gates the (pricier) `smaps_rollup`
     /// read so it can be decimated independently of the sampling rate.
     pub fn sample(&mut self, want_pss: bool, scratch: &mut Vec<u8>) -> io::Result<PidSample> {
         let stat = parse_stat(read_fd_to_string(&self.stat_fd, scratch)?)
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!(status.uid, 1000);
         assert_eq!(status.vm_rss_kb, 98304);
         assert_eq!(status.vm_swap_kb, 512);
-        assert_eq!(status.vm_size_kb, 150000);
+        assert_eq!(status.vm_size_kb, 150_000);
         assert_eq!(status.voluntary_ctxt_switches, Some(4321));
         assert_eq!(status.nonvoluntary_ctxt_switches, Some(99));
     }

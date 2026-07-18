@@ -16,7 +16,7 @@ pub struct CpuTotals {
 /// Parses the first (`cpu `) line: user nice system idle iowait irq softirq steal.
 pub fn parse_cpu_totals(proc_stat: &str) -> Option<CpuTotals> {
     let line = proc_stat.lines().next()?.strip_prefix("cpu ")?;
-    let mut fields = line.split_ascii_whitespace().map(|f| f.parse::<u64>());
+    let mut fields = line.split_ascii_whitespace().map(str::parse::<u64>);
     let mut take = |_: &str| fields.next().and_then(Result::ok);
     let user = take("user")?;
     let nice = take("nice")?;
@@ -79,7 +79,7 @@ pub fn parse_psi_avg10(content: &str) -> (Option<f32>, Option<f32>) {
 pub struct HostReader {
     stat: File,
     meminfo: File,
-    /// PSI needs kernel ≥ 4.20 with CONFIG_PSI; absent files stay None.
+    /// PSI needs kernel ≥ 4.20 with `CONFIG_PSI`; absent files stay None.
     psi_cpu: Option<File>,
     psi_mem: Option<File>,
     psi_io: Option<File>,

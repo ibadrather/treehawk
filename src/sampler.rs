@@ -27,8 +27,8 @@ pub enum Tracker {
 impl Tracker {
     fn members(&mut self, scratch: &mut Vec<u8>) -> std::io::Result<Vec<i32>> {
         match self {
-            Tracker::Cgroup(c) => c.members(scratch),
-            Tracker::PidTree(p) => p.members(),
+            Self::Cgroup(c) => c.members(scratch),
+            Self::PidTree(p) => p.members(),
         }
     }
 }
@@ -56,7 +56,7 @@ impl StopSignal {
 
 pub struct SamplerOptions {
     pub interval: Duration,
-    /// Read PSS every N ticks (0 = never); keeps smaps_rollup cost off the
+    /// Read PSS every N ticks (0 = never); keeps `smaps_rollup` cost off the
     /// hot path at high rates.
     pub pss_every_ticks: u32,
     /// Comma-joined `--label` values, attached to every process row in M1.
@@ -79,16 +79,16 @@ pub fn spawn_sampler(
 ) -> JoinHandle<SamplerStats> {
     std::thread::Builder::new()
         .name("treehawk-sampler".into())
-        .spawn(move || sampler_thread(opts, tracker, target_pid, tx, stop))
+        .spawn(move || sampler_thread(&opts, tracker, target_pid, &tx, &stop))
         .expect("spawning the sampler thread cannot fail")
 }
 
 fn sampler_thread(
-    opts: SamplerOptions,
+    opts: &SamplerOptions,
     mut tracker: Tracker,
     target_pid: i32,
-    tx: Sender<WriterMsg>,
-    stop: Arc<StopSignal>,
+    tx: &Sender<WriterMsg>,
+    stop: &StopSignal,
 ) -> SamplerStats {
     let interval_ns = opts.interval.as_nanos() as u64;
     let mut scratch: Vec<u8> = Vec::with_capacity(4096);
@@ -103,7 +103,7 @@ fn sampler_thread(
 
     let mut next = monotonic_ns() + interval_ns;
     loop {
-        sleep_until(next, &stop);
+        sleep_until(next, stop);
         let stopping = stop.stopping();
         let t = monotonic_ns();
 
@@ -154,43 +154,40 @@ fn sampler_thread(
             let Some(&proc_id) = proc_ids.get(&pid) else {
                 continue;
             };
-            match handle.sample(want_pss, &mut scratch) {
-                Ok(s) => {
-                    let (dt_ns, du, ds) = match handle.prev {
-                        Some((pu, ps, pt)) => (
-                            Some(t.saturating_sub(pt)),
-                            Some(s.stat.utime_ticks.saturating_sub(pu)),
-                            Some(s.stat.stime_ticks.saturating_sub(ps)),
-                        ),
-                        None => (None, None, None),
-                    };
-                    handle.prev = Some((s.stat.utime_ticks, s.stat.stime_ticks, t));
-                    if let Some(row) = registry.get_mut(&proc_id) {
-                        row.last_seen_ns = t;
-                    }
-                    samples.push(SampleRow {
-                        t_mono_ns: t,
-                        proc_id,
-                        pid,
-                        dt_ns,
-                        cpu_utime_ticks: du,
-                        cpu_stime_ticks: ds,
-                        num_threads: s.stat.num_threads,
-                        vm_rss_kb: s.status.vm_rss_kb,
-                        vm_swap_kb: s.status.vm_swap_kb,
-                        vm_size_kb: s.status.vm_size_kb,
-                        pss_kb: s.pss_kb,
-                        voluntary_ctxt_switches: s.status.voluntary_ctxt_switches,
-                        nonvoluntary_ctxt_switches: s.status.nonvoluntary_ctxt_switches,
-                        gpu_util_pct: None,
-                        gpu_mem_bytes: None,
-                    });
+            if let Ok(s) = handle.sample(want_pss, &mut scratch) {
+                let (dt_ns, du, ds) = match handle.prev {
+                    Some((pu, ps, pt)) => (
+                        Some(t.saturating_sub(pt)),
+                        Some(s.stat.utime_ticks.saturating_sub(pu)),
+                        Some(s.stat.stime_ticks.saturating_sub(ps)),
+                    ),
+                    None => (None, None, None),
+                };
+                handle.prev = Some((s.stat.utime_ticks, s.stat.stime_ticks, t));
+                if let Some(row) = registry.get_mut(&proc_id) {
+                    row.last_seen_ns = t;
                 }
-                Err(_) => {
-                    // Died mid-tick: drop the handle, keep the identity row.
-                    handles.remove(&pid);
-                    proc_ids.remove(&pid);
-                }
+                samples.push(SampleRow {
+                    t_mono_ns: t,
+                    proc_id,
+                    pid,
+                    dt_ns,
+                    cpu_utime_ticks: du,
+                    cpu_stime_ticks: ds,
+                    num_threads: s.stat.num_threads,
+                    vm_rss_kb: s.status.vm_rss_kb,
+                    vm_swap_kb: s.status.vm_swap_kb,
+                    vm_size_kb: s.status.vm_size_kb,
+                    pss_kb: s.pss_kb,
+                    voluntary_ctxt_switches: s.status.voluntary_ctxt_switches,
+                    nonvoluntary_ctxt_switches: s.status.nonvoluntary_ctxt_switches,
+                    gpu_util_pct: None,
+                    gpu_mem_bytes: None,
+                });
+            } else {
+                // Died mid-tick: drop the handle, keep the identity row.
+                handles.remove(&pid);
+                proc_ids.remove(&pid);
             }
         }
         handles.retain(|pid, _| member_set.contains(pid));
@@ -242,7 +239,7 @@ fn sampler_thread(
     }
 }
 
-/// Sleeps until `deadline_ns` on CLOCK_MONOTONIC using absolute-deadline
+/// Sleeps until `deadline_ns` on `CLOCK_MONOTONIC` using absolute-deadline
 /// `clock_nanosleep` (no drift accumulation), in ≤ 50 ms slices so a stop
 /// request is honored promptly even at long intervals.
 fn sleep_until(deadline_ns: u64, stop: &StopSignal) {

@@ -11,6 +11,11 @@ all-features = true
 [advisories]
 # RustSec advisories: any vulnerability in the dependency tree fails CI.
 yanked = "warn"
+ignore = [
+  # `paste` is archived/unmaintained, pulled in transitively by parquet.
+  # No replacement upstream; remove once parquet drops the dependency.
+  { id = "RUSTSEC-2024-0436", reason = "transitive via parquet, no upgrade available" },
+]
 
 [licenses]
 # treehawk is MIT OR Apache-2.0; allow the common permissive licenses.

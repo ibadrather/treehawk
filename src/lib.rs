@@ -1,6 +1,6 @@
 //! Treehawk: run a command and log CPU/RAM usage of it and every descendant.
 //!
-//! Library form of the binary so integration tests (and, post-v1, the PyO3
+//! Library form of the binary so integration tests (and, post-v1, the `PyO3`
 //! bindings) can reach the internals. The CLI entry point is `main.rs`.
 
 pub mod cgroup;

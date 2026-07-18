@@ -32,7 +32,7 @@ pub struct SampleRow {
     pub vm_rss_kb: u64,
     pub vm_swap_kb: u64,
     pub vm_size_kb: u64,
-    /// PSS from smaps_rollup; None when unreadable or decimated (FR-7 "when readable").
+    /// PSS from `smaps_rollup`; None when unreadable or decimated (FR-7 "when readable").
     pub pss_kb: Option<u64>,
     pub voluntary_ctxt_switches: Option<u64>,
     pub nonvoluntary_ctxt_switches: Option<u64>,

@@ -22,8 +22,8 @@ pub enum TrackingMode {
 impl TrackingMode {
     pub fn as_str(self) -> &'static str {
         match self {
-            TrackingMode::Cgroup => "cgroup",
-            TrackingMode::PidTree => "pid-tree",
+            Self::Cgroup => "cgroup",
+            Self::PidTree => "pid-tree",
         }
     }
 }

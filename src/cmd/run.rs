@@ -21,7 +21,7 @@ fn pss_every_ticks(interval: Duration) -> u32 {
     per_second.max(1)
 }
 
-pub fn run(args: RunArgs) -> ExitCode {
+pub fn run(args: &RunArgs) -> ExitCode {
     match run_inner(args) {
         Ok(code) => code,
         Err(err) => {
@@ -31,7 +31,7 @@ pub fn run(args: RunArgs) -> ExitCode {
     }
 }
 
-fn run_inner(args: RunArgs) -> Result<ExitCode> {
+fn run_inner(args: &RunArgs) -> Result<ExitCode> {
     install_signal_handlers().context("installing signal handlers")?;
 
     let session_id = utc_timestamp_compact();
@@ -80,7 +80,7 @@ fn run_inner(args: RunArgs) -> Result<ExitCode> {
 
     let procs_fd = cgroup
         .as_ref()
-        .map(|c| c.procs_write_fd())
+        .map(super::super::cgroup::CgroupTracker::procs_write_fd)
         .transpose()
         .context("opening cgroup.procs for the child")?;
     let mut child = match spawn_target(&args.command, procs_fd) {

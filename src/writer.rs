@@ -64,7 +64,7 @@ pub fn spawn_writer(opts: WriterOptions) -> (Sender<WriterMsg>, JoinHandle<Resul
     let (tx, rx) = channel();
     let handle = std::thread::Builder::new()
         .name("treehawk-writer".into())
-        .spawn(move || writer_thread(opts, rx))
+        .spawn(move || writer_thread(&opts, &rx))
         .expect("spawning the writer thread cannot fail");
     (tx, handle)
 }
@@ -164,7 +164,7 @@ pub fn convert_arrows_to_parquet(
     Ok(())
 }
 
-fn writer_thread(opts: WriterOptions, rx: Receiver<WriterMsg>) -> Result<()> {
+fn writer_thread(opts: &WriterOptions, rx: &Receiver<WriterMsg>) -> Result<()> {
     let mut samples_table = Table::new(&opts.dir, "samples", samples_schema());
     let mut host_table = Table::new(&opts.dir, "host", host_schema());
     let mut processes_wal = Table::new(&opts.dir, "processes", processes_schema());
