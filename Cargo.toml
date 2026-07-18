@@ -26,6 +26,11 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 # Lint policy adapted from uv (https://github.com/astral-sh/uv), MIT OR
 # Apache-2.0 — see CONTRIBUTING.md. Deviations from uv's list are commented.
 # CI treats every warning as an error (`-D warnings`), so "warn" here means

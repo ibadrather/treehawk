@@ -33,6 +33,21 @@ It launches your command, tracks **it and every process it spawns** — even dae
 - **Keyword labels, not command-line dumps.** Processes are recorded by executable name plus your labels (`--label camera`, or config rules that tag anything matching `*camera*`). Full command lines are opt-in, so tokens and passwords in arguments never end up in logs by accident.
 - **Optional power logging.** CPU package/DRAM via RAPL, GPU power, battery, and Jetson board sensors (`--power`).
 
+## Installation
+
+Install the latest release with a single command (no Rust toolchain required):
+
+```bash
+curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/treehawk-installer.sh | sh
+```
+
+Prebuilt binaries are available for Linux on x86_64 and aarch64. To build from
+source instead, install [Rust](https://rustup.rs) and run:
+
+```bash
+cargo install --git https://github.com/ibadrather/treehawk
+```
+
 ## Quick start (planned interface)
 
 ```bash
