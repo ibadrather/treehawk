@@ -1,0 +1,19 @@
+
+What I did
+
+- Scanned the full git history for secrets before anything public-facing: clean. The ANTHROPIC_API_KEY mentions are just references to a GitHub Actions secret name, not actual keys.
+- Set up cargo-dist v0.32 (the same tool uv uses). It generated .github/workflows/release.yml, which on every v* tag push builds release binaries for Linux x86_64 + aarch64, and attaches them plus a treehawk-installer.sh to a GitHub Release. I restricted targets to Linux since the code has no platform gating and is cgroup-dependent.
+- Added an Installation section to the README with the curl one-liner and the cargo install --git fallback.
+- Committed and pushed all of it to feature/milestone-1 (commit 465601f).
+
+What you need to do (2 steps)
+
+1. Make the repo public — I can't do this without an authenticated gh (not installed, and installing needs sudo). Go to https://github.com/ibadrather/treehawk/settings → Danger Zone → Change visibility. Doing this before tagging matters: the aarch64 build uses GitHub's ARM runners, which are free only for public repos, and public repos get unlimited Actions minutes.
+2. Tag the release — once public, tell me and I'll run it, or do it yourself:
+git tag v0.1.0 && git push origin v0.1.0
+
+CI then builds for a few minutes, and on any Linux machine this works with no Rust toolchain:
+
+curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/treehawk-installer.sh | sh
+
+It installs to ~/.cargo/bin (creating it if needed) and tells you what to add to PATH. One note: the tag will point at the feature branch — fine for testing, but you may want to merge to main before a "real" release since main currently only has the initial commit.
