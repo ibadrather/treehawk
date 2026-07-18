@@ -7,6 +7,8 @@ use std::os::unix::process::CommandExt;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use log::warn;
+
 /// Counts of signals received by treehawk itself, set from the handlers.
 static SIGINT_COUNT: AtomicU32 = AtomicU32::new(0);
 static SIGTERM_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -126,7 +128,7 @@ pub fn wait_target(child: &mut Child) -> io::Result<TargetExit> {
         let ints = SIGINT_COUNT.load(Ordering::Relaxed);
         let terms = SIGTERM_COUNT.load(Ordering::Relaxed);
         if ints >= 2 {
-            eprintln!("treehawk: second interrupt: abandoning target, finalizing session");
+            warn!("second interrupt: abandoning target, finalizing session");
             return Ok(TargetExit::Abandoned);
         }
         if ints > forwarded_int {

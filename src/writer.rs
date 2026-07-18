@@ -20,6 +20,7 @@ use arrow::datatypes::SchemaRef;
 use arrow::ipc::reader::StreamReader;
 use arrow::ipc::writer::StreamWriter;
 use arrow::record_batch::RecordBatch;
+use log::debug;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
@@ -132,6 +133,7 @@ impl Table {
         let chunk = self.chunk_path(self.chunk_index);
         convert_arrows_to_parquet(&path, &chunk, &self.schema)?;
         std::fs::remove_file(&path)?;
+        debug!("rotated active chunk into: {}", chunk.display());
         self.chunk_index += 1;
         Ok(())
     }

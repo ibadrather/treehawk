@@ -3,10 +3,11 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use treehawk::cli::{Cli, Command};
-use treehawk::cmd;
+use treehawk::{cmd, logging};
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    logging::init(cli.verbose);
     let result = match cli.command {
         Command::Run(args) => return cmd::run::run(&args),
         Command::Report(args) => cmd::report::report(&args),

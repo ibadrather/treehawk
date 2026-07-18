@@ -13,6 +13,7 @@ use arrow::array::{Array, AsArray};
 use arrow::datatypes::{Int32Type, UInt32Type, UInt64Type};
 use arrow::ipc::reader::StreamReader;
 use arrow::record_batch::RecordBatch;
+use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 use crate::cli::ReportArgs;
@@ -125,6 +126,7 @@ fn read_table(dir: &Path, prefix: &str) -> Result<Vec<RecordBatch>> {
     if wal.exists()
         && let Ok(reader) = StreamReader::try_new(File::open(&wal)?, None)
     {
+        info!("recovering unrotated data from: {}", wal.display());
         // A truncated tail after SIGKILL simply ends the iteration early.
         batches.extend(reader.flatten());
     }

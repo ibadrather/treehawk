@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use log::{info, warn};
 
 use crate::cgroup::{CgroupTracker, PidTreeTracker, TrackingMode};
 use crate::cli::RunArgs;
@@ -41,14 +42,15 @@ fn run_inner(args: &RunArgs) -> Result<ExitCode> {
         .unwrap_or_else(|| PathBuf::from("treehawk").join(&session_id));
     std::fs::create_dir_all(&session_dir)
         .with_context(|| format!("creating session dir {}", session_dir.display()))?;
+    info!("session directory: {}", session_dir.display());
 
     // Containment: cgroup v2, or PID-tree fallback with the FR-3 warning.
     let cgroup = match CgroupTracker::create(&session_id) {
         Ok(c) => Some(c),
         Err(err) => {
-            eprintln!(
-                "treehawk: warning: cgroup tracking unavailable ({err}); falling back to \
-                 PID-tree tracking — daemonizing (double-forking) descendants may be missed"
+            warn!(
+                "cgroup tracking unavailable ({err}); falling back to PID-tree \
+                 tracking — daemonizing (double-forking) descendants may be missed"
             );
             None
         }
@@ -61,6 +63,11 @@ fn run_inner(args: &RunArgs) -> Result<ExitCode> {
 
     let interval_ns = args.interval.as_nanos() as u64;
     let pss_ticks = pss_every_ticks(args.interval);
+    info!(
+        "tracking mode: {}; sampling every {:?} (PSS every {pss_ticks} ticks)",
+        mode.as_str(),
+        args.interval
+    );
     let manifest = Manifest::new(
         session_id,
         args.command.clone(),
@@ -147,20 +154,25 @@ fn finalize_manifest(
     let ended = monotonic_ns();
     let duration_s = (ended.saturating_sub(manifest.clock_anchor.monotonic_ns)) as f64 / 1e9;
     let expected_rate = 1e9 / interval_ns as f64;
+    let achieved_rate_hz = if duration_s > 0.0 {
+        (stats.ticks as f64 / duration_s).min(expected_rate)
+    } else {
+        0.0
+    };
     manifest.finished = Some(Finished {
         ended_mono_ns: ended,
         target_exit_code: exit.code_for_manifest(),
         ticks: stats.ticks,
         overruns: stats.overruns,
-        achieved_rate_hz: if duration_s > 0.0 {
-            (stats.ticks as f64 / duration_s).min(expected_rate)
-        } else {
-            0.0
-        },
+        achieved_rate_hz,
         descendants_alive_at_exit: stats.descendants_alive_at_exit,
     });
     manifest
         .write(session_dir)
         .context("finalizing session.json")?;
+    info!(
+        "session finalized: {} ticks, {} overruns, achieved {achieved_rate_hz:.1} Hz",
+        stats.ticks, stats.overruns
+    );
     Ok(())
 }

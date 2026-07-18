@@ -982,6 +982,7 @@ dependencies = [
  "arrow",
  "clap",
  "libc",
+ "log",
  "parquet",
  "rustix",
  "serde",

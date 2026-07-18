@@ -6,6 +6,7 @@ use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
+use log::warn;
 use rustix::fs::{Mode, OFlags};
 
 use crate::proc::read_fd_to_string;
@@ -81,9 +82,9 @@ impl CgroupTracker {
     pub fn cleanup(self) {
         drop(self.procs);
         if let Err(e) = std::fs::remove_dir(&self.dir) {
-            eprintln!(
-                "treehawk: warning: could not remove cgroup {} ({e}); \
-                 processes may still be running in it",
+            warn!(
+                "could not remove cgroup {} ({e}); processes may still be \
+                 running in it",
                 self.dir.display()
             );
         }

@@ -168,6 +168,31 @@ fn sigkill_leaves_readable_dataset() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `-v` prints info-level progress to stderr while stdout stays pipeable.
+#[test]
+fn verbose_flag_logs_to_stderr() {
+    let dir = temp_session("verbose");
+    let output = treehawk()
+        .args(["-v", "run", "--interval", "50ms", "--out"])
+        .arg(&dir)
+        .args(["--", "sleep", "0.2"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("treehawk binary should launch");
+    assert_eq!(output.status.code(), Some(0));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("treehawk: info: tracking mode:"),
+        "expected the tracking-mode info line on stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("treehawk: info: session finalized:"),
+        "expected the finalize summary on stderr:\n{stderr}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// Stub subcommands fail loudly instead of pretending to work.
 #[test]
 fn stub_subcommands_error() {

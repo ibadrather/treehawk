@@ -6,6 +6,7 @@
 pub mod cgroup;
 pub mod cli;
 pub mod cmd;
+pub mod logging;
 pub mod manifest;
 pub mod model;
 pub mod proc;
