@@ -1,0 +1,29 @@
+name: Bug report
+description: Report an error or unexpected behavior
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Summary
+      description: |
+        A clear and concise description of the bug, including the exact `treehawk` command you ran and what you expected to happen.
+
+        Please include the full stderr output with `-vv` verbosity, and — when the issue concerns recorded data — the session's `session.json` (it records the tracking mode, sampling config, and host info).
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Platform
+      description: What operating system and architecture are you using? (see `uname -orsm`)
+      placeholder: e.g., Ubuntu 26.04 x86_64, Raspberry Pi OS Bookworm aarch64, JetPack 5.1 aarch64
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Version
+      description: What version of treehawk are you using? (see `treehawk --version`)
+      placeholder: e.g., treehawk 0.1.0
+    validations:
+      required: true

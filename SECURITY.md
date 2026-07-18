@@ -1,30 +1,14 @@
 # Security policy
 
-## Supported versions
+Treehawk launches the command you give it and records process metadata to local files. By
+design it executes arbitrary commands — that is its job, not a vulnerability.
 
-Only the latest release is supported with security fixes.
-
-## Reporting a vulnerability
-
-Report vulnerabilities privately through
-[GitHub security advisories](https://github.com/ibadrather/treehawk/security/advisories/new) —
-please do not open a public issue for anything security-sensitive.
-
-You should receive an initial response within a week. Once a fix is available, the advisory is
-published and credited.
-
-## Scope notes
-
-Treehawk runs unprivileged and records process metadata to local files. Areas of particular
-interest for reports:
-
-- Recorded sessions leaking data they should not (treehawk deliberately records executable
-  names and user-provided labels, never command lines or environment variables, so secrets in
-  arguments stay out of logs).
-- Escapes from the per-run cgroup containment or the PID-tree fallback being tricked into
-  sampling unrelated processes.
-- Unsafe handling of hostile `/proc` or cgroup file contents (these parsers are fuzz-adjacent
-  attack surface).
-
-The internal threat model lives at
+Reports we consider in scope include: recorded sessions leaking data they should not (treehawk
+records executable names and user-provided labels, never command lines or environment
+variables), escapes from the per-run cgroup containment, and unsafe handling of hostile
+`/proc` or cgroup file contents. The internal threat model lives at
 [`agents/references/threat-model.md`](agents/references/threat-model.md).
+
+If you believe you have found a vulnerability that is in scope, please report it privately via
+[GitHub security advisories](https://github.com/ibadrather/treehawk/security/advisories/new) —
+do not open a public issue.

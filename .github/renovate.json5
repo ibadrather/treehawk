@@ -1,0 +1,104 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  // Dependency-update policy adapted from uv's renovate.json5
+  // (https://github.com/astral-sh/uv), MIT OR Apache-2.0. uv extends Astral's
+  // shared org config; treehawk uses Renovate's recommended preset instead,
+  // and drops the uv-specific package rules (pyo3, pubgrub, maturin, docs).
+  extends: [
+    "config:recommended",
+    // For tool versions defined in GitHub Actions:
+    "customManagers:githubActionsVersions",
+  ],
+  dependencyDashboard: true,
+  suppressNotifications: ["prEditedNotification"],
+  schedule: ["* 0-3 * * 1"],
+  semanticCommits: "disabled",
+  separateMajorMinor: false,
+  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
+  cargo: {
+    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
+    rangeStrategy: "update-lockfile",
+  },
+  "pre-commit": {
+    enabled: true,
+  },
+  packageRules: [
+    // Pin GitHub Actions to immutable SHAs.
+    {
+      matchDepTypes: ["action"],
+      pinDigests: true,
+    },
+    // Annotate GitHub Actions SHAs with a SemVer version.
+    {
+      extends: ["helpers:pinGitHubActionDigests"],
+      extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
+      versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
+    },
+    {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
+      enabled: false,
+    },
+    {
+      // This package rule disables updates for GitHub runners:
+      // we'd only pin them to a specific version
+      // if there was a deliberate reason to do so
+      groupName: "GitHub runners",
+      matchManagers: ["github-actions"],
+      matchDatasources: ["github-runners"],
+      description: "Disable PRs updating GitHub runners (e.g. 'runs-on: ubuntu-24.04-arm')",
+      enabled: false,
+    },
+    {
+      groupName: "pre-commit dependencies",
+      matchManagers: ["pre-commit"],
+      description: "Weekly update of pre-commit dependencies",
+    },
+    {
+      commitMessageTopic: "MSRV",
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["msrv"],
+      // Rolling support policy like uv's:
+      // 2 releases back * 6 weeks per release * 7 days per week + 1.
+      // Note the current floor is also functional: let chains need 1.88.
+      minimumReleaseAge: "85 days",
+      internalChecksFilter: "strict",
+      groupName: "MSRV",
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
+    },
+  ],
+  customManagers: [
+    // Minimum supported Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Cargo\\.toml?$/"],
+      matchStrings: [
+        'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "msrv",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    },
+    // Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml?$/"],
+      matchStrings: [
+        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "rust",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    },
+  ],
+  vulnerabilityAlerts: {
+    commitMessageSuffix: "",
+    labels: ["security"],
+  },
+}

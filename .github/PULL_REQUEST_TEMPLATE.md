@@ -1,13 +1,15 @@
-## What does this change?
+<!--
+Thank you for contributing to treehawk! To help us out with reviewing, please consider the following:
 
-<!-- One or two sentences: what and why. Link the issue if there is one. -->
+- Does this pull request include a summary of the change? (See below.)
+- Does this pull request include a descriptive title?
+- Does this pull request include references to any relevant issues?
+-->
 
-## Checklist
+## Summary
 
-- [ ] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` pass
-      locally (see [TESTING.md](../TESTING.md)).
-- [ ] Changed behavior has a test — integration tests in `tests/` preferred
-      (see [AGENTS.md](../AGENTS.md) for the testing conventions).
-- [ ] Sampling-path changes add no allocations, syscalls, or blocking work per sample
-      (or the trade-off is discussed in the PR description).
-- [ ] User-facing text (CLI output, errors, docs) follows [STYLE.md](../STYLE.md).
+<!-- What's the purpose of the change? What does it do, and why? -->
+
+## Test Plan
+
+<!-- How was it tested? -->

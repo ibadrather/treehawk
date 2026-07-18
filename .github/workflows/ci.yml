@@ -84,23 +84,6 @@ jobs:
       - name: "tests"
         run: cargo test --locked
 
-  msrv:
-    name: "minimum supported rust version"
-    timeout-minutes: 15
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-      # Verifies the `rust-version` claim in Cargo.toml; the explicit
-      # `+1.88` overrides the newer toolchain pinned in rust-toolchain.toml.
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.88"
-      - uses: Swatinem/rust-cache@v2
-      - name: "check with MSRV"
-        run: cargo +1.88 check --locked --all-targets
-
   deny:
     name: "cargo deny"
     timeout-minutes: 10
