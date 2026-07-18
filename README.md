@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 
-> ⚠️ **Status: M1 usable.** `treehawk run` (cgroup tracking, CPU+RAM at up to 1 kHz, crash-safe Parquet output) and `treehawk report` work end-to-end. GPU metrics, watch mode, event capture, and service mode are still being built — see [Roadmap](#roadmap). Nothing is released yet.
+> ⚠️ **Status: M1 released.** `treehawk run` (cgroup tracking, CPU+RAM at up to 1 kHz, crash-safe Parquet output) and `treehawk report` work end-to-end. GPU metrics, watch mode, event capture, and service mode are still being built — see [Roadmap](#roadmap).
 
 ---
 
@@ -139,4 +139,4 @@ conventions.
 
 ## License
 
-Dual-licensed under **MIT OR Apache-2.0**, at your option (the Rust ecosystem convention). Currently developed internally; planned to be open-sourced.
+Dual-licensed under **MIT OR Apache-2.0**, at your option (the Rust ecosystem convention).
