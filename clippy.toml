@@ -1,0 +1,18 @@
+# Clippy configuration, adapted from uv (https://github.com/astral-sh/uv),
+# MIT OR Apache-2.0. See CONTRIBUTING.md for the full credit.
+#
+# The lint *levels* live in Cargo.toml under [lints]; this file holds the
+# knobs that configure how individual lints behave.
+
+# `clippy::unwrap_used` is enabled in Cargo.toml so production code must
+# handle errors, but `.unwrap()` in tests is idiomatic and fine.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# Words that `clippy::doc_markdown` should not ask to wrap in backticks.
+# ".." includes clippy's built-in defaults (CPU, GPU, TCP, ...).
+doc-valid-idents = [
+  "NVML",
+  "RAPL",
+  "..", # Include the defaults
+]

@@ -1,0 +1,4 @@
+# Formatting policy adapted from uv (https://github.com/astral-sh/uv),
+# MIT OR Apache-2.0. See CONTRIBUTING.md for the full credit.
+edition = "2024"
+style_edition = "2024"
