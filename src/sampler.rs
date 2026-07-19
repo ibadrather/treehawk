@@ -110,7 +110,8 @@ fn sampler_thread(
         // --- one tick ---
         let members = tracker.members(&mut scratch).unwrap_or_default();
         let member_set: HashSet<i32> = members.iter().copied().collect();
-        let want_pss = opts.pss_every_ticks != 0 && ticks % u64::from(opts.pss_every_ticks) == 0;
+        let want_pss =
+            opts.pss_every_ticks != 0 && ticks.is_multiple_of(u64::from(opts.pss_every_ticks));
         let mut samples = Vec::with_capacity(members.len());
         let mut new_processes = Vec::new();
 
