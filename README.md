@@ -4,9 +4,38 @@
 
 [![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 
-> ⚠️ **Status: M1 released.** `treehawk run` (cgroup tracking, CPU+RAM at up to 1 kHz, crash-safe Parquet output) and `treehawk report` work end-to-end. GPU metrics, watch mode, event capture, and service mode are still being built — see [Roadmap](#roadmap).
+> ⚠️ **Status: M1 released.** `treehawk run` and `treehawk report` work end-to-end; everything
+> else is still being built — see [What works today](#what-works-today) and [Roadmap](#roadmap).
 
 ---
+
+## What works today
+
+- `treehawk run -- <command>` — runs a command and records it plus every descendant, contained in
+  a dedicated cgroup (v2), with automatic PID-tree fallback where cgroups are unavailable.
+- CPU and RAM sampling per process, `--interval` from 1 ms to 60 s (default 100 ms / 10 Hz),
+  measured at < 1 % of one core at defaults.
+- Crash-safe output: rotating Parquet chunks plus a JSON manifest, flushed every ≤ 5 s, readable
+  directly with pandas/polars/DuckDB.
+- `--label` to tag processes and `--out` to name the session directory.
+- `treehawk report <session>` for a terminal summary, and a global `-v`/`-vv` flag for progress
+  logging on stderr.
+
+## Not built yet
+
+These appear in the CLI and docs but are placeholders for future releases (see
+[Roadmap](#roadmap) for detail):
+
+- **GPU metrics** (M2) — NVML, DRM fdinfo, and Jetson sysfs backends; the schema already reserves
+  the columns.
+- **Watch mode and config** (M3) — `treehawk watch` with thresholds and keyword matching,
+  `treehawk config`, `treehawk ls`, `treehawk export`, and `interval "max"` self-tuning.
+- **Event capture** (M4) — eBPF/netlink exec+exit events; today a process must live for about one
+  sampling tick to be seen.
+- **Service mode and power logging** (M5) — `treehawk service install` (systemd) and `--power`.
+- **Hardening** (M6) — overhead budgets as CI release gates, 7-day soak test, musl static builds.
+- **Python API** (deferred) — `treehawk.load()` and live streaming; Parquet files are directly
+  readable in the meantime.
 
 ## Why
 
@@ -87,7 +116,8 @@ df = pd.read_parquet("runs/cam-test/samples-00000.parquet")
 df[df.label == "camera"].plot(x="t", y="cpu_pct")
 ```
 
-Plus `treehawk report <session>` for a quick terminal summary and `treehawk export --format csv` for everything else. A dedicated Python API (`treehawk.load()`, live streaming into dashboards) is planned, but deferred until the core is solid.
+Plus `treehawk report <session>` for a quick terminal summary; `treehawk export --format csv`
+arrives with M3 for everything else. A dedicated Python API (`treehawk.load()`, live streaming into dashboards) is planned, but deferred until the core is solid.
 
 ## How it works (short version)
 
