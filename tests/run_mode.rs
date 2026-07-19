@@ -140,8 +140,8 @@ fn sigkill_leaves_readable_dataset() {
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn treehawk");
-    // Let it sample past at least one flush... the first flush happens at 5 s.
-    std::thread::sleep(Duration::from_secs(6));
+    // Let it sample past at least one flush... flushes happen every 1 s.
+    std::thread::sleep(Duration::from_millis(2500));
     // SAFETY: plain SIGKILL of the child we just spawned.
     unsafe { libc::kill(child.id() as i32, libc::SIGKILL) };
     child.wait().expect("reap treehawk");
@@ -165,6 +165,100 @@ fn sigkill_leaves_readable_dataset() {
 
     // The orphaned `sleep 30` keeps running in its own process group; clean it up.
     let _ = Command::new("pkill").args(["-f", "^sleep 30$"]).status();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A non-empty `--out` directory is refused instead of silently overwritten.
+#[test]
+fn non_empty_out_dir_is_refused() {
+    let dir = temp_session("nooverwrite");
+    let output = run_target(&dir, "50ms", &["sleep", "0.2"]);
+    assert_eq!(output.status.code(), Some(0));
+    let first = Manifest::load(&dir).expect("first session");
+
+    let output = run_target(&dir, "50ms", &["sleep", "0.2"]);
+    assert_ne!(output.status.code(), Some(0), "second run must be refused");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not empty"),
+        "expected the refusal message:\n{stderr}"
+    );
+    // The first session survives untouched (session ids are unique UUIDs).
+    let survivor = Manifest::load(&dir).expect("first session still readable");
+    assert_eq!(survivor.session_id, first.session_id);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Session ids are UUIDs, so runs can never collide on a directory name.
+#[test]
+fn session_id_is_a_uuid() {
+    let dir = temp_session("uuid");
+    let output = run_target(&dir, "50ms", &["true"]);
+    assert_eq!(output.status.code(), Some(0));
+    let manifest = Manifest::load(&dir).expect("manifest");
+    assert_eq!(manifest.session_id.len(), 36, "{}", manifest.session_id);
+    assert_eq!(manifest.session_id.matches('-').count(), 4);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `--cmdline` records argv, so same-named processes stay distinguishable.
+#[test]
+fn cmdline_flag_records_argv() {
+    let dir = temp_session("cmdline");
+    let output = treehawk()
+        .args(["run", "--interval", "20ms", "--cmdline", "--out"])
+        .arg(&dir)
+        .args(["--", "sh", "-c", "sleep 0.3"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("treehawk binary should launch");
+    assert_eq!(output.status.code(), Some(0));
+
+    let report = report_text(&dir);
+    // The shell's exe basename may be dash/bash, but its recorded arguments
+    // must appear in the process column.
+    assert!(
+        report.contains("-c sleep 0.3"),
+        "report should show recorded argv:\n{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Whole-tree CPU from the cgroup's `cpu.stat` lands in the manifest and the
+/// report, covering processes too short-lived to be sampled.
+#[test]
+fn cgroup_cpu_totals_reported() {
+    let dir = temp_session("cputotal");
+    let output = run_target(
+        &dir,
+        "20ms",
+        &[
+            "sh",
+            "-c",
+            "i=0; while [ \"$i\" -lt 50000 ]; do i=$((i+1)); done",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(0));
+
+    let manifest = Manifest::load(&dir).expect("manifest");
+    if manifest.tracking_mode != "cgroup" {
+        // Cgroup v2 delegation unavailable (e.g. non-systemd session): the
+        // total is only defined for cgroup tracking.
+        eprintln!("skipping: cgroup tracking unavailable on this host");
+        std::fs::remove_dir_all(&dir).ok();
+        return;
+    }
+    let finished = manifest.finished.expect("finalized");
+    assert!(
+        finished.cgroup_cpu_usage_usec.is_some_and(|us| us > 0),
+        "expected cpu.stat usage in the manifest: {:?}",
+        finished.cgroup_cpu_usage_usec
+    );
+    let report = report_text(&dir);
+    assert!(
+        report.contains("total tree CPU"),
+        "report should show the tree CPU total:\n{report}"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
 

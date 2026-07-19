@@ -65,6 +65,11 @@ pub struct Finished {
     pub achieved_rate_hz: f64,
     /// Tracked processes still alive when the target exited and the session closed.
     pub descendants_alive_at_exit: u32,
+    /// Total CPU time of the whole tree from the cgroup's `cpu.stat`
+    /// (`usage_usec`), read at session end. Captures even processes too
+    /// short-lived to be sampled. None in pid-tree mode or on read failure.
+    #[serde(default)]
+    pub cgroup_cpu_usage_usec: Option<u64>,
 }
 
 impl Manifest {
@@ -170,6 +175,7 @@ mod tests {
             overruns: 0,
             achieved_rate_hz: 10.0,
             descendants_alive_at_exit: 0,
+            cgroup_cpu_usage_usec: Some(1_000_000),
         });
         m.write(&dir).expect("write manifest");
         let loaded = Manifest::load(&dir).expect("load manifest");

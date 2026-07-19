@@ -61,6 +61,8 @@ pub struct SamplerOptions {
     pub pss_every_ticks: u32,
     /// Comma-joined `--label` values, attached to every process row in M1.
     pub labels: Option<String>,
+    /// `--cmdline`: record argv in the process table (FR-30 opt-in).
+    pub record_cmdline: bool,
 }
 
 /// Sampler outcome for the manifest (FR-13, FR-11b groundwork).
@@ -68,6 +70,9 @@ pub struct SamplerStats {
     pub ticks: u64,
     pub overruns: u64,
     pub descendants_alive_at_exit: u32,
+    /// Whole-tree CPU time from the cgroup's `cpu.stat`, read at session end;
+    /// None in pid-tree mode.
+    pub cgroup_cpu_usage_usec: Option<u64>,
 }
 
 pub fn spawn_sampler(
@@ -119,7 +124,7 @@ fn sampler_thread(
             if let std::collections::hash_map::Entry::Vacant(vacant) = handles.entry(pid) {
                 // First sight of this PID: open fds and record identity. Any
                 // failure means it died already or is off-limits — skip (NFR-4).
-                let Ok(handle) = PidHandle::open(pid, &mut scratch) else {
+                let Ok(handle) = PidHandle::open(pid, opts.record_cmdline, &mut scratch) else {
                     continue;
                 };
                 let proc_id = next_proc_id;
@@ -138,6 +143,7 @@ fn sampler_thread(
                     last_seen_ns: t,
                     exit_code: None,
                     labels: opts.labels.clone(),
+                    cmdline: id.cmdline.clone(),
                 };
                 registry.insert(proc_id, row.clone());
                 new_processes.push(row);
@@ -155,10 +161,11 @@ fn sampler_thread(
                     // Exec after first sight: refresh the identity and re-emit
                     // the row so the WAL carries the corrected name too (the
                     // reader keeps the last row per proc_id).
-                    handle.refresh_identity(&s.stat.comm);
+                    handle.refresh_identity(&s.stat.comm, opts.record_cmdline);
                     if let Some(row) = registry.get_mut(&proc_id) {
                         row.exe_path.clone_from(&handle.identity.exe_path);
                         row.exe_name = handle.identity.exe_name();
+                        row.cmdline.clone_from(&handle.identity.cmdline);
                         new_processes.push(row.clone());
                     }
                 }
@@ -236,6 +243,13 @@ fn sampler_thread(
         row.exit_code = Some(code);
     }
     let _ = tx.send(WriterMsg::Finalize { processes });
+    // Whole-tree CPU from the kernel's own accounting, so the report can show
+    // how much ran in processes too short-lived to be sampled. Read before
+    // cleanup() removes the cgroup.
+    let cgroup_cpu_usage_usec = match &tracker {
+        Tracker::Cgroup(cgroup) => cgroup.cpu_usage_usec(),
+        Tracker::PidTree(_) => None,
+    };
     if let Tracker::Cgroup(cgroup) = tracker {
         cgroup.cleanup();
     }
@@ -243,6 +257,7 @@ fn sampler_thread(
         ticks,
         overruns,
         descendants_alive_at_exit: alive_at_exit,
+        cgroup_cpu_usage_usec,
     }
 }
 

@@ -33,14 +33,20 @@ pub fn report(args: &ReportArgs) -> Result<()> {
     let processes = read_processes(dir)?;
 
     let clk_tck = f64::from(manifest.host.clk_tck);
-    let n_cpus = f64::from(manifest.host.n_cpus);
 
     let mut stats: HashMap<u32, ProcStats> = HashMap::new();
+    let mut attributed_cpu_seconds = 0.0;
     for batch in &samples {
-        accumulate(batch, &mut stats, clk_tck, n_cpus)?;
+        accumulate(batch, &mut stats, clk_tck, &mut attributed_cpu_seconds)?;
     }
 
-    print_summary(&manifest, dir, &mut stats, &processes);
+    print_summary(
+        &manifest,
+        dir,
+        &mut stats,
+        &processes,
+        attributed_cpu_seconds,
+    );
     Ok(())
 }
 
@@ -61,13 +67,15 @@ struct ProcInfo {
     exit_code: Option<i32>,
     first_seen_ns: u64,
     last_seen_ns: u64,
+    /// Argv joined with spaces; recorded only with `--cmdline`.
+    cmdline: Option<String>,
 }
 
 fn accumulate(
     batch: &RecordBatch,
     stats: &mut HashMap<u32, ProcStats>,
     clk_tck: f64,
-    n_cpus: f64,
+    attributed_cpu_seconds: &mut f64,
 ) -> Result<()> {
     let col = |name: &str| {
         batch
@@ -92,10 +100,10 @@ fn accumulate(
         if !dt.is_null(row) && dt.value(row) > 0 && !utime.is_null(row) {
             let cpu_seconds = (utime.value(row) + stime.value(row)) as f64 / clk_tck;
             let wall_seconds = dt.value(row) as f64 / 1e9;
-            // Machine-normalized: 100% = every core busy (NFR-7).
-            entry
-                .cpu_pcts
-                .push(cpu_seconds / wall_seconds / n_cpus * 100.0);
+            *attributed_cpu_seconds += cpu_seconds;
+            // Per-core convention, as in `top` (NFR-7): 100% = one core busy,
+            // so a process saturating four cores reads 400%.
+            entry.cpu_pcts.push(cpu_seconds / wall_seconds * 100.0);
         }
     }
     Ok(())
@@ -158,6 +166,10 @@ fn read_processes(dir: &Path) -> Result<HashMap<u32, ProcInfo>> {
         let exit_code = col("exit_code")?.as_primitive::<Int32Type>();
         let first_seen = col("first_seen_ns")?.as_primitive::<UInt64Type>();
         let last_seen = col("last_seen_ns")?.as_primitive::<UInt64Type>();
+        // Absent in sessions recorded before the column existed (NFR-8).
+        let cmdline = batch
+            .column_by_name("cmdline")
+            .map(AsArray::as_string::<i32>);
         for row in 0..batch.num_rows() {
             out.insert(
                 proc_id.value(row),
@@ -168,6 +180,8 @@ fn read_processes(dir: &Path) -> Result<HashMap<u32, ProcInfo>> {
                     exit_code: (!exit_code.is_null(row)).then(|| exit_code.value(row)),
                     first_seen_ns: first_seen.value(row),
                     last_seen_ns: last_seen.value(row),
+                    cmdline: cmdline
+                        .and_then(|c| (!c.is_null(row)).then(|| c.value(row).to_string())),
                 },
             );
         }
@@ -188,6 +202,7 @@ fn print_summary(
     dir: &Path,
     stats: &mut HashMap<u32, ProcStats>,
     processes: &HashMap<u32, ProcInfo>,
+    attributed_cpu_seconds: f64,
 ) {
     // Color only on a TTY (FR-21).
     let tty = std::io::stdout().is_terminal();
@@ -237,11 +252,27 @@ fn print_summary(
                 String::new()
             }
         );
+        if let Some(usage_usec) = f.cgroup_cpu_usage_usec {
+            // Kernel accounting for the whole tree, so CPU burned by processes
+            // too short-lived to be sampled still shows up.
+            let total = usage_usec as f64 / 1e6;
+            let unattributed = (total - attributed_cpu_seconds).max(0.0);
+            println!(
+                "  cpu:      {} total tree CPU · {} unattributed to sampled processes",
+                human_duration(total),
+                human_duration(unattributed),
+            );
+        }
     } else {
         println!("  sampling: {interval_ms} ms interval");
+        let recovered = if stats.is_empty() {
+            "no sample data could be recovered"
+        } else {
+            "data recovered from the active chunk"
+        };
         println!(
             "  {bold}note:{reset} session was not finalized (crashed or still running); \
-             data recovered from the active chunk"
+             {recovered}"
         );
     }
     println!();
@@ -282,13 +313,7 @@ fn print_summary(
         let p95 = percentile(&s.cpu_pcts, 0.95);
         let peak = s.cpu_pcts.last().copied().unwrap_or(0.0);
         let info = processes.get(&proc_id);
-        let name = info.map_or_else(
-            || format!("proc#{proc_id}"),
-            |i| match &i.labels {
-                Some(l) => format!("{} [{}]", i.exe_name, l),
-                None => i.exe_name.clone(),
-            },
-        );
+        let name = info.map_or_else(|| format!("proc#{proc_id}"), display_name);
         let lifetime = info
             .map(|i| (i.last_seen_ns.saturating_sub(i.first_seen_ns)) as f64 / 1e9)
             .unwrap_or_else(|| (s.last_t_ns.saturating_sub(s.first_t_ns)) as f64 / 1e9);
@@ -308,7 +333,13 @@ fn print_summary(
         );
     }
     if stats.is_empty() {
-        println!("{dim}(no samples recorded — target likely exited within one interval){reset}");
+        if manifest.finished.is_some() {
+            println!(
+                "{dim}(no samples recorded — target likely exited within one interval){reset}"
+            );
+        } else {
+            println!("{dim}(no samples recovered){reset}");
+        }
     }
     // Processes seen (identity) but never sampled, e.g. died between ticks.
     let unsampled: Vec<&ProcInfo> = processes
@@ -329,11 +360,75 @@ fn print_summary(
     }
 }
 
+/// Table name for one process: executable basename, the recorded arguments
+/// when `--cmdline` was used (argv\[0\] is dropped in favor of the basename,
+/// since it can be an arbitrarily long path), and any labels.
+fn display_name(info: &ProcInfo) -> String {
+    let mut name = match info.cmdline.as_deref().and_then(|c| c.split_once(' ')) {
+        Some((_, args)) => format!("{} {args}", info.exe_name),
+        None => info.exe_name.clone(),
+    };
+    if let Some(l) = &info.labels {
+        name = format!("{name} [{l}]");
+    }
+    name
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
         let cut: String = s.chars().take(max - 1).collect();
         format!("{cut}…")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{SampleRow, samples_batch};
+
+    #[test]
+    fn cpu_percent_uses_per_core_convention() {
+        let row = SampleRow {
+            t_mono_ns: 1,
+            proc_id: 0,
+            pid: 1,
+            dt_ns: Some(500_000_000),
+            cpu_utime_ticks: Some(80),
+            cpu_stime_ticks: Some(20),
+            num_threads: 4,
+            vm_rss_kb: 0,
+            vm_swap_kb: 0,
+            vm_size_kb: 0,
+            pss_kb: None,
+            voluntary_ctxt_switches: None,
+            nonvoluntary_ctxt_switches: None,
+            gpu_util_pct: None,
+            gpu_mem_bytes: None,
+        };
+        let batch = samples_batch(&[row]).expect("valid batch");
+        let mut stats = HashMap::new();
+        let mut attributed = 0.0;
+        accumulate(&batch, &mut stats, 100.0, &mut attributed).expect("accumulate");
+        // 1 s of CPU over 0.5 s of wall time is 200% of one core, as in `top`
+        // — never divided by the machine's core count.
+        let pcts = &stats[&0].cpu_pcts;
+        assert!((pcts[0] - 200.0).abs() < 1e-9, "got {}", pcts[0]);
+        assert!((attributed - 1.0).abs() < 1e-9, "got {attributed}");
+    }
+
+    #[test]
+    fn display_name_prefers_recorded_argv() {
+        let info = ProcInfo {
+            pid: 1,
+            exe_name: "python3.14".into(),
+            labels: None,
+            exit_code: None,
+            first_seen_ns: 0,
+            last_seen_ns: 0,
+            cmdline: Some("/usr/bin/python3.14 train.py --epochs 5".into()),
+        };
+        assert_eq!(display_name(&info), "python3.14 train.py --epochs 5");
     }
 }

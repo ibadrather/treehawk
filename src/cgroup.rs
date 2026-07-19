@@ -78,6 +78,20 @@ impl CgroupTracker {
             .collect())
     }
 
+    /// Total CPU time consumed by the whole cgroup, from `cpu.stat`
+    /// (`usage_usec`). Unlike sampling, this includes processes too
+    /// short-lived to ever be seen at a tick. None when unreadable.
+    pub fn cpu_usage_usec(&self) -> Option<u64> {
+        let content = std::fs::read_to_string(self.dir.join("cpu.stat")).ok()?;
+        content.lines().find_map(|l| {
+            l.strip_prefix("usage_usec")?
+                .split_ascii_whitespace()
+                .next()?
+                .parse()
+                .ok()
+        })
+    }
+
     /// Removes the cgroup; harmless to fail while stragglers are still inside.
     pub fn cleanup(self) {
         drop(self.procs);

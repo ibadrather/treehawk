@@ -4,7 +4,7 @@
 //! Design (plan §Key designs 6): Parquet needs its footer, so a killed process
 //! would lose the whole open chunk. Instead the active chunk is an Arrow IPC
 //! *stream* file (`<table>-active.arrows`) appended and fsynced every flush
-//! window (≤ 5 s); it is converted into a numbered `.parquet` chunk at rotation
+//! window (default 1 s); it is converted into a numbered `.parquet` chunk at rotation
 //! boundaries and at finalize. A truncated `.arrows` tail is readable up to the
 //! last complete batch.
 
@@ -45,7 +45,8 @@ pub enum WriterMsg {
 
 pub struct WriterOptions {
     pub dir: PathBuf,
-    /// Bounded data-loss window (FR-17). Default 5 s.
+    /// Bounded data-loss window (FR-17): a SIGKILL loses at most this much.
+    /// Default 1 s.
     pub flush_interval: Duration,
     /// Active chunk size that triggers rotation to Parquet (FR-18).
     pub rotate_bytes: u64,
@@ -55,7 +56,7 @@ impl WriterOptions {
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,
-            flush_interval: Duration::from_secs(5),
+            flush_interval: Duration::from_secs(1),
             rotate_bytes: 64 * 1024 * 1024,
         }
     }

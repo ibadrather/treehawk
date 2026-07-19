@@ -107,6 +107,25 @@ pub fn parse_pss_kb(content: &str) -> Option<u64> {
     })
 }
 
+/// Joins the NUL-separated argv of `/proc/<pid>/cmdline` with spaces; None
+/// for an empty file (kernel threads, zombies).
+fn join_argv(raw: &str) -> Option<String> {
+    let joined = raw.trim_end_matches('\0').replace('\0', " ");
+    (!joined.is_empty()).then_some(joined)
+}
+
+/// Reads `/proc/<pid>/cmdline` once, at first sight — never on the sample path.
+fn read_cmdline(proc_dir: &OwnedFd, scratch: &mut Vec<u8>) -> Option<String> {
+    let fd = openat(
+        proc_dir,
+        "cmdline",
+        OFlags::RDONLY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .ok()?;
+    join_argv(read_fd_to_string(&fd, scratch).ok()?)
+}
+
 /// Whether PSS is readable for this process; tri-state so we probe exactly once.
 enum PssState {
     Unprobed,
@@ -125,14 +144,16 @@ pub struct PidHandle {
     pub prev: Option<(u64, u64, u64)>,
 }
 
-/// Immutable facts captured when the process is first seen (FR-30 subset:
-/// no cmdline, no environment).
+/// Immutable facts captured when the process is first seen (FR-30: cmdline
+/// only when opted in, never the environment).
 #[derive(Debug, Clone)]
 pub struct Identity {
     pub comm: String,
     pub ppid: i32,
     pub uid: u32,
     pub exe_path: Option<String>,
+    /// NUL-separated argv joined with spaces; only captured with `--cmdline`.
+    pub cmdline: Option<String>,
     pub starttime_ticks: u64,
 }
 
@@ -156,8 +177,9 @@ impl Identity {
 
 impl PidHandle {
     /// Opens all per-tick fds. Any error means "this PID is gone or off-limits":
-    /// the caller skips it this tick (NFR-4).
-    pub fn open(pid: i32, scratch: &mut Vec<u8>) -> io::Result<Self> {
+    /// the caller skips it this tick (NFR-4). `record_cmdline` gates reading
+    /// `/proc/<pid>/cmdline` (FR-30: opt-in, command lines can carry secrets).
+    pub fn open(pid: i32, record_cmdline: bool, scratch: &mut Vec<u8>) -> io::Result<Self> {
         let dir = rustix::fs::open(
             format!("/proc/{pid}"),
             OFlags::PATH | OFlags::DIRECTORY | OFlags::CLOEXEC,
@@ -178,6 +200,11 @@ impl PidHandle {
         let exe_path = rustix::fs::readlinkat(&dir, "exe", Vec::new())
             .ok()
             .map(|c| c.to_string_lossy().into_owned());
+        let cmdline = if record_cmdline {
+            read_cmdline(&dir, scratch)
+        } else {
+            None
+        };
 
         let stat = parse_stat(read_fd_to_string(&stat_fd, scratch)?)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "unparsable stat"))?;
@@ -187,6 +214,7 @@ impl PidHandle {
             ppid: stat.ppid,
             uid: status.uid,
             exe_path,
+            cmdline,
             starttime_ticks: stat.starttime_ticks,
         };
         Ok(Self {
@@ -224,11 +252,16 @@ impl PidHandle {
     /// identity in line with what actually ran. `exe` is unreadable for
     /// zombies, so a failed readlink falls back to the new comm via
     /// [`Identity::exe_name`].
-    pub fn refresh_identity(&mut self, comm: &str) {
+    pub fn refresh_identity(&mut self, comm: &str, record_cmdline: bool) {
         self.identity.comm = comm.to_string();
         self.identity.exe_path = std::fs::read_link(format!("/proc/{}/exe", self.pid))
             .ok()
             .map(|p| p.to_string_lossy().into_owned());
+        if record_cmdline {
+            self.identity.cmdline = std::fs::read(format!("/proc/{}/cmdline", self.pid))
+                .ok()
+                .and_then(|raw| join_argv(&String::from_utf8_lossy(&raw)));
+        }
     }
 
     fn read_pss(&mut self, scratch: &mut Vec<u8>) -> Option<u64> {
@@ -302,10 +335,30 @@ mod tests {
     }
 
     #[test]
+    fn argv_joining() {
+        assert_eq!(
+            join_argv("python3\0train.py\0--epochs\x005\0"),
+            Some("python3 train.py --epochs 5".into())
+        );
+        assert_eq!(join_argv(""), None);
+        assert_eq!(join_argv("\0"), None);
+    }
+
+    #[test]
     fn live_self_inspection() {
         let mut scratch = Vec::new();
         let me = std::process::id() as i32;
-        let mut handle = PidHandle::open(me, &mut scratch).expect("open self");
+        let mut handle = PidHandle::open(me, true, &mut scratch).expect("open self");
+        assert!(
+            handle
+                .identity
+                .cmdline
+                .as_deref()
+                .is_some_and(|c| !c.is_empty()),
+            "own cmdline should be captured when opted in"
+        );
+        let without = PidHandle::open(me, false, &mut scratch).expect("open self");
+        assert_eq!(without.identity.cmdline, None);
         let sample = handle.sample(true, &mut scratch).expect("sample self");
         assert!(sample.status.vm_rss_kb > 0);
         assert!(sample.stat.num_threads >= 1);

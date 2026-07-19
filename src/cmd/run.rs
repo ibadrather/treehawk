@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use log::{info, warn};
 
 use crate::cgroup::{CgroupTracker, PidTreeTracker, TrackingMode};
@@ -13,7 +13,7 @@ use crate::cli::RunArgs;
 use crate::manifest::{Finished, Manifest};
 use crate::sampler::{SamplerOptions, SamplerStats, StopSignal, Tracker, spawn_sampler};
 use crate::spawn::{TargetExit, install_signal_handlers, spawn_target, wait_target};
-use crate::util::{monotonic_ns, utc_timestamp_compact};
+use crate::util::{monotonic_ns, session_uuid};
 use crate::writer::{WriterMsg, WriterOptions, spawn_writer};
 
 /// PSS decimation: aim for ~1 Hz regardless of the sampling rate.
@@ -35,11 +35,21 @@ pub fn run(args: &RunArgs) -> ExitCode {
 fn run_inner(args: &RunArgs) -> Result<ExitCode> {
     install_signal_handlers().context("installing signal handlers")?;
 
-    let session_id = utc_timestamp_compact();
+    let session_id = session_uuid();
     let session_dir: PathBuf = args
         .out
         .clone()
         .unwrap_or_else(|| PathBuf::from("treehawk").join(&session_id));
+    // Never overwrite an existing session: a reused --out must be empty.
+    if let Ok(mut entries) = std::fs::read_dir(&session_dir)
+        && entries.next().is_some()
+    {
+        bail!(
+            "output directory is not empty: {}; use a new or empty directory \
+             so the existing data is not overwritten",
+            session_dir.display()
+        );
+    }
     std::fs::create_dir_all(&session_dir)
         .with_context(|| format!("creating session dir {}", session_dir.display()))?;
     info!("session directory: {}", session_dir.display());
@@ -122,6 +132,7 @@ fn run_inner(args: &RunArgs) -> Result<ExitCode> {
             interval: args.interval,
             pss_every_ticks: pss_ticks,
             labels: (!args.label.is_empty()).then(|| args.label.join(",")),
+            record_cmdline: args.cmdline,
         },
         tracker,
         target_pid,
@@ -166,6 +177,7 @@ fn finalize_manifest(
         overruns: stats.overruns,
         achieved_rate_hz,
         descendants_alive_at_exit: stats.descendants_alive_at_exit,
+        cgroup_cpu_usage_usec: stats.cgroup_cpu_usage_usec,
     });
     manifest
         .write(session_dir)

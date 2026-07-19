@@ -45,9 +45,15 @@ pub struct RunArgs {
     #[arg(long, default_value = "100ms", value_parser = parse_interval)]
     pub interval: Duration,
 
-    /// Output directory for the session (default: ./treehawk/<timestamp>)
+    /// Output directory for the session; must be new or empty
+    /// (default: ./treehawk/<uuid>)
     #[arg(long)]
     pub out: Option<PathBuf>,
+
+    /// Record full command lines in the process table (off by default:
+    /// command lines can contain secrets)
+    #[arg(long)]
+    pub cmdline: bool,
 
     /// Label attached to every recorded process (repeatable)
     #[arg(long)]
