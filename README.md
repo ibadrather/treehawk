@@ -146,7 +146,9 @@ These are release-gated commitments, measured in CI:
 
 ## Roadmap
 
-Milestone detail lives in [docs/plan.md](docs/plan.md); the full formal spec is
+The consolidated per-feature tracker — every planned feature grouped by milestone, with what's
+already done ticked off — is [docs/ROADMAP.md](docs/ROADMAP.md). Milestone detail lives in
+[docs/plan.md](docs/plan.md); the full formal spec is
 [docs/requirements.md](docs/requirements.md).
 
 | Milestone | Scope | Status |
