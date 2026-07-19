@@ -6,6 +6,7 @@ use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 
+use log::warn;
 use rustix::fs::{Mode, OFlags};
 
 use crate::proc::read_fd_to_string;
@@ -77,13 +78,27 @@ impl CgroupTracker {
             .collect())
     }
 
+    /// Total CPU time consumed by the whole cgroup, from `cpu.stat`
+    /// (`usage_usec`). Unlike sampling, this includes processes too
+    /// short-lived to ever be seen at a tick. None when unreadable.
+    pub fn cpu_usage_usec(&self) -> Option<u64> {
+        let content = std::fs::read_to_string(self.dir.join("cpu.stat")).ok()?;
+        content.lines().find_map(|l| {
+            l.strip_prefix("usage_usec")?
+                .split_ascii_whitespace()
+                .next()?
+                .parse()
+                .ok()
+        })
+    }
+
     /// Removes the cgroup; harmless to fail while stragglers are still inside.
     pub fn cleanup(self) {
         drop(self.procs);
         if let Err(e) = std::fs::remove_dir(&self.dir) {
-            eprintln!(
-                "treehawk: warning: could not remove cgroup {} ({e}); \
-                 processes may still be running in it",
+            warn!(
+                "could not remove cgroup {} ({e}); processes may still be \
+                 running in it",
                 self.dir.display()
             );
         }

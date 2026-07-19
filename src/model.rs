@@ -65,8 +65,8 @@ pub struct HostRow {
 
 /// Per-process identity, one row per process seen in the session (FR-30).
 ///
-/// Deliberately no cmdline and no environment in M1; identity is executable
-/// path/basename plus user labels.
+/// The command line is recorded only when `--cmdline` opts in (it can carry
+/// secrets); the environment is never recorded.
 #[derive(Debug, Clone)]
 pub struct ProcessRow {
     pub proc_id: u32,
@@ -82,6 +82,8 @@ pub struct ProcessRow {
     /// Only known for the direct target in M1 (descendant exits arrive with FR-4 events in M4).
     pub exit_code: Option<i32>,
     pub labels: Option<String>,
+    /// Argv joined with spaces; None unless recorded with `--cmdline` (FR-30).
+    pub cmdline: Option<String>,
 }
 
 pub fn samples_schema() -> Arc<Schema> {
@@ -135,6 +137,7 @@ pub fn processes_schema() -> Arc<Schema> {
         Field::new("last_seen_ns", DataType::UInt64, false),
         Field::new("exit_code", DataType::Int32, true),
         Field::new("labels", DataType::Utf8, true),
+        Field::new("cmdline", DataType::Utf8, true),
     ]))
 }
 
@@ -250,6 +253,7 @@ pub fn processes_batch(rows: &[ProcessRow]) -> Result<RecordBatch, ArrowError> {
     let mut last_seen = UInt64Builder::with_capacity(rows.len());
     let mut exit_code = Int32Builder::with_capacity(rows.len());
     let mut labels = StringBuilder::new();
+    let mut cmdline = StringBuilder::new();
     for r in rows {
         proc_id.append_value(r.proc_id);
         pid.append_value(r.pid);
@@ -262,6 +266,7 @@ pub fn processes_batch(rows: &[ProcessRow]) -> Result<RecordBatch, ArrowError> {
         last_seen.append_value(r.last_seen_ns);
         exit_code.append_option(r.exit_code);
         labels.append_option(r.labels.as_deref());
+        cmdline.append_option(r.cmdline.as_deref());
     }
     let arrays: Vec<ArrayRef> = vec![
         Arc::new(proc_id.finish()),
@@ -275,6 +280,7 @@ pub fn processes_batch(rows: &[ProcessRow]) -> Result<RecordBatch, ArrowError> {
         Arc::new(last_seen.finish()),
         Arc::new(exit_code.finish()),
         Arc::new(labels.finish()),
+        Arc::new(cmdline.finish()),
     ];
     RecordBatch::try_new(processes_schema(), arrays)
 }

@@ -1,0 +1,24 @@
+name: Question
+description: Ask a question about treehawk
+labels: ["question"]
+body:
+  - type: textarea
+    attributes:
+      label: Question
+      description: Describe your question in detail.
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Platform
+      description: What operating system and architecture are you using? (see `uname -orsm`)
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Version
+      description: What version of treehawk are you using? (see `treehawk --version`)
+    validations:
+      required: false

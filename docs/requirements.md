@@ -102,9 +102,9 @@ planned but deferred (see 5.6).
 
 - FR-7: Per process and per sample, Treehawk SHALL collect at minimum:
   - identity: PID, PPID, cgroup, executable path, full command line, UID, start time;
-  - CPU: raw CPU-time deltas (utime+stime), from which both machine-normalized
-    utilization (default presentation, matching threshold semantics) and
-    per-core-normalized utilization are derivable; user/system split, number of
+  - CPU: raw CPU-time deltas (utime+stime), from which both per-core
+    utilization (default presentation, matching `top`) and machine-normalized
+    utilization are derivable; user/system split, number of
     threads, voluntary/involuntary context switches;
   - memory: RSS, PSS (when readable), swap, virtual size;
   - GPU (per process, per device): compute/SM utilization, encoder/decoder
@@ -180,10 +180,10 @@ planned but deferred (see 5.6).
 - FR-16: A session SHALL be self-describing: a `session.json` manifest containing
   the exact command, environment hash, host info (kernel, CPU model, GPU model,
   driver versions), Treehawk version, sampling config, and clock anchors.
-- FR-17: Data SHALL be flushed at a bounded interval (default ≤ 5 s) so that a
+- FR-17: Data SHALL be flushed at a bounded interval (default 1 s) so that a
   crash of the target, the host, or Treehawk itself loses at most that window.
 - FR-18: Treehawk SHALL support log rotation and a retention cap (`--max-disk`)
-  for multi-day runs. Defaults: run mode writes to `./treehawk/<timestamp>`
+  for multi-day runs. Defaults: run mode writes to `./treehawk/<uuid>`
   (override with `--out`); service mode writes to `/var/lib/treehawk` (system)
   or `~/.local/share/treehawk` (user) with a 1 GB default cap enforced by
   deleting oldest sessions first — deliberately conservative for SD-card
@@ -273,7 +273,8 @@ treehawk service status
 - FR-30 (identity & secret hygiene): The default recorded identity of a process
   SHALL be its executable basename plus any labels (from `--label` or match
   rules) — not its full command line. Full command-line recording SHALL be
-  opt-in (`cmdline = "full"`), with a configurable list of redaction regexes
+  opt-in (the `--cmdline` flag; `cmdline = "full"` once config lands), with a
+  configurable list of redaction regexes
   applied before writing to disk. Process environment variables SHALL NOT be
   recorded. Rationale: command lines routinely contain secrets, and keywords
   ("camera") identify a process for analysis just as well.
@@ -298,9 +299,10 @@ treehawk service status
   wheels; no runtime dependencies beyond glibc/musl and optional GPU drivers.
 - NFR-7 (accuracy): CPU utilization derived from jiffy deltas SHALL be exact with
   respect to kernel accounting. All CPU percentages presented by Treehawk
-  (thresholds, report, defaults in exported data) are machine-normalized
-  (100% = all cores); per-core normalization remains derivable from the stored
-  raw counters. Documentation SHALL state the semantics of every metric.
+  (thresholds, report, defaults in exported data) use the per-core convention
+  (100% = one core busy, as in `top`, so multi-core processes exceed 100%);
+  machine-normalized utilization remains derivable from the stored raw
+  counters. Documentation SHALL state the semantics of every metric.
 - NFR-8 (compatibility): Output schema SHALL be versioned; the Python API SHALL
   read all prior schema versions.
 

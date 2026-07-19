@@ -5,14 +5,15 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
+use log::{info, warn};
 
 use crate::cgroup::{CgroupTracker, PidTreeTracker, TrackingMode};
 use crate::cli::RunArgs;
 use crate::manifest::{Finished, Manifest};
 use crate::sampler::{SamplerOptions, SamplerStats, StopSignal, Tracker, spawn_sampler};
 use crate::spawn::{TargetExit, install_signal_handlers, spawn_target, wait_target};
-use crate::util::{monotonic_ns, utc_timestamp_compact};
+use crate::util::{monotonic_ns, session_uuid};
 use crate::writer::{WriterMsg, WriterOptions, spawn_writer};
 
 /// PSS decimation: aim for ~1 Hz regardless of the sampling rate.
@@ -34,21 +35,32 @@ pub fn run(args: &RunArgs) -> ExitCode {
 fn run_inner(args: &RunArgs) -> Result<ExitCode> {
     install_signal_handlers().context("installing signal handlers")?;
 
-    let session_id = utc_timestamp_compact();
+    let session_id = session_uuid();
     let session_dir: PathBuf = args
         .out
         .clone()
         .unwrap_or_else(|| PathBuf::from("treehawk").join(&session_id));
+    // Never overwrite an existing session: a reused --out must be empty.
+    if let Ok(mut entries) = std::fs::read_dir(&session_dir)
+        && entries.next().is_some()
+    {
+        bail!(
+            "output directory is not empty: {}; use a new or empty directory \
+             so the existing data is not overwritten",
+            session_dir.display()
+        );
+    }
     std::fs::create_dir_all(&session_dir)
         .with_context(|| format!("creating session dir {}", session_dir.display()))?;
+    info!("session directory: {}", session_dir.display());
 
     // Containment: cgroup v2, or PID-tree fallback with the FR-3 warning.
     let cgroup = match CgroupTracker::create(&session_id) {
         Ok(c) => Some(c),
         Err(err) => {
-            eprintln!(
-                "treehawk: warning: cgroup tracking unavailable ({err}); falling back to \
-                 PID-tree tracking — daemonizing (double-forking) descendants may be missed"
+            warn!(
+                "cgroup tracking unavailable ({err}); falling back to PID-tree \
+                 tracking — daemonizing (double-forking) descendants may be missed"
             );
             None
         }
@@ -61,6 +73,11 @@ fn run_inner(args: &RunArgs) -> Result<ExitCode> {
 
     let interval_ns = args.interval.as_nanos() as u64;
     let pss_ticks = pss_every_ticks(args.interval);
+    info!(
+        "tracking mode: {}; sampling every {:?} (PSS every {pss_ticks} ticks)",
+        mode.as_str(),
+        args.interval
+    );
     let manifest = Manifest::new(
         session_id,
         args.command.clone(),
@@ -115,6 +132,7 @@ fn run_inner(args: &RunArgs) -> Result<ExitCode> {
             interval: args.interval,
             pss_every_ticks: pss_ticks,
             labels: (!args.label.is_empty()).then(|| args.label.join(",")),
+            record_cmdline: args.cmdline,
         },
         tracker,
         target_pid,
@@ -147,20 +165,26 @@ fn finalize_manifest(
     let ended = monotonic_ns();
     let duration_s = (ended.saturating_sub(manifest.clock_anchor.monotonic_ns)) as f64 / 1e9;
     let expected_rate = 1e9 / interval_ns as f64;
+    let achieved_rate_hz = if duration_s > 0.0 {
+        (stats.ticks as f64 / duration_s).min(expected_rate)
+    } else {
+        0.0
+    };
     manifest.finished = Some(Finished {
         ended_mono_ns: ended,
         target_exit_code: exit.code_for_manifest(),
         ticks: stats.ticks,
         overruns: stats.overruns,
-        achieved_rate_hz: if duration_s > 0.0 {
-            (stats.ticks as f64 / duration_s).min(expected_rate)
-        } else {
-            0.0
-        },
+        achieved_rate_hz,
         descendants_alive_at_exit: stats.descendants_alive_at_exit,
+        cgroup_cpu_usage_usec: stats.cgroup_cpu_usage_usec,
     });
     manifest
         .write(session_dir)
         .context("finalizing session.json")?;
+    info!(
+        "session finalized: {} ticks, {} overruns, achieved {achieved_rate_hz:.1} Hz",
+        stats.ticks, stats.overruns
+    );
     Ok(())
 }

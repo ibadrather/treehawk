@@ -1,7 +1,9 @@
-//! Small shared helpers: clocks and timestamp formatting.
+//! Small shared helpers: clocks, session identifiers, and human formatting.
 
+use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rustix::rand::{GetRandomFlags, getrandom};
 use rustix::time::{ClockId, clock_gettime};
 
 /// Nanoseconds on `CLOCK_MONOTONIC`. Every sample is stamped with this (FR-12).
@@ -18,37 +20,43 @@ pub fn realtime_ns() -> u64 {
         .unwrap_or(0)
 }
 
-/// `20260717-165412Z`-style UTC stamp used for default session directory names.
-pub fn utc_timestamp_compact() -> String {
-    let secs = (realtime_ns() / 1_000_000_000) as i64;
-    let (y, mo, d, h, mi, s) = civil_from_unix(secs);
-    format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}Z")
+/// Random version-4 UUID (RFC 9562) used as the session identifier, so two
+/// runs — even concurrent ones — can never collide on a session directory.
+pub fn session_uuid() -> String {
+    let mut bytes = [0u8; 16];
+    let filled = getrandom(&mut bytes[..], GetRandomFlags::empty()).unwrap_or(0);
+    if filled < bytes.len() {
+        // getrandom(2) practically cannot fail on Linux; mix the clocks and
+        // PID as a last resort so a session id is still produced.
+        let mut seed =
+            realtime_ns() ^ monotonic_ns().rotate_left(32) ^ u64::from(std::process::id());
+        for chunk in bytes.chunks_mut(8) {
+            seed = splitmix64(seed);
+            chunk.copy_from_slice(&seed.to_le_bytes()[..chunk.len()]);
+        }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC variant
+    let mut hex = String::with_capacity(32);
+    for byte in bytes {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
 }
 
-/// Converts Unix seconds to UTC civil time (Howard Hinnant's days-from-civil inverse).
-fn civil_from_unix(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    let (hour, minute, second) = (rem / 3600, (rem % 3600) / 60, rem % 60);
-
-    let shifted_days = days + 719_468;
-    let era = shifted_days.div_euclid(146_097);
-    let doe = shifted_days.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let year = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = if month <= 2 { year + 1 } else { year };
-    (
-        year,
-        month as u32,
-        day as u32,
-        hour as u32,
-        minute as u32,
-        second as u32,
-    )
+/// One `SplitMix64` step; only the `getrandom` fallback mixer, not for crypto.
+fn splitmix64(state: u64) -> u64 {
+    let mut z = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
 }
 
 /// Renders byte counts for human-readable report output.
@@ -86,12 +94,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn civil_conversion_known_dates() {
-        assert_eq!(civil_from_unix(0), (1970, 1, 1, 0, 0, 0));
-        // 2026-07-17 12:34:56 UTC
-        assert_eq!(civil_from_unix(1_784_291_696), (2026, 7, 17, 12, 34, 56));
-        // Leap day 2024-02-29
-        assert_eq!(civil_from_unix(1_709_164_800), (2024, 2, 29, 0, 0, 0));
+    fn session_uuid_is_well_formed_and_unique() {
+        let id = session_uuid();
+        assert_eq!(id.len(), 36);
+        let chars: Vec<char> = id.chars().collect();
+        for i in [8, 13, 18, 23] {
+            assert_eq!(chars[i], '-');
+        }
+        assert_eq!(chars[14], '4', "version nibble: {id}");
+        assert!(matches!(chars[19], '8' | '9' | 'a' | 'b'), "variant: {id}");
+        assert_ne!(session_uuid(), id);
     }
 
     #[test]

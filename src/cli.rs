@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
@@ -13,6 +13,10 @@ use clap::{Args, Parser, Subcommand};
              usage of it and every process it spawns"
 )]
 pub struct Cli {
+    /// Print progress to stderr (repeat for more detail: -v info, -vv debug)
+    #[arg(short, long, global = true, action = ArgAction::Count)]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -41,9 +45,15 @@ pub struct RunArgs {
     #[arg(long, default_value = "100ms", value_parser = parse_interval)]
     pub interval: Duration,
 
-    /// Output directory for the session (default: ./treehawk/<timestamp>)
+    /// Output directory for the session; must be new or empty
+    /// (default: ./treehawk/<uuid>)
     #[arg(long)]
     pub out: Option<PathBuf>,
+
+    /// Record full command lines in the process table (off by default:
+    /// command lines can contain secrets)
+    #[arg(long)]
+    pub cmdline: bool,
 
     /// Label attached to every recorded process (repeatable)
     #[arg(long)]
@@ -98,6 +108,22 @@ mod tests {
         assert!(parse_interval("0ms").is_err());
         assert!(parse_interval("61s").is_err());
         assert!(parse_interval("fast").is_err());
+    }
+
+    #[test]
+    fn verbose_flag_is_global_and_stops_at_separator() {
+        let cli = Cli::try_parse_from(["treehawk", "run", "-vv", "--", "true"])
+            .expect("cli should parse");
+        assert_eq!(cli.verbose, 2);
+
+        // After `--`, a -v belongs to the target's argv, not to treehawk.
+        let cli =
+            Cli::try_parse_from(["treehawk", "run", "--", "ls", "-v"]).expect("cli should parse");
+        assert_eq!(cli.verbose, 0);
+        match cli.command {
+            Command::Run(args) => assert_eq!(args.command, ["ls", "-v"]),
+            _ => panic!("expected run subcommand"),
+        }
     }
 
     #[test]
