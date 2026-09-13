@@ -1,20 +1,26 @@
 """Value objects shared across the application.
 
-These are plain data carriers with no behaviour beyond trivial derivations, so
-that every other component can depend on them without depending on each other.
+Plain data carriers with no behaviour beyond trivial derivations, so that every
+other component can depend on them without depending on each other.
 """
 
 from __future__ import annotations
 
+import signal
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Final, Mapping, TypeAlias
 
-Identity = tuple[int, int]
+Identity: TypeAlias = tuple[int, int]
 """A process identity: ``(pid, starttime)``.
 
 The kernel recycles PIDs, so a bare PID is not a stable key. ``starttime`` (the
 process start time in clock ticks since boot) makes the pair unique for the
 lifetime of the machine.
 """
+
+ZOMBIE_STATE: Final = "Z"
+"""Process state for an exited process still awaiting its parent's ``wait()``."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +42,10 @@ class ProcInfo:
     def identity(self) -> Identity:
         return (self.pid, self.starttime)
 
+    @property
+    def is_zombie(self) -> bool:
+        return self.state == ZOMBIE_STATE
+
 
 @dataclass(slots=True)
 class ProcSample:
@@ -52,6 +62,10 @@ class ProcSample:
     @property
     def identity(self) -> Identity:
         return self.info.identity
+
+    @property
+    def label(self) -> str:
+        return self.cmdline or self.info.comm
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,20 +107,39 @@ class Snapshot:
     swap_bytes: int | None = None
     group: GroupMetrics | None = None
     overrun: bool = False
-    extra: dict[str, object] = field(default_factory=dict)
+    extra: dict[str, Mapping[str, object]] = field(default_factory=dict)
 
     @property
     def n_procs(self) -> int:
         return len(self.procs)
 
 
-@dataclass(slots=True)
-class LaunchedWorkload:
-    """Handle on a process started by prowatch itself."""
+class LaunchedWorkload(ABC):
+    """A process prowatch started, and the two things it needs to do to it.
 
-    pid: int
-    argv: list[str]
-    group_path: str | None
-    wait: object  # callable() -> int | None, returns the exit code
-    signal: object  # callable(signum) -> None, forwards a signal
-    isolated: bool = False
+    An abstract class rather than a bag of callables: it keeps the signalling
+    and reaping rules with the implementation that knows how the process was
+    started, and it is substitutable - the CLI treats a systemd scope and a bare
+    subprocess identically.
+    """
+
+    def __init__(
+        self,
+        *,
+        pid: int,
+        argv: list[str],
+        group_path: str | None = None,
+        isolated: bool = False,
+    ) -> None:
+        self.pid = pid
+        self.argv = argv
+        self.group_path = group_path
+        self.isolated = isolated
+
+    @abstractmethod
+    def poll(self) -> int | None:
+        """Exit code if the workload has finished, else ``None``. Never blocks."""
+
+    @abstractmethod
+    def signal(self, signum: int = signal.SIGTERM) -> None:
+        """Forward a signal to the workload, ignoring a process already gone."""

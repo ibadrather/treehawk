@@ -5,7 +5,7 @@ from __future__ import annotations
 _UNITS = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
 
 
-def bytes_human(value: int | float | None, *, precision: int = 1) -> str:
+def bytes_human(value: float | None, *, precision: int = 1) -> str:
     if value is None:
         return "-"
     size = float(value)

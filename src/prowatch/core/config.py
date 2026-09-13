@@ -3,8 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
-from .strategies import DEFAULT_STRATEGIES
+
+class ExpansionName(StrEnum):
+    """Membership rules, by name. The CLI renders these as its choices."""
+
+    TREE = "tree"
+    CGROUP = "cgroup"
+    SESSION = "session"
+    ORPHAN = "orphan"
+
+
+DEFAULT_EXPANSIONS: tuple[ExpansionName, ...] = (
+    ExpansionName.TREE,
+    ExpansionName.CGROUP,
+    ExpansionName.SESSION,
+    ExpansionName.ORPHAN,
+)
 
 
 @dataclass(slots=True)
@@ -16,7 +32,7 @@ class WatchConfig:
     max_samples: int | None = None
     per_process: bool = True
     want_pss: bool = True
-    expand: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_STRATEGIES))
+    expand: tuple[ExpansionName, ...] = field(default_factory=lambda: DEFAULT_EXPANSIONS)
     rescan: bool = False
     wait: float | None = None
     stop_when_empty: bool = True
@@ -30,3 +46,5 @@ class WatchConfig:
             raise ValueError("duration must be greater than 0")
         if self.max_samples is not None and self.max_samples <= 0:
             raise ValueError("max-samples must be greater than 0")
+        if self.top_n < 0:
+            raise ValueError("top must not be negative")

@@ -9,8 +9,9 @@ Two small collaborators, each with one job:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable, Final, Iterable, TypedDict
 
-from .models import GroupMetrics, HostInfo, ProcSample, Snapshot
+from .models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
 from .tracker import RefreshResult
 
 
@@ -34,7 +35,7 @@ class Aggregator:
         self._prev_total_cpu: float | None = None
         self._baseline_cpu: float | None = None
 
-    def build(
+    def build(  # noqa: PLR0913 - one call site, all of it meaningful
         self,
         *,
         seq: int,
@@ -88,6 +89,17 @@ class Aggregator:
         return snap
 
 
+class ProcessTotals(TypedDict):
+    """Per-process figures accumulated over a whole run."""
+
+    pid: int
+    name: str
+    cmdline: str
+    via: str
+    cpu_seconds: float
+    peak_rss_bytes: int
+
+
 @dataclass(slots=True)
 class RunSummary:
     """Whole-run figures, computed incrementally so nothing is kept in memory."""
@@ -105,12 +117,18 @@ class RunSummary:
     cpu_seconds_used: float = 0.0
     overruns: int = 0
     exit_code: int | None = None
-    top_by_cpu: list[dict] = field(default_factory=list)
-    top_by_memory: list[dict] = field(default_factory=list)
+    top_by_cpu: list[ProcessTotals] = field(default_factory=list)
+    top_by_memory: list[ProcessTotals] = field(default_factory=list)
 
 
 class SummaryAccumulator:
-    """Folds snapshots into a :class:`RunSummary` as the run proceeds."""
+    """Folds snapshots into a :class:`RunSummary` as the run proceeds.
+
+    Per-process totals are kept for the whole run so the final tables can rank
+    processes that have long since exited. A watch is expected to last until the
+    workload ends - which may be days - so that table is pruned back to the
+    contenders once it grows past :data:`PROCESS_TABLE_LIMIT`.
+    """
 
     def __init__(self, *, clk_tck: int = 100, top_n: int = 5) -> None:
         self._summary = RunSummary()
@@ -118,7 +136,7 @@ class SummaryAccumulator:
         self._cpu_sum = 0.0
         self._cpu_n = 0
         self._top_n = top_n
-        self._seen: dict[tuple[int, int], dict] = {}
+        self._seen: dict[Identity, ProcessTotals] = {}
 
     def add(self, snap: Snapshot) -> None:
         s = self._summary
@@ -143,39 +161,70 @@ class SummaryAccumulator:
             )
         for sample in snap.procs:
             self._record_process(sample)
+        if len(self._seen) > PROCESS_TABLE_LIMIT:
+            self._prune()
 
     def _record_process(self, sample: ProcSample) -> None:
         entry = self._seen.get(sample.identity)
         if entry is None:
-            entry = {
-                "pid": sample.info.pid,
-                "name": sample.info.comm,
-                "cmdline": sample.cmdline or sample.info.comm,
-                "via": sample.via,
-                "cpu_seconds": 0.0,
-                "peak_rss_bytes": 0,
-            }
+            entry = ProcessTotals(
+                pid=sample.info.pid,
+                name=sample.info.comm,
+                cmdline=sample.label,
+                via=sample.via,
+                cpu_seconds=0.0,
+                peak_rss_bytes=0,
+            )
             self._seen[sample.identity] = entry
         entry["cpu_seconds"] = round(sample.info.cpu_ticks / self._clk_tck, 3)
         if sample.info.rss_bytes:
             entry["peak_rss_bytes"] = max(entry["peak_rss_bytes"], sample.info.rss_bytes)
+
+    def _prune(self) -> None:
+        """Keep only processes that could still reach a top table."""
+        keep = set(_rank(self._seen.values(), _by_cpu, PRUNE_KEEP))
+        keep |= set(_rank(self._seen.values(), _by_memory, PRUNE_KEEP))
+        self._seen = {
+            identity: totals
+            for identity, totals in self._seen.items()
+            if totals["pid"] in keep
+        }
 
     def finish(self, *, exit_code: int | None = None) -> RunSummary:
         s = self._summary
         s.exit_code = exit_code
         s.total_procs_seen = len(self._seen)
         entries = list(self._seen.values())
-        s.top_by_cpu = sorted(
-            entries, key=lambda e: e["cpu_seconds"], reverse=True
-        )[: self._top_n]
-        s.top_by_memory = sorted(
-            entries, key=lambda e: e["peak_rss_bytes"], reverse=True
-        )[: self._top_n]
+        s.top_by_cpu = sorted(entries, key=_by_cpu, reverse=True)[: self._top_n]
+        s.top_by_memory = sorted(entries, key=_by_memory, reverse=True)[: self._top_n]
         return s
 
 
-def _sum_or_none(values) -> int | None:
-    total = None
+PROCESS_TABLE_LIMIT: Final = 4096
+"""Distinct processes remembered for the summary before pruning kicks in."""
+
+PRUNE_KEEP: Final = 256
+"""Contenders kept per ranking when pruning."""
+
+
+def _rank(
+    entries: Iterable[ProcessTotals],
+    key: Callable[[ProcessTotals], float],
+    limit: int,
+) -> list[int]:
+    return [e["pid"] for e in sorted(entries, key=key, reverse=True)[:limit]]
+
+
+def _by_cpu(entry: ProcessTotals) -> float:
+    return entry["cpu_seconds"]
+
+
+def _by_memory(entry: ProcessTotals) -> int:
+    return entry["peak_rss_bytes"]
+
+
+def _sum_or_none(values: Iterable[int | None]) -> int | None:
+    total: int | None = None
     for value in values:
         if value is None:
             continue
@@ -183,7 +232,7 @@ def _sum_or_none(values) -> int | None:
     return total
 
 
-def _max(current, candidate):
+def _max[T: (int, float)](current: T | None, candidate: T | None) -> T | None:
     if candidate is None:
         return current
     return candidate if current is None else max(current, candidate)

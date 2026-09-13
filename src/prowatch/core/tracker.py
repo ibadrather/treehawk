@@ -15,19 +15,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping
 
-from .interfaces import ExpansionContext
+from .interfaces import (
+    ExpansionContext,
+    ExpansionStrategy,
+    GroupMetricSource,
+    ProcessMatcher,
+    ProcessSource,
+)
 from .models import Identity, ProcInfo
 
 MAX_EXPANSION_ROUNDS = 8
 """Strategies feed each other (a cgroup adoption reveals a new subtree), so
 expansion repeats until it stabilises - bounded, to keep one sample bounded."""
-
-
-ZOMBIE = "Z"
-"""An exited process still holding a slot until its parent reaps it. It owns no
-memory and accrues no more CPU, so it is excluded from the reported set - and
-from the "has the workload finished?" question - while its final CPU counters
-are still carried into the total."""
 
 
 @dataclass(slots=True)
@@ -53,10 +52,10 @@ class Tracker:
     def __init__(
         self,
         *,
-        matcher,
-        strategies: list,
-        source,
-        groups=None,
+        matcher: ProcessMatcher,
+        strategies: list[ExpansionStrategy],
+        source: ProcessSource,
+        groups: GroupMetricSource | None = None,
         self_pid: int = 0,
         self_group: str | None = None,
         self_sid: int = 0,
@@ -149,13 +148,16 @@ class Tracker:
 
         # Processes that appeared since the previous sample. A detached child
         # is always one of these, which is what lets the orphan rule find it
-        # without dragging in everything else on the machine.
+        # without dragging in everything else on the machine. Only the previous
+        # scan is remembered, not the whole history - prowatch is expected to
+        # run for days, and a machine with process churn would otherwise grow
+        # this set without limit.
         new_pids = (
             {pid for pid in procs if pid not in self._seen_pids}
             if self._seen_pids
             else set()
         )
-        self._seen_pids |= set(procs)
+        self._seen_pids = set(procs)
 
         # Expansion runs even with nothing currently alive: a workload whose
         # last visible process just exited may have left a detached child that
@@ -167,7 +169,10 @@ class Tracker:
             info = procs[pid]
             self._last_ticks[info.identity] = info.cpu_ticks
             result.alive_cpu_ticks += info.cpu_ticks
-            if info.state == ZOMBIE:
+            # A zombie owns no memory and accrues no more CPU. It is left out
+            # of the reported set - and out of the "has the workload finished?"
+            # question - while its final counters still reach the total.
+            if info.is_zombie:
                 result.zombies.append(info)
             else:
                 result.alive.append(info)

@@ -8,9 +8,11 @@ whatever any of them finds.
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Callable, Iterable, Mapping
 
-from .interfaces import ExpansionContext
+from .config import DEFAULT_EXPANSIONS, ExpansionName
+from .interfaces import ExpansionContext, ExpansionStrategy
+from .models import ProcInfo
 
 
 class TreeExpansion:
@@ -184,32 +186,36 @@ class OrphanExpansion:
         return found
 
     @staticmethod
-    def _was_reparented(ctx: ExpansionContext, info, group: str) -> bool:
+    def _was_reparented(
+        ctx: ExpansionContext, info: ProcInfo, group: str
+    ) -> bool:
         if info.ppid <= 1 or info.ppid not in ctx.procs:
             return True  # adopted by init, or the parent is already gone
         return ctx.group_of(info.ppid) != group
 
 
-STRATEGY_KINDS: dict[str, object] = {
-    "tree": TreeExpansion,
-    "cgroup": GroupExpansion,
-    "session": SessionExpansion,
-    "orphan": OrphanExpansion,
+StrategyFactory = Callable[[], ExpansionStrategy]
+
+STRATEGY_KINDS: dict[str, StrategyFactory] = {
+    ExpansionName.TREE: TreeExpansion,
+    ExpansionName.CGROUP: GroupExpansion,
+    ExpansionName.SESSION: SessionExpansion,
+    ExpansionName.ORPHAN: OrphanExpansion,
 }
 
-DEFAULT_STRATEGIES = ("tree", "cgroup", "session", "orphan")
+DEFAULT_STRATEGIES = DEFAULT_EXPANSIONS
 
 
-def build_strategies(names) -> list:
+def build_strategies(names: Iterable[str]) -> list[ExpansionStrategy]:
     """Instantiate expansion strategies by name, preserving the given order."""
-    built = []
+    built: list[ExpansionStrategy] = []
     for name in names:
         try:
-            cls = STRATEGY_KINDS[name]
+            factory = STRATEGY_KINDS[name]
         except KeyError:
             raise ValueError(
                 f"unknown expansion strategy {name!r}; "
                 f"known: {', '.join(sorted(STRATEGY_KINDS))}"
             ) from None
-        built.append(cls())  # type: ignore[operator]
+        built.append(factory())
     return built

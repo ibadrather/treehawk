@@ -7,7 +7,7 @@ implementations satisfy these structurally - no inheritance required.
 
 from __future__ import annotations
 
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol, TypeAlias, runtime_checkable
 
 from .models import (
     GroupMetrics,
@@ -19,6 +19,10 @@ from .models import (
     Snapshot,
 )
 
+Record: TypeAlias = dict[str, Any]
+"""One serialised log record. Deliberately loose: sinks must stay indifferent to
+which fields a schema version happens to carry."""
+
 
 @runtime_checkable
 class ProcessSource(Protocol):
@@ -26,18 +30,27 @@ class ProcessSource(Protocol):
 
     def scan(self) -> Mapping[int, ProcInfo]:
         """Return cheap facts for every visible process, one pass."""
+        ...
+
+    def read_info(self, pid: int) -> ProcInfo | None:
+        """Return cheap facts for one process, or None if it is gone."""
+        ...
 
     def read_cmdline(self, pid: int) -> str:
         """Return the full command line, or ``""`` if unreadable."""
+        ...
 
     def read_group_path(self, pid: int) -> str | None:
         """Return the process' group boundary path (cgroup), if any."""
+        ...
 
     def enrich(self, info: ProcInfo, *, want_pss: bool) -> ProcSample:
         """Add the costlier fields (command line, PSS, swap, group) to ``info``."""
+        ...
 
     def forget(self, identity: Identity) -> None:
         """Drop any cached state for a process that has exited."""
+        ...
 
 
 @runtime_checkable
@@ -48,6 +61,7 @@ class GroupMetricSource(Protocol):
 
     def pids_in(self, path: str) -> set[int] | None:
         """PIDs in ``path`` and all of its descendants, or None if unreadable."""
+        ...
 
     def metrics(self, path: str) -> GroupMetrics | None: ...
 
@@ -55,6 +69,11 @@ class GroupMetricSource(Protocol):
 @runtime_checkable
 class ProcessLauncher(Protocol):
     """Starts a workload, ideally inside its own accounting boundary."""
+
+    @property
+    def name(self) -> str: ...
+
+    def available(self) -> bool: ...
 
     def launch(self, argv: list[str]) -> LaunchedWorkload: ...
 
@@ -68,14 +87,16 @@ class HostInfoSource(Protocol):
 class ProcessMatcher(Protocol):
     """Decides whether a process is the workload the user asked for."""
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool: ...
-
-    def describe(self) -> dict[str, object]:
-        """Serializable description, recorded in the log header."""
-
     @property
     def needs_cmdline(self) -> bool:
         """True if :meth:`matches` inspects the command line."""
+        ...
+
+    def matches(self, info: ProcInfo, cmdline: str) -> bool: ...
+
+    def describe(self) -> Record:
+        """Serializable description, recorded in the log header."""
+        ...
 
 
 @runtime_checkable
@@ -89,8 +110,9 @@ class ExpansionStrategy(Protocol):
     @property
     def name(self) -> str: ...
 
-    def expand(self, ctx: "ExpansionContext") -> Mapping[int, str]:
+    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
         """Return ``{pid: reason}`` for processes to adopt into the workload."""
+        ...
 
 
 @runtime_checkable
@@ -114,11 +136,11 @@ class MetricCollector(Protocol):
 class Sink(Protocol):
     """Writes records somewhere. Every sink is substitutable for any other."""
 
-    def open(self, header: Mapping[str, object]) -> None: ...
+    def open(self, header: Record) -> None: ...
 
-    def sample(self, record: Mapping[str, object]) -> None: ...
+    def sample(self, record: Record) -> None: ...
 
-    def close(self, summary: Mapping[str, object]) -> None: ...
+    def close(self, summary: Record) -> None: ...
 
 
 @runtime_checkable

@@ -14,6 +14,7 @@ Neither is exceptional here, so both yield partial data rather than an error.
 from __future__ import annotations
 
 import os
+from typing import Final, Mapping
 
 from ...core.models import Identity, ProcInfo, ProcSample
 from .procfs import (
@@ -25,8 +26,8 @@ from .procfs import (
     parse_status_memory,
 )
 
-DEFAULT_PROC_ROOT = "/proc"
-_CMDLINE_CACHE_LIMIT = 4096
+DEFAULT_PROC_ROOT: Final = "/proc"
+_CMDLINE_CACHE_LIMIT: Final = 4096
 
 
 class LinuxProcessSource:
@@ -48,7 +49,7 @@ class LinuxProcessSource:
     def root(self) -> str:
         return self._root
 
-    def scan(self) -> dict[int, ProcInfo]:
+    def scan(self) -> Mapping[int, ProcInfo]:
         procs: dict[int, ProcInfo] = {}
         try:
             entries = os.listdir(self._root)

@@ -8,10 +8,11 @@ between two of our samples. Polling /proc can never see those; a cgroup can.
 from __future__ import annotations
 
 import os
+from typing import Final
 
 from ...core.models import GroupMetrics
 
-DEFAULT_CGROUP_ROOT = "/sys/fs/cgroup"
+DEFAULT_CGROUP_ROOT: Final = "/sys/fs/cgroup"
 
 
 class CgroupV2Source:

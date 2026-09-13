@@ -8,11 +8,19 @@ OS means providing new implementations, not touching this file.
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping
+from typing import Callable, Iterable
 
 from .aggregate import Aggregator, RunSummary, SummaryAccumulator
 from .config import WatchConfig
-from .models import GroupMetrics, HostInfo, ProcSample, Snapshot
+from .interfaces import (
+    Clock,
+    GroupMetricSource,
+    MetricCollector,
+    ProcessSource,
+    Record,
+    Sink,
+)
+from .models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
 from .records import header_record, sample_record, summary_record
 from .tracker import RefreshResult, Tracker
 
@@ -27,17 +35,17 @@ class Monitor:
     def __init__(
         self,
         *,
-        source,
+        source: ProcessSource,
         tracker: Tracker,
         aggregator: Aggregator,
-        sink,
-        clock,
+        sink: Sink,
+        clock: Clock,
         config: WatchConfig,
         host: HostInfo,
-        groups=None,
-        collectors: Iterable = (),
+        groups: GroupMetricSource | None = None,
+        collectors: Iterable[MetricCollector] = (),
         mode: str = "watch",
-        matcher: Mapping[str, object] | None = None,
+        matcher: Record | None = None,
         argv: list[str] | None = None,
         notes: Iterable[str] = (),
     ) -> None:
@@ -61,7 +69,7 @@ class Monitor:
         """Ask the loop to finish after the current sample (signal-safe)."""
         self._stop = True
 
-    def run(self, *, exit_code: object = None) -> RunSummary:
+    def run(self, *, exit_code: Callable[[], int | None] | None = None) -> RunSummary:
         """Sample until a stop condition fires. Always writes a summary."""
         self._config.validate()
         started = self._clock.monotonic()
@@ -117,7 +125,7 @@ class Monitor:
                     collector.close()
                 except Exception:  # a broken collector must not lose the log
                     pass
-            code = exit_code() if callable(exit_code) else exit_code
+            code = exit_code() if exit_code is not None else None
             summary = self._summaries.finish(exit_code=code)
             self._sink.close(summary_record(summary))
         return summary
@@ -150,7 +158,7 @@ class Monitor:
                 snap.extra[collector.namespace] = dict(extra)
         return snap
 
-    def _enrich(self, info, refresh: RefreshResult) -> ProcSample:
+    def _enrich(self, info: ProcInfo, refresh: RefreshResult) -> ProcSample:
         sample = self._source.enrich(info, want_pss=self._config.want_pss)
         sample.via = refresh.via.get(info.pid, sample.via)
         return sample

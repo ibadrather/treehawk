@@ -8,7 +8,9 @@ seeding logic.
 from __future__ import annotations
 
 import re
+from typing import Callable
 
+from .interfaces import ProcessMatcher, Record
 from .models import ProcInfo
 
 
@@ -25,7 +27,7 @@ class PidMatcher:
     def matches(self, info: ProcInfo, cmdline: str) -> bool:
         return info.pid == self._pid
 
-    def describe(self) -> dict[str, object]:
+    def describe(self) -> Record:
         return {"kind": "pid", "value": self._pid}
 
 
@@ -47,7 +49,7 @@ class KeywordMatcher:
             haystack = haystack.lower()
         return self._needle in haystack
 
-    def describe(self) -> dict[str, object]:
+    def describe(self) -> Record:
         return {
             "kind": "keyword",
             "value": self._raw,
@@ -68,7 +70,7 @@ class ExactMatcher:
     def matches(self, info: ProcInfo, cmdline: str) -> bool:
         return cmdline.strip() == self._command
 
-    def describe(self) -> dict[str, object]:
+    def describe(self) -> Record:
         return {"kind": "exact", "value": self._command}
 
 
@@ -87,19 +89,21 @@ class RegexMatcher:
     def matches(self, info: ProcInfo, cmdline: str) -> bool:
         return self._regex.search(cmdline or info.comm) is not None
 
-    def describe(self) -> dict[str, object]:
+    def describe(self) -> Record:
         return {"kind": "regex", "value": self._pattern}
 
 
-MATCHER_KINDS: dict[str, object] = {
+MatcherFactory = Callable[..., ProcessMatcher]
+
+MATCHER_KINDS: dict[str, MatcherFactory] = {
     "pid": lambda value, **kw: PidMatcher(int(value)),
-    "keyword": lambda value, **kw: KeywordMatcher(value, **kw),
-    "exact": lambda value, **kw: ExactMatcher(value),
-    "regex": lambda value, **kw: RegexMatcher(value, **kw),
+    "keyword": lambda value, **kw: KeywordMatcher(str(value), **kw),
+    "exact": lambda value, **kw: ExactMatcher(str(value)),
+    "regex": lambda value, **kw: RegexMatcher(str(value), **kw),
 }
 
 
-def build_matcher(kind: str, value: object, **kwargs):
+def build_matcher(kind: str, value: object, **kwargs: bool) -> ProcessMatcher:
     """Create a matcher by name. Unknown names raise ``ValueError``."""
     try:
         factory = MATCHER_KINDS[kind]
@@ -107,4 +111,4 @@ def build_matcher(kind: str, value: object, **kwargs):
         raise ValueError(
             f"unknown matcher {kind!r}; known: {', '.join(sorted(MATCHER_KINDS))}"
         ) from None
-    return factory(value, **kwargs)  # type: ignore[operator]
+    return factory(value, **kwargs)

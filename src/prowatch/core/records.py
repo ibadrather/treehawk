@@ -9,24 +9,26 @@ by older consumers.
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Mapping
+from typing import Iterable
 
 from .. import SCHEMA_VERSION, __version__
 from .aggregate import RunSummary
+from .config import WatchConfig
+from .interfaces import Record
 from .models import HostInfo, Snapshot
 
 
 def header_record(
     *,
     host: HostInfo,
-    config,
+    config: WatchConfig,
     mode: str,
-    matcher: Mapping[str, object] | None,
+    matcher: Record | None,
     started_at: str,
     group_path: str | None,
     argv: list[str] | None = None,
-    notes: list[str] | None = None,
-) -> dict:
+    notes: Iterable[str] = (),
+) -> Record:
     return {
         "type": "header",
         "schema": SCHEMA_VERSION,
@@ -36,18 +38,18 @@ def header_record(
         "matcher": dict(matcher) if matcher else None,
         "argv": argv,
         "interval": config.interval,
-        "expand": list(config.expand),
+        "expand": [str(name) for name in config.expand],
         "per_process": config.per_process,
         "group_path": group_path,
         "host": asdict(host),
-        "notes": notes or [],
+        "notes": list(notes),
     }
 
 
 def sample_record(
     snap: Snapshot, *, per_process: bool = True, clk_tck: int = 100
-) -> dict:
-    record = {
+) -> Record:
+    record: Record = {
         "type": "sample",
         "seq": snap.seq,
         "t": snap.t,
@@ -89,7 +91,7 @@ def sample_record(
     return record
 
 
-def summary_record(summary: RunSummary) -> dict:
-    record = {"type": "summary", "schema": SCHEMA_VERSION}
+def summary_record(summary: RunSummary) -> Record:
+    record: Record = {"type": "summary", "schema": SCHEMA_VERSION}
     record.update(asdict(summary))
     return record

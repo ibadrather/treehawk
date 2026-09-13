@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.Python
+
+# Environments
+.venv/
+venv/
+.env
+
+# uv
+.uv/
+
+# Testing & type checking
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+
+# prowatch output: logs and reports written by a run
+prowatch-*.jsonl
+prowatch-*.csv
+prowatch-*.procs.csv
+prowatch-*.header.json
+prowatch-*.summary.json
+prowatch-*.pdf
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

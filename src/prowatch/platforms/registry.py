@@ -8,7 +8,14 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
+from typing import Callable
 
+from ..core.interfaces import (
+    GroupMetricSource,
+    HostInfoSource,
+    ProcessLauncher,
+    ProcessSource,
+)
 from ..core.models import HostInfo
 
 
@@ -17,10 +24,10 @@ class Platform:
     """The bundle of capabilities a platform provides (a tiny DI container)."""
 
     name: str
-    processes: object
-    host: object
-    groups: object | None = None
-    launcher: object | None = None
+    processes: ProcessSource
+    host: HostInfoSource
+    groups: GroupMetricSource | None = None
+    launcher: ProcessLauncher | None = None
     notes: list[str] = field(default_factory=list)
 
     def host_info(self) -> HostInfo:
@@ -31,18 +38,17 @@ class UnsupportedPlatform(RuntimeError):
     """prowatch has no implementation for this operating system yet."""
 
 
-def build_linux(**kwargs) -> Platform:
+def build_linux(
+    *, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
+) -> Platform:
     from .linux import CgroupV2Source, LinuxHostInfoSource, LinuxProcessSource
     from .linux.launcher import default_launcher
 
-    proc_root = kwargs.get("proc_root", "/proc")
-    cgroup_root = kwargs.get("cgroup_root", "/sys/fs/cgroup")
-
     host = LinuxHostInfoSource(proc_root)
     info = host.host_info()
-    cgroups = CgroupV2Source(cgroup_root)
+    cgroups: CgroupV2Source | None = CgroupV2Source(cgroup_root)
     notes: list[str] = []
-    if not cgroups.available():
+    if cgroups is not None and not cgroups.available():
         notes.append(
             "cgroup v2 is not mounted: group-level CPU/memory totals are "
             "unavailable and detached children are tracked heuristically"
@@ -59,10 +65,12 @@ def build_linux(**kwargs) -> Platform:
     )
 
 
-PLATFORM_BUILDERS = {"linux": build_linux}
+PlatformBuilder = Callable[..., Platform]
+
+PLATFORM_BUILDERS: dict[str, PlatformBuilder] = {"linux": build_linux}
 
 
-def get_platform(name: str | None = None, **kwargs) -> Platform:
+def get_platform(name: str | None = None, **kwargs: str) -> Platform:
     """Build the platform bundle for ``name`` (default: the current OS)."""
     name = name or sys.platform
     key = "linux" if name.startswith("linux") else name

@@ -6,6 +6,8 @@ metric path can be unit-tested against captured fixtures.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 # Field numbers per proc(5), counted from 1. Everything after the comm field is
 # positional, and comm itself may contain spaces and parentheses - hence the
 # rsplit on ')' rather than a naive split.
@@ -20,19 +22,33 @@ _STARTTIME = 19  # field 22
 _RSS_PAGES = 21  # field 24
 
 
+class StatFields(TypedDict):
+    """Exactly the fields :func:`parse_stat` extracts, mirroring ``ProcInfo``."""
+
+    pid: int
+    comm: str
+    state: str
+    ppid: int
+    pgid: int
+    sid: int
+    cpu_ticks: int
+    threads: int
+    starttime: int
+    rss_bytes: int
+
+
 class ProcStatParseError(ValueError):
     """The stat line was malformed or truncated (the process died mid-read)."""
 
 
-def parse_stat(text: str, *, page_size: int = 4096) -> dict:
+def parse_stat(text: str, *, page_size: int = 4096) -> StatFields:
     """Parse ``/proc/<pid>/stat`` into the fields prowatch uses."""
     try:
         head, _, rest = text.partition(" (")
         comm, _, tail = rest.rpartition(") ")
         fields = tail.split()
-        pid = int(head)
         return {
-            "pid": pid,
+            "pid": int(head),
             "comm": comm,
             "state": fields[_STATE],
             "ppid": int(fields[_PPID]),
@@ -52,7 +68,7 @@ def parse_cmdline(raw: bytes) -> str:
     return raw.replace(b"\x00", b" ").strip().decode("utf-8", "replace")
 
 
-def parse_status_memory(text: str) -> dict:
+def parse_status_memory(text: str) -> dict[str, int]:
     """Pull VmRSS / VmSwap (kB) out of ``/proc/<pid>/status``."""
     out: dict[str, int] = {}
     for line in text.splitlines():
@@ -65,7 +81,7 @@ def parse_status_memory(text: str) -> dict:
     return out
 
 
-def parse_smaps_rollup(text: str) -> dict:
+def parse_smaps_rollup(text: str) -> dict[str, int]:
     """Pull Pss / Swap out of ``/proc/<pid>/smaps_rollup``.
 
     PSS divides each shared page by the number of processes mapping it, so

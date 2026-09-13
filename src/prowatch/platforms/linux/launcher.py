@@ -19,11 +19,44 @@ import shutil
 import signal
 import subprocess
 import time
+from typing import Final
 
+from ...core.interfaces import ProcessLauncher
 from ...core.models import LaunchedWorkload
 from .cgroup2 import CgroupV2Source
+from .procfs import parse_cgroup
 
-_RESOLVE_TIMEOUT = 3.0
+_RESOLVE_TIMEOUT: Final = 3.0
+
+
+class SubprocessWorkload(LaunchedWorkload):
+    """A workload started with :mod:`subprocess`, signalled by process group.
+
+    ``start_new_session=True`` puts it in its own group, so one ``killpg``
+    reaches the whole workload rather than just the process we happen to hold.
+    """
+
+    def __init__(
+        self,
+        process: "subprocess.Popen[bytes]",
+        argv: list[str],
+        *,
+        group_path: str | None = None,
+        isolated: bool = False,
+    ) -> None:
+        super().__init__(
+            pid=process.pid, argv=list(argv), group_path=group_path, isolated=isolated
+        )
+        self._process = process
+
+    def poll(self) -> int | None:
+        return self._process.poll()
+
+    def signal(self, signum: int = signal.SIGTERM) -> None:
+        try:
+            os.killpg(os.getpgid(self._process.pid), signum)
+        except (ProcessLookupError, PermissionError):
+            pass  # already gone, or no longer ours to signal
 
 
 class DirectLauncher:
@@ -34,20 +67,24 @@ class DirectLauncher:
     and gives the session expansion strategy something stable to follow.
     """
 
-    name = "direct"
+    @property
+    def name(self) -> str:
+        return "direct"
 
     def available(self) -> bool:
         return True
 
     def launch(self, argv: list[str]) -> LaunchedWorkload:
-        proc = subprocess.Popen(argv, start_new_session=True)
-        return _handle(proc, argv, group_path=None, isolated=False)
+        process = subprocess.Popen(argv, start_new_session=True)
+        return SubprocessWorkload(process, argv)
 
 
 class ScopeLauncher:
     """Start the command inside a transient systemd scope (its own cgroup)."""
 
-    name = "scope"
+    @property
+    def name(self) -> str:
+        return "scope"
 
     def __init__(
         self,
@@ -75,23 +112,25 @@ class ScopeLauncher:
             "--",
             *argv,
         ]
-        proc = subprocess.Popen(wrapper, start_new_session=True)
-        group = self._resolve_group(proc, unit)
+        process = subprocess.Popen(wrapper, start_new_session=True)
+        group = self._resolve_group(process, unit)
         if group is None:
             raise ScopeUnavailable(
                 f"could not place the workload in a cgroup (unit {unit})"
             )
-        return _handle(proc, argv, group_path=group, isolated=True)
+        return SubprocessWorkload(process, argv, group_path=group, isolated=True)
 
-    def _resolve_group(self, proc: subprocess.Popen, unit: str) -> str | None:
+    def _resolve_group(
+        self, process: "subprocess.Popen[bytes]", unit: str
+    ) -> str | None:
         """Wait for the child to appear inside the new scope's cgroup."""
         needle = f"{unit}.scope"
         deadline = time.monotonic() + self._timeout
         while time.monotonic() < deadline:
-            path = _read_cgroup(self._proc_root, proc.pid)
+            path = _read_cgroup(self._proc_root, process.pid)
             if path and needle in path:
                 return path
-            if proc.poll() is not None and proc.returncode != 0:
+            if process.poll() is not None and process.returncode != 0:
                 return None  # systemd-run itself failed; nothing to salvage
             time.sleep(0.02)
         return None
@@ -107,9 +146,14 @@ class FallbackLauncher:
     Composite over ``ProcessLauncher``, so callers still see a single launcher.
     """
 
-    name = "fallback"
+    @property
+    def name(self) -> str:
+        return "fallback"
 
-    def __init__(self, launchers: list) -> None:
+    def available(self) -> bool:
+        return any(launcher.available() for launcher in self._launchers)
+
+    def __init__(self, launchers: list[ProcessLauncher]) -> None:
         self._launchers = launchers
         self.notes: list[str] = []
         self.used: str | None = None
@@ -141,32 +185,7 @@ def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:
     return FallbackLauncher([ScopeLauncher(cgroups), DirectLauncher()])
 
 
-def _handle(
-    proc: subprocess.Popen,
-    argv: list[str],
-    *,
-    group_path: str | None,
-    isolated: bool,
-) -> LaunchedWorkload:
-    def send(signum: int = signal.SIGTERM) -> None:
-        try:
-            os.killpg(os.getpgid(proc.pid), signum)
-        except (ProcessLookupError, PermissionError):
-            pass
-
-    return LaunchedWorkload(
-        pid=proc.pid,
-        argv=list(argv),
-        group_path=group_path,
-        wait=proc.wait,
-        signal=send,
-        isolated=isolated,
-    )
-
-
 def _read_cgroup(proc_root: str, pid: int) -> str | None:
-    from .procfs import parse_cgroup
-
     try:
         with open(os.path.join(proc_root, str(pid), "cgroup")) as handle:
             return parse_cgroup(handle.read())

@@ -12,7 +12,6 @@ import argparse
 import json
 import os
 import signal
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -22,6 +21,7 @@ from .core.aggregate import Aggregator
 from .core.clock import SystemClock
 from .core.config import WatchConfig
 from .core.matchers import build_matcher
+from .core.models import LaunchedWorkload
 from .core.monitor import Monitor, WorkloadNotFound
 from .core.strategies import DEFAULT_STRATEGIES, STRATEGY_KINDS, build_strategies
 from .core.tracker import Tracker
@@ -378,16 +378,13 @@ def _install_signal_handlers(monitor: Monitor, workload=None) -> None:
         signal.signal(signum, handler)
 
 
-def _poll_exit_code(workload) -> int | None:
-    try:
-        return workload.wait(0.05)
-    except subprocess.TimeoutExpired:
-        return None
-    except Exception:
-        return None
+def _poll_exit_code(workload: LaunchedWorkload) -> int | None:
+    return workload.poll()
 
 
-def _finalize_workload(workload, *, leave_running: bool) -> int | None:
+def _finalize_workload(
+    workload: LaunchedWorkload, *, leave_running: bool
+) -> int | None:
     code = _poll_exit_code(workload)
     if code is not None or leave_running:
         return code

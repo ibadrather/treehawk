@@ -9,18 +9,24 @@ and no GPU keys appear in the output.
 
 from __future__ import annotations
 
-COLLECTOR_KINDS: dict[str, object] = {}
+from typing import Callable, Iterable
+
+from ..core.interfaces import MetricCollector
+
+CollectorFactory = Callable[[], MetricCollector]
+
+COLLECTOR_KINDS: dict[str, CollectorFactory] = {}
 """Name -> factory. A future NVIDIA collector registers as ``"nvidia"`` here."""
 
 
-def build_collectors(names=()) -> list:
+def build_collectors(names: Iterable[str] = ()) -> list[MetricCollector]:
     """Instantiate the requested collectors; unknown names raise ``ValueError``."""
-    collectors = []
+    collectors: list[MetricCollector] = []
     for name in names:
         try:
             factory = COLLECTOR_KINDS[name]
         except KeyError:
             known = ", ".join(sorted(COLLECTOR_KINDS)) or "none available yet"
             raise ValueError(f"unknown metric collector {name!r}; known: {known}")
-        collectors.append(factory())  # type: ignore[operator]
+        collectors.append(factory())
     return collectors
