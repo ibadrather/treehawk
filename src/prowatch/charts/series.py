@@ -10,9 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Final, Sequence
 
-from ..core.interfaces import Record
-from ..report import ReportError, read_records
-from ..ui.theme import discovery_group
+from prowatch.core.interfaces import Record
+from prowatch.report import ReportError, read_records
+from prowatch.ui.theme import discovery_group
 
 TOP_SERIES: Final = 6
 """Processes charted individually before the rest folds into "other".

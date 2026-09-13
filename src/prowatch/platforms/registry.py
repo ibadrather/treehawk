@@ -10,13 +10,13 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
-from ..core.interfaces import (
+from prowatch.core.interfaces import (
     GroupMetricSource,
     HostInfoSource,
     ProcessLauncher,
     ProcessSource,
 )
-from ..core.models import HostInfo
+from prowatch.core.models import HostInfo
 
 
 @dataclass(frozen=True)
@@ -41,8 +41,8 @@ class UnsupportedPlatform(RuntimeError):
 def build_linux(
     *, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
 ) -> Platform:
-    from .linux import CgroupV2Source, LinuxHostInfoSource, LinuxProcessSource
-    from .linux.launcher import default_launcher
+    from prowatch.platforms.linux import CgroupV2Source, LinuxHostInfoSource, LinuxProcessSource
+    from prowatch.platforms.linux.launcher import default_launcher
 
     host = LinuxHostInfoSource(proc_root)
     info = host.host_info()

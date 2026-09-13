@@ -5,6 +5,6 @@ imported by ``core``; the CLI composes these views onto the data that ``core``
 produces, so the monitoring logic stays renderer-agnostic.
 """
 
-from .theme import PALETTE, Palette
+from prowatch.ui.theme import PALETTE, Palette
 
 __all__ = ["PALETTE", "Palette"]

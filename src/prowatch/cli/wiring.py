@@ -10,15 +10,15 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from ..core.aggregate import Aggregator
-from ..core.clock import SystemClock
-from ..core.config import WatchConfig
-from ..core.interfaces import ProcessMatcher, ProcessSource, Sink
-from ..core.monitor import Monitor
-from ..core.strategies import build_strategies
-from ..core.tracker import Tracker
-from ..gpu import build_collectors
-from ..platforms.registry import Platform
+from prowatch.core.aggregate import Aggregator
+from prowatch.core.clock import SystemClock
+from prowatch.core.config import WatchConfig
+from prowatch.core.interfaces import ProcessMatcher, ProcessSource, Sink
+from prowatch.core.monitor import Monitor
+from prowatch.core.strategies import build_strategies
+from prowatch.core.tracker import Tracker
+from prowatch.gpu import build_collectors
+from prowatch.platforms.registry import Platform
 
 
 @dataclass(frozen=True, slots=True)

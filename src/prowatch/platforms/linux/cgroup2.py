@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import Final
 
-from ...core.models import GroupMetrics
+from prowatch.core.models import GroupMetrics
 
 DEFAULT_CGROUP_ROOT: Final = "/sys/fs/cgroup"
 

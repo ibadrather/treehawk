@@ -1,5 +1,5 @@
 """Allow ``python -m prowatch``."""
 
-from .cli import main
+from prowatch.cli import main
 
 main()

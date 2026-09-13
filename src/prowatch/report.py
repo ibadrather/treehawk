@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Iterator, TypedDict
 
-from .core.interfaces import Record
+from prowatch.core.interfaces import Record
 
 
 class Report(TypedDict):

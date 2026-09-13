@@ -7,6 +7,6 @@ drawing it (:mod:`pages`), and the writer (:mod:`report`) knows only that a page
 is something with a title that can draw itself onto a figure.
 """
 
-from .report import PAGES, write_pdf_report
+from prowatch.charts.report import PAGES, write_pdf_report
 
 __all__ = ["PAGES", "write_pdf_report"]

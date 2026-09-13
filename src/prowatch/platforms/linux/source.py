@@ -16,8 +16,8 @@ from __future__ import annotations
 import os
 from typing import Final, Mapping
 
-from ...core.models import Identity, ProcInfo, ProcSample
-from .procfs import (
+from prowatch.core.models import Identity, ProcInfo, ProcSample
+from prowatch.platforms.linux.procfs import (
     ProcStatParseError,
     parse_cgroup,
     parse_cmdline,

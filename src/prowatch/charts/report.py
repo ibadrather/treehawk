@@ -17,10 +17,9 @@ import matplotlib.pyplot as plt  # noqa: E402 - must follow the backend choice
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
-from .. import __version__  # noqa: E402
-from ..ui.theme import PRINT, Palette  # noqa: E402
-from . import style  # noqa: E402
-from .pages import (  # noqa: E402
+from prowatch import __version__  # noqa: E402
+from prowatch.charts import style  # noqa: E402
+from prowatch.charts.pages import (  # noqa: E402
     CpuByProcessPage,
     CpuPage,
     LifetimePage,
@@ -31,7 +30,8 @@ from .pages import (  # noqa: E402
     RankingPage,
     SamplingPage,
 )
-from .series import RunSeries, load_series  # noqa: E402
+from prowatch.charts.series import RunSeries, load_series  # noqa: E402
+from prowatch.ui.theme import PRINT, Palette  # noqa: E402
 
 PAGES: Final[tuple[Page, ...]] = (
     OverviewPage(),

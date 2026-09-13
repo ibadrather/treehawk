@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Iterable
 
-from .. import SCHEMA_VERSION, __version__
-from .aggregate import RunSummary
-from .config import WatchConfig
-from .interfaces import Record
-from .models import HostInfo, Snapshot
+from prowatch import SCHEMA_VERSION, __version__
+from prowatch.core.aggregate import RunSummary
+from prowatch.core.config import WatchConfig
+from prowatch.core.interfaces import Record
+from prowatch.core.models import HostInfo, Snapshot
 
 
 def header_record(

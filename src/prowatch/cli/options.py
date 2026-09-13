@@ -15,7 +15,7 @@ from typing import Annotated, Final
 
 import typer
 
-from ..core.config import ExpansionName
+from prowatch.core.config import ExpansionName
 
 ADVANCED: Final = "Advanced"
 

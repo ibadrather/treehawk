@@ -23,19 +23,8 @@ from typing import Annotated, Final, NoReturn
 import typer
 from rich.console import Console
 
-from .. import __version__
-from ..core.config import DEFAULT_EXPANSIONS, ExpansionName, WatchConfig
-from ..core.interfaces import ProcessLauncher, ProcessMatcher
-from ..core.matchers import build_matcher
-from ..core.models import LaunchedWorkload
-from ..core.monitor import Monitor, WorkloadNotFound
-from ..platforms.registry import Platform, UnsupportedPlatform, get_platform
-from ..report import Report, ReportError, build_report
-from ..core.interfaces import Sink
-from ..sinks import build_sink
-from ..ui.theme import PALETTE
-from ..ui.views import render_header_facts, render_summary
-from .options import (
+from prowatch import __version__
+from prowatch.cli.options import (
     ADVANCED,
     AggregateOnly,
     Csv,
@@ -46,7 +35,17 @@ from .options import (
     Output,
     Quiet,
 )
-from .wiring import assemble
+from prowatch.cli.wiring import assemble
+from prowatch.core.config import DEFAULT_EXPANSIONS, ExpansionName, WatchConfig
+from prowatch.core.interfaces import ProcessLauncher, ProcessMatcher, Sink
+from prowatch.core.matchers import build_matcher
+from prowatch.core.models import LaunchedWorkload
+from prowatch.core.monitor import Monitor, WorkloadNotFound
+from prowatch.platforms.registry import Platform, UnsupportedPlatform, get_platform
+from prowatch.report import Report, ReportError, build_report
+from prowatch.sinks import build_sink
+from prowatch.ui.theme import PALETTE
+from prowatch.ui.views import render_header_facts, render_summary
 
 EXIT_ERROR: Final = 1
 EXIT_NOT_FOUND: Final = 2
@@ -230,7 +229,7 @@ def pdf(
     ] = None,
 ) -> None:
     """Render a finished run as a multi-page PDF report."""
-    from ..charts.report import write_pdf_report
+    from prowatch.charts.report import write_pdf_report
 
     destination = output or path.with_suffix(".pdf")
     try:
@@ -274,7 +273,7 @@ def _launcher(platform: Platform, *, isolate: bool) -> ProcessLauncher:
         _fail("this platform cannot start processes")
     if isolate:
         return platform.launcher
-    from ..platforms.linux.launcher import DirectLauncher, FallbackLauncher
+    from prowatch.platforms.linux.launcher import DirectLauncher, FallbackLauncher
 
     return FallbackLauncher([DirectLauncher()])
 

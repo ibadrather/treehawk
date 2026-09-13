@@ -10,8 +10,8 @@ import csv
 import json
 import os
 from typing import TextIO
-from ..core.interfaces import Record
-from .base import BaseSink
+from prowatch.core.interfaces import Record
+from prowatch.sinks.base import BaseSink
 
 SAMPLE_COLUMNS = (
     "seq",

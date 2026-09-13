@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import socket
 
-from ...core.models import HostInfo
-from .procfs import parse_meminfo_total
+from prowatch.core.models import HostInfo
+from prowatch.platforms.linux.procfs import parse_meminfo_total
 
 
 class LinuxHostInfoSource:

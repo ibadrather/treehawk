@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..core.interfaces import Record, Sink
+from prowatch.core.interfaces import Record, Sink
 
 
 class BaseSink:

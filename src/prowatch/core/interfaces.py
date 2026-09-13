@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Protocol, TypeAlias, runtime_checkable
 
-from .models import (
+from prowatch.core.models import (
     GroupMetrics,
     HostInfo,
     Identity,

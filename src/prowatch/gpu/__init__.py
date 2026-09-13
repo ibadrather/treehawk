@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
-from ..core.interfaces import MetricCollector
+from prowatch.core.interfaces import MetricCollector
 
 CollectorFactory = Callable[[], MetricCollector]
 

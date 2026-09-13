@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
-from .aggregate import Aggregator, RunSummary, SummaryAccumulator
-from .config import WatchConfig
-from .interfaces import (
+from prowatch.core.aggregate import Aggregator, RunSummary, SummaryAccumulator
+from prowatch.core.config import WatchConfig
+from prowatch.core.interfaces import (
     Clock,
     GroupMetricSource,
     MetricCollector,
@@ -20,9 +20,9 @@ from .interfaces import (
     Record,
     Sink,
 )
-from .models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
-from .records import header_record, sample_record, summary_record
-from .tracker import RefreshResult, Tracker
+from prowatch.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
+from prowatch.core.records import header_record, sample_record, summary_record
+from prowatch.core.tracker import RefreshResult, Tracker
 
 
 class WorkloadNotFound(RuntimeError):

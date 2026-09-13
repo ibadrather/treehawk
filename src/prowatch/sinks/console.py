@@ -9,9 +9,9 @@ from __future__ import annotations
 import sys
 from typing import IO
 
-from ..core.humanize import bytes_human, percent_human, seconds_human, truncate
-from ..core.interfaces import Record
-from .base import BaseSink
+from prowatch.core.humanize import bytes_human, percent_human, seconds_human, truncate
+from prowatch.core.interfaces import Record
+from prowatch.sinks.base import BaseSink
 
 
 class ConsoleSink(BaseSink):

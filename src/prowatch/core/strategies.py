@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Callable, Iterable, Mapping
 
-from .config import ExpansionName
-from .interfaces import ExpansionContext, ExpansionStrategy
-from .models import ProcInfo
+from prowatch.core.config import ExpansionName
+from prowatch.core.interfaces import ExpansionContext, ExpansionStrategy
+from prowatch.core.models import ProcInfo
 
 
 class TreeExpansion:

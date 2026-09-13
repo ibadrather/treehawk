@@ -15,14 +15,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping
 
-from .interfaces import (
+from prowatch.core.interfaces import (
     ExpansionContext,
     ExpansionStrategy,
     GroupMetricSource,
     ProcessMatcher,
     ProcessSource,
 )
-from .models import Identity, ProcInfo
+from prowatch.core.models import Identity, ProcInfo
 
 MAX_EXPANSION_ROUNDS = 8
 """Strategies feed each other (a cgroup adoption reveals a new subtree), so

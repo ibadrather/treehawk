@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Final, Iterable, TypedDict
 
-from .models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
-from .tracker import RefreshResult
+from prowatch.core.models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
+from prowatch.core.tracker import RefreshResult
 
 
 class Aggregator:

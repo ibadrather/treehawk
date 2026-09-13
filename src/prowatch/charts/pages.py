@@ -18,10 +18,10 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
-from ..core.humanize import bytes_human, seconds_human, truncate
-from ..ui.theme import DISCOVERY_ORDER, PRINT, Palette
-from . import style
-from .series import ProcessTrack, RunSeries
+from prowatch.charts import style
+from prowatch.charts.series import ProcessTrack, RunSeries
+from prowatch.core.humanize import bytes_human, seconds_human, truncate
+from prowatch.ui.theme import DISCOVERY_ORDER, PRINT, Palette
 
 MAX_GANTT_ROWS: Final = 34
 """Lifetime bars that fit legibly on one page before the rest is summarised."""
@@ -293,7 +293,7 @@ class _StackedPage(Page):
     def draw(self, fig: Figure, series: RunSeries, palette: Palette = PRINT) -> bool:
         if not series.has_per_process:
             return False
-        from .series import stack_for
+        from prowatch.charts.series import stack_for
 
         style.page(fig, self.title, self.subtitle, palette)
         ax = fig.subplots()

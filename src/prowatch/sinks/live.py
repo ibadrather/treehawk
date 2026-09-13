@@ -11,11 +11,11 @@ from __future__ import annotations
 from rich.console import Console
 from rich.live import Live
 
-from ..core.interfaces import Record
-from ..ui.dashboard import Dashboard
-from ..ui.theme import PALETTE, Palette
-from ..ui.views import render_summary
-from .base import BaseSink
+from prowatch.core.interfaces import Record
+from prowatch.sinks.base import BaseSink
+from prowatch.ui.dashboard import Dashboard
+from prowatch.ui.theme import PALETTE, Palette
+from prowatch.ui.views import render_summary
 
 
 class LiveSink(BaseSink):

@@ -13,8 +13,8 @@ from typing import Any, Final
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from ..core.humanize import bytes_human
-from ..ui.theme import PRINT, Palette
+from prowatch.core.humanize import bytes_human
+from prowatch.ui.theme import PRINT, Palette
 
 PAGE_SIZE: Final = (11.69, 8.27)
 """A4 landscape - charts are wider than they are tall."""

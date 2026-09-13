@@ -10,12 +10,12 @@ from typing import Callable
 
 from rich.console import Console
 
-from ..core.interfaces import Sink
-from .base import CompositeSink
-from .console import ConsoleSink
-from .csv_sink import CsvSink
-from .jsonl import JsonlSink
-from .live import LiveSink
+from prowatch.core.interfaces import Sink
+from prowatch.sinks.base import CompositeSink
+from prowatch.sinks.console import ConsoleSink
+from prowatch.sinks.csv_sink import CsvSink
+from prowatch.sinks.jsonl import JsonlSink
+from prowatch.sinks.live import LiveSink
 
 FileSinkFactory = Callable[[str, bool], Sink]
 

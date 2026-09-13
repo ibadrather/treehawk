@@ -21,10 +21,10 @@ import subprocess
 import time
 from typing import Final
 
-from ...core.interfaces import ProcessLauncher
-from ...core.models import LaunchedWorkload
-from .cgroup2 import CgroupV2Source
-from .procfs import parse_cgroup
+from prowatch.core.interfaces import ProcessLauncher
+from prowatch.core.models import LaunchedWorkload
+from prowatch.platforms.linux.cgroup2 import CgroupV2Source
+from prowatch.platforms.linux.procfs import parse_cgroup
 
 _RESOLVE_TIMEOUT: Final = 3.0
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import sys
 from typing import TextIO
-from ..core.interfaces import Record
-from .base import BaseSink
+from prowatch.core.interfaces import Record
+from prowatch.sinks.base import BaseSink
 
 
 class JsonlSink(BaseSink):

@@ -14,9 +14,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ..core.humanize import bytes_human, seconds_human, truncate
-from ..core.interfaces import Record
-from .theme import Palette, discovery_color
+from prowatch.core.humanize import bytes_human, seconds_human, truncate
+from prowatch.core.interfaces import Record
+from prowatch.ui.theme import Palette, discovery_color
 
 
 def render_summary(

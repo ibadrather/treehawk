@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from .interfaces import ProcessMatcher, Record
-from .models import ProcInfo
+from prowatch.core.interfaces import ProcessMatcher, Record
+from prowatch.core.models import ProcInfo
 
 
 class PidMatcher:

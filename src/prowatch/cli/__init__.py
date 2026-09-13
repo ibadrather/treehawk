@@ -1,5 +1,5 @@
 """Command line entry point."""
 
-from .app import app, main
+from prowatch.cli.app import app, main
 
 __all__ = ["app", "main"]
