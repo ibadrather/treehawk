@@ -1,0 +1,26 @@
+[project]
+name = "prowatch"
+version = "0.1.0"
+description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+prowatch = "prowatch.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prowatch"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: spawns real processes; slower than the unit tests",
+]
