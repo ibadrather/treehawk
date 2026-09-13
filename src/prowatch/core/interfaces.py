@@ -57,8 +57,6 @@ class ProcessSource(Protocol):
 class GroupMetricSource(Protocol):
     """Reads kernel-side aggregates for a process group boundary (cgroup)."""
 
-    def exists(self, path: str) -> bool: ...
-
     def pids_in(self, path: str) -> set[int] | None:
         """PIDs in ``path`` and all of its descendants, or None if unreadable."""
         ...

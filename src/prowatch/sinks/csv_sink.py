@@ -9,8 +9,8 @@ from __future__ import annotations
 import csv
 import json
 import os
-from typing import Mapping
-
+from typing import TextIO
+from ..core.interfaces import Record
 from .base import BaseSink
 
 SAMPLE_COLUMNS = (
@@ -59,16 +59,16 @@ class CsvSink(BaseSink):
         self._procs_path = f"{base}.procs.csv" if per_process else None
         self._header_path = f"{base}.header.json"
         self._per_process = per_process
-        self._handle = None
-        self._writer = None
-        self._procs_handle = None
-        self._procs_writer = None
+        self._handle: TextIO | None = None
+        self._writer: csv.DictWriter[str] | None = None
+        self._procs_handle: TextIO | None = None
+        self._procs_writer: csv.DictWriter[str] | None = None
 
     @property
     def paths(self) -> list[str]:
         return [p for p in (self._path, self._procs_path, self._header_path) if p]
 
-    def open(self, header: Mapping[str, object]) -> None:
+    def open(self, header: Record) -> None:
         # CSV has nowhere to put a header record, so run metadata goes beside it.
         with open(self._header_path, "w", encoding="utf-8") as handle:
             json.dump(header, handle, indent=2, default=str)
@@ -88,11 +88,11 @@ class CsvSink(BaseSink):
             )
             self._procs_writer.writeheader()
 
-    def sample(self, record: Mapping[str, object]) -> None:
-        if self._writer is not None:
+    def sample(self, record: Record) -> None:
+        if self._writer is not None and self._handle is not None:
             self._writer.writerow(record)
             self._handle.flush()
-        if self._procs_writer is not None:
+        if self._procs_writer is not None and self._procs_handle is not None:
             for proc in record.get("procs", ()) or ():
                 row = dict(proc)
                 row["seq"] = record.get("seq")
@@ -101,7 +101,7 @@ class CsvSink(BaseSink):
                 self._procs_writer.writerow(row)
             self._procs_handle.flush()
 
-    def close(self, summary: Mapping[str, object]) -> None:
+    def close(self, summary: Record) -> None:
         for handle in (self._handle, self._procs_handle):
             if handle is not None:
                 handle.close()

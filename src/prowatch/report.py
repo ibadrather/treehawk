@@ -1,25 +1,34 @@
-"""Post-hoc reporting over a prowatch log.
+"""Reading a prowatch log back.
 
-Reads back what a run wrote and prints the figures people actually ask for -
-peak and mean CPU, peak memory, total CPU time, and which process was
-responsible. Uses the recorded summary when the run finished cleanly, and
-recomputes from the samples when it did not (an interrupted or killed run still
-leaves a usable log).
+Produces the figures people ask for - peak and mean CPU, peak memory, total CPU
+time, and which process was responsible - as plain data. Rendering belongs to
+:mod:`prowatch.ui.views` (terminal) and :mod:`prowatch.charts` (PDF), so one
+reader serves both.
+
+Uses the recorded summary when the run finished cleanly and recomputes from the
+samples when it did not, so an interrupted or killed run still reports.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Iterator, Mapping
+from typing import Iterator, TypedDict
 
-from .core.humanize import bytes_human, percent_human, seconds_human, truncate
+from .core.interfaces import Record
+
+
+class Report(TypedDict):
+    """A log, read back: the run's metadata and its computed figures."""
+
+    header: Record
+    summary: Record
 
 
 class ReportError(RuntimeError):
     """The log could not be read or contained no samples."""
 
 
-def read_records(path: str) -> Iterator[dict]:
+def read_records(path: str) -> Iterator[Record]:
     try:
         with open(path, "r", encoding="utf-8") as handle:
             for line in handle:
@@ -34,11 +43,11 @@ def read_records(path: str) -> Iterator[dict]:
         raise ReportError(f"cannot read {path}: {exc}") from exc
 
 
-def build_report(path: str, *, top_n: int = 5) -> dict:
-    header: dict = {}
-    summary: dict = {}
+def build_report(path: str, *, top_n: int = 5) -> Report:
+    header: Record = {}
+    summary: Record = {}
     samples = 0
-    recomputed = {
+    recomputed: Record = {
         "peak_cpu_percent": None,
         "peak_rss_bytes": None,
         "peak_pss_bytes": None,
@@ -49,7 +58,7 @@ def build_report(path: str, *, top_n: int = 5) -> dict:
     }
     cpu_sum = 0.0
     cpu_n = 0
-    procs: dict[tuple, dict] = {}
+    procs: dict[tuple[object, object], Record] = {}
 
     for record in read_records(path):
         kind = record.get("type")
@@ -64,13 +73,15 @@ def build_report(path: str, *, top_n: int = 5) -> dict:
             recomputed["peak_n_procs"] = max(
                 recomputed["peak_n_procs"], record.get("n_procs") or 0
             )
-            for key, field in (
+            for peak_key, sample_key in (
                 ("peak_cpu_percent", "cpu_percent"),
                 ("peak_rss_bytes", "rss_bytes"),
                 ("peak_pss_bytes", "pss_bytes"),
                 ("peak_group_memory_bytes", "group_memory_bytes"),
             ):
-                recomputed[key] = _max(recomputed[key], record.get(field))
+                recomputed[peak_key] = _max(
+                    recomputed[peak_key], record.get(sample_key)
+                )
             if record.get("cpu_percent") is not None:
                 cpu_sum += record["cpu_percent"]
                 cpu_n += 1
@@ -110,59 +121,10 @@ def build_report(path: str, *, top_n: int = 5) -> dict:
         merged["top_by_memory"] = sorted(
             entries, key=lambda e: e["peak_rss_bytes"], reverse=True
         )[:top_n]
-    return {"header": header, "summary": merged}
+    return Report(header=header, summary=merged)
 
 
-def format_report(report: Mapping[str, object]) -> str:
-    header = report.get("header") or {}
-    summary = report.get("summary") or {}
-    host = header.get("host") or {}
-    matcher = header.get("matcher") or {}
-    target = " ".join(header.get("argv") or []) or matcher.get("value", "?")
-
-    lines = [
-        f"target        {target}",
-        f"mode          {header.get('mode', '?')}  "
-        f"interval={header.get('interval', '?')}s  "
-        f"schema={header.get('schema', '?')}",
-        f"host          {host.get('hostname', '?')} "
-        f"({host.get('ncpu', '?')} cpus, {bytes_human(host.get('mem_total_bytes'))} ram)",
-        f"started       {header.get('started_at', '?')}",
-        "",
-        f"samples       {summary.get('samples', 0)} over "
-        f"{seconds_human(summary.get('duration_s'))}"
-        + (f"  ({summary['overruns']} overrun)" if summary.get("overruns") else ""),
-        f"processes     {summary.get('total_procs_seen', '?')} seen, "
-        f"peak {summary.get('peak_n_procs', '?')} concurrent",
-        f"cpu           peak {percent_human(summary.get('peak_cpu_percent'))}, "
-        f"mean {percent_human(summary.get('mean_cpu_percent'))}, "
-        f"{seconds_human(summary.get('cpu_seconds_used'))} of cpu time",
-        f"memory        peak rss {bytes_human(summary.get('peak_rss_bytes'))}, "
-        f"peak pss {bytes_human(summary.get('peak_pss_bytes'))}, "
-        f"peak cgroup {bytes_human(summary.get('peak_group_memory_bytes'))}",
-    ]
-    if summary.get("exit_code") is not None:
-        lines.append(f"exit code     {summary['exit_code']}")
-
-    for title, key, column, render in (
-        ("top by cpu time", "top_by_cpu", "cpu_seconds", seconds_human),
-        ("top by peak rss", "top_by_memory", "peak_rss_bytes", bytes_human),
-    ):
-        rows = summary.get(key) or []
-        if not rows:
-            continue
-        lines.append("")
-        lines.append(title)
-        for row in rows:
-            lines.append(
-                f"  {row.get('pid'):>8}  {render(row.get(column)):>10}  "
-                f"{row.get('via', '-'):<8} "
-                f"{truncate(row.get('cmdline') or row.get('name') or '', 56)}"
-            )
-    return "\n".join(lines)
-
-
-def _max(current, candidate):
+def _max[T: (int, float)](current: T | None, candidate: T | None) -> T | None:
     if candidate is None:
         return current
     return candidate if current is None else max(current, candidate)

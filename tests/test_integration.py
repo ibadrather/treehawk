@@ -20,7 +20,7 @@ pytestmark = pytest.mark.integration
 
 def prowatch(*args, timeout=90):
     return subprocess.run(
-        [sys.executable, "-m", "prowatch.cli", *args],
+        [sys.executable, "-m", "prowatch", *args],
         capture_output=True, text=True, timeout=timeout,
     )
 
@@ -163,7 +163,7 @@ def test_report_round_trips_a_real_run(tmp_path):
 
 def test_csv_output_is_written_and_joinable(tmp_path):
     base = tmp_path / "run.csv"
-    prowatch("run", "-i", "0.25", "-q", "-f", "csv", "-o", str(base), "--",
+    prowatch("run", "-i", "0.25", "-q", "--csv", "-o", str(base), "--",
              sys.executable, WORKLOAD, "--seconds", "1", "--mb", "16",
              "--children", "1")
 

@@ -287,14 +287,3 @@ def test_exact_matcher_requires_the_whole_command_line(world):
     tracker = world.tracker(build_matcher("exact", "python train.py"))
 
     assert [info.pid for info in world.seed(tracker)] == [200]
-
-
-def test_rescan_picks_up_a_process_that_starts_later(world):
-    world.spawn(100, cmdline="python train.py")
-    tracker = world.tracker(build_matcher("keyword", "train.py"), rescan=True)
-    world.seed(tracker)
-    world.refresh(tracker)
-
-    world.spawn(500, cmdline="python train.py", ppid=1)
-
-    assert {info.pid for info in world.refresh(tracker).alive} == {100, 500}

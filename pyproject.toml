@@ -5,6 +5,7 @@ description = "Log CPU and RAM usage of a process and every process it spawns, d
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "matplotlib>=3.11.2",
     "rich>=15.0.0",
     "typer>=0.27.2",
 ]
@@ -19,9 +20,22 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/prowatch"]
 
+[tool.mypy]
+strict = true
+files = ["src/prowatch"]
+warn_unreachable = true
+warn_unused_ignores = true
+enable_error_code = [
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "ignore-without-code",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
+    "pypdf>=6.18.1",
     "pytest>=8",
 ]
 

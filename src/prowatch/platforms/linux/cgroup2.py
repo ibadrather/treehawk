@@ -31,9 +31,6 @@ class CgroupV2Source:
     def _abs(self, path: str) -> str:
         return os.path.join(self._root, path.lstrip("/"))
 
-    def exists(self, path: str) -> bool:
-        return os.path.isdir(self._abs(path))
-
     def pids_in(self, path: str) -> set[int] | None:
         """Every PID in ``path`` and its descendant groups.
 

@@ -96,3 +96,66 @@ def cgroup_root(tmp_path):
     root.mkdir()
     (root / "cgroup.controllers").write_text("cpu memory pids\n")
     return root
+
+
+def write_log(path, *, samples: int = 6, per_process: bool = True, interval=0.5):
+    """A realistic JSONL log, for the readers, the views and the PDF report."""
+    import json
+
+    records = [{
+        "type": "header", "schema": 1, "prowatch_version": "0.1.0",
+        "started_at": "2026-01-01T00:00:00Z", "mode": "run",
+        "matcher": {"kind": "pid", "value": 100},
+        "argv": ["python", "train.py"], "interval": interval,
+        "expand": ["tree", "cgroup", "session", "orphan"], "per_process": per_process,
+        "group_path": "/user.slice/prowatch-1.scope",
+        "host": {"platform": "linux", "hostname": "test", "ncpu": 4,
+                 "clk_tck": 100, "page_size": 4096, "mem_total_bytes": 8 * 1024**3},
+        "notes": [],
+    }]
+    for seq in range(samples):
+        procs = []
+        if per_process:
+            procs.append({
+                "pid": 100, "ppid": 1, "starttime": 1000, "name": "python",
+                "cmdline": "python train.py", "state": "R", "threads": 2,
+                "cpu_percent": None if seq == 0 else 90.0 + seq,
+                "cpu_seconds": seq * 0.5, "rss_bytes": 50_000_000 + seq * 1_000_000,
+                "pss_bytes": 40_000_000, "swap_bytes": 0, "via": "match",
+            })
+            if seq >= 2:
+                procs.append({
+                    "pid": 200, "ppid": 1, "starttime": 2000, "name": "worker",
+                    "cmdline": "python worker.py", "state": "R", "threads": 1,
+                    "cpu_percent": 70.0, "cpu_seconds": (seq - 1) * 0.4,
+                    "rss_bytes": 20_000_000, "pss_bytes": 15_000_000,
+                    "swap_bytes": 0, "via": "orphan",
+                })
+        records.append({
+            "type": "sample", "seq": seq, "t": round(seq * interval, 3),
+            "ts": f"2026-01-01T00:00:{seq:02d}Z", "n_procs": len(procs) or 1,
+            "cpu_percent": None if seq == 0 else 90.0 + seq + (70.0 if seq >= 2 else 0),
+            "cpu_percent_norm": None if seq == 0 else 25.0,
+            "cpu_seconds_total": seq * 0.9, "cpu_seconds_used": seq * 0.9,
+            "rss_bytes": 50_000_000 + seq * 1_000_000,
+            "pss_bytes": 40_000_000, "swap_bytes": 0,
+            "group_memory_bytes": 45_000_000, "group_memory_peak_bytes": 60_000_000,
+            "overrun": seq == 3, "procs": procs,
+        })
+    records.append({
+        "type": "summary", "schema": 1, "samples": samples,
+        "duration_s": round((samples - 1) * interval, 3),
+        "peak_cpu_percent": 165.0, "mean_cpu_percent": 120.0,
+        "peak_n_procs": 2, "total_procs_seen": 2 if per_process else 0,
+        "peak_rss_bytes": 55_000_000, "peak_pss_bytes": 40_000_000,
+        "peak_group_memory_bytes": 60_000_000, "cpu_seconds_total": 4.5,
+        "cpu_seconds_used": 4.5, "overruns": 1, "exit_code": 0,
+        "top_by_cpu": [], "top_by_memory": [],
+    })
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return str(path)
+
+
+@pytest.fixture
+def log(tmp_path):
+    return write_log(tmp_path / "run.jsonl")

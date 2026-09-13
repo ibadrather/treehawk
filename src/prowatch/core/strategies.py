@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable, Mapping
 
-from .config import DEFAULT_EXPANSIONS, ExpansionName
+from .config import ExpansionName
 from .interfaces import ExpansionContext, ExpansionStrategy
 from .models import ProcInfo
 
@@ -202,8 +202,6 @@ STRATEGY_KINDS: dict[str, StrategyFactory] = {
     ExpansionName.SESSION: SessionExpansion,
     ExpansionName.ORPHAN: OrphanExpansion,
 }
-
-DEFAULT_STRATEGIES = DEFAULT_EXPANSIONS
 
 
 def build_strategies(names: Iterable[str]) -> list[ExpansionStrategy]:

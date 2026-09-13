@@ -34,27 +34,19 @@ class PidMatcher:
 class KeywordMatcher:
     """Case-insensitive substring of the command line (or the process name)."""
 
-    def __init__(self, keyword: str, *, case_sensitive: bool = False) -> None:
+    def __init__(self, keyword: str) -> None:
         self._raw = keyword
-        self._case_sensitive = case_sensitive
-        self._needle = keyword if case_sensitive else keyword.lower()
+        self._needle = keyword.lower()
 
     @property
     def needs_cmdline(self) -> bool:
         return True
 
     def matches(self, info: ProcInfo, cmdline: str) -> bool:
-        haystack = cmdline or info.comm
-        if not self._case_sensitive:
-            haystack = haystack.lower()
-        return self._needle in haystack
+        return self._needle in (cmdline or info.comm).lower()
 
     def describe(self) -> Record:
-        return {
-            "kind": "keyword",
-            "value": self._raw,
-            "case_sensitive": self._case_sensitive,
-        }
+        return {"kind": "keyword", "value": self._raw}
 
 
 class ExactMatcher:
@@ -77,10 +69,9 @@ class ExactMatcher:
 class RegexMatcher:
     """Regular expression searched against the command line."""
 
-    def __init__(self, pattern: str, *, case_sensitive: bool = False) -> None:
+    def __init__(self, pattern: str) -> None:
         self._pattern = pattern
-        flags = 0 if case_sensitive else re.IGNORECASE
-        self._regex = re.compile(pattern, flags)
+        self._regex = re.compile(pattern, re.IGNORECASE)
 
     @property
     def needs_cmdline(self) -> bool:
@@ -93,17 +84,17 @@ class RegexMatcher:
         return {"kind": "regex", "value": self._pattern}
 
 
-MatcherFactory = Callable[..., ProcessMatcher]
+MatcherFactory = Callable[[object], ProcessMatcher]
 
 MATCHER_KINDS: dict[str, MatcherFactory] = {
-    "pid": lambda value, **kw: PidMatcher(int(value)),
-    "keyword": lambda value, **kw: KeywordMatcher(str(value), **kw),
-    "exact": lambda value, **kw: ExactMatcher(str(value)),
-    "regex": lambda value, **kw: RegexMatcher(str(value), **kw),
+    "pid": lambda value: PidMatcher(int(str(value))),
+    "keyword": lambda value: KeywordMatcher(str(value)),
+    "exact": lambda value: ExactMatcher(str(value)),
+    "regex": lambda value: RegexMatcher(str(value)),
 }
 
 
-def build_matcher(kind: str, value: object, **kwargs: bool) -> ProcessMatcher:
+def build_matcher(kind: str, value: object) -> ProcessMatcher:
     """Create a matcher by name. Unknown names raise ``ValueError``."""
     try:
         factory = MATCHER_KINDS[kind]
@@ -111,4 +102,4 @@ def build_matcher(kind: str, value: object, **kwargs: bool) -> ProcessMatcher:
         raise ValueError(
             f"unknown matcher {kind!r}; known: {', '.join(sorted(MATCHER_KINDS))}"
         ) from None
-    return factory(value, **kwargs)
+    return factory(value)

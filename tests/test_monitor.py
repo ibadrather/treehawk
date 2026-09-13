@@ -178,7 +178,7 @@ def test_a_missing_workload_is_reported_not_guessed(proc_root, config):
 
 
 def test_wait_polls_until_the_workload_appears(proc_root, config):
-    config.wait = 10.0
+    config.wait = True
     config.max_samples = 1
     source = ScriptedSource(
         proc_root,
@@ -194,11 +194,13 @@ def test_wait_polls_until_the_workload_appears(proc_root, config):
     assert sink.samples[0]["n_procs"] == 1
 
 
-def test_wait_gives_up_and_says_so(proc_root, config):
-    config.wait = 1.0
+def test_wait_stops_cleanly_when_the_user_interrupts(proc_root, config):
+    """No timeout: it waits until the process appears, or until asked to stop."""
+    config.wait = True
     monitor = build_monitor(ScriptedSource(proc_root), config)
+    monitor.request_stop()
 
-    with pytest.raises(WorkloadNotFound, match="within 1s"):
+    with pytest.raises(WorkloadNotFound, match="stopped before"):
         monitor.run()
 
 

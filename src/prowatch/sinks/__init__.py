@@ -5,6 +5,7 @@ from .console import ConsoleSink
 from .csv_sink import CsvSink
 from .factory import build_sink
 from .jsonl import JsonlSink
+from .live import LiveSink
 
 __all__ = [
     "BaseSink",
@@ -12,5 +13,6 @@ __all__ = [
     "ConsoleSink",
     "CsvSink",
     "JsonlSink",
+    "LiveSink",
     "build_sink",
 ]

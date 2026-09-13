@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from prowatch.report import ReportError, build_report, format_report
+from prowatch.report import ReportError, build_report
 
 
 def write_log(path, records):
@@ -74,14 +74,13 @@ def test_report_ranks_processes_when_the_summary_has_no_tables(tmp_path):
     assert [p["pid"] for p in summary["top_by_memory"]] == [100, 200]
 
 
-def test_format_report_mentions_the_target_and_the_peaks(tmp_path):
+def test_report_keeps_the_run_metadata(tmp_path):
     path = write_log(tmp_path / "run.jsonl", [HEADER, sample(0, 10.0, 1048576)])
 
-    text = format_report(build_report(path))
+    header = build_report(path)["header"]
 
-    assert "train.py" in text
-    assert "1.0MiB" in text
-    assert "4 cpus" in text
+    assert header["matcher"]["value"] == "train.py"
+    assert header["host"]["ncpu"] == 4
 
 
 def test_missing_and_empty_logs_fail_clearly(tmp_path):

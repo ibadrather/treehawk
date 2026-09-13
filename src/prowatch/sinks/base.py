@@ -6,7 +6,9 @@ Sinks receive plain dictionaries, so they never depend on the domain model.
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping
+from typing import Iterable
+
+from ..core.interfaces import Record, Sink
 
 
 class BaseSink:
@@ -16,13 +18,13 @@ class BaseSink:
     valid stand-in for the others (Liskov) even when it ignores a record type.
     """
 
-    def open(self, header: Mapping[str, object]) -> None:
+    def open(self, header: Record) -> None:
         return None
 
-    def sample(self, record: Mapping[str, object]) -> None:
+    def sample(self, record: Record) -> None:
         return None
 
-    def close(self, summary: Mapping[str, object]) -> None:
+    def close(self, summary: Record) -> None:
         return None
 
 
@@ -33,27 +35,27 @@ class CompositeSink(BaseSink):
     are collected and re-raised only after everyone has been given the record.
     """
 
-    def __init__(self, sinks: Iterable[BaseSink] = ()) -> None:
-        self._sinks = list(sinks)
+    def __init__(self, sinks: Iterable[Sink] = ()) -> None:
+        self._sinks: list[Sink] = list(sinks)
         self.errors: list[BaseException] = []
 
-    def add(self, sink: BaseSink) -> "CompositeSink":
+    def add(self, sink: Sink) -> "CompositeSink":
         self._sinks.append(sink)
         return self
 
     def __len__(self) -> int:
         return len(self._sinks)
 
-    def open(self, header: Mapping[str, object]) -> None:
+    def open(self, header: Record) -> None:
         self._each("open", header)
 
-    def sample(self, record: Mapping[str, object]) -> None:
+    def sample(self, record: Record) -> None:
         self._each("sample", record)
 
-    def close(self, summary: Mapping[str, object]) -> None:
+    def close(self, summary: Record) -> None:
         self._each("close", summary)
 
-    def _each(self, method: str, payload: Mapping[str, object]) -> None:
+    def _each(self, method: str, payload: Record) -> None:
         for sink in self._sinks:
             try:
                 getattr(sink, method)(payload)

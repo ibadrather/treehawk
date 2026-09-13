@@ -7,20 +7,21 @@ user still sees what is happening.
 from __future__ import annotations
 
 import sys
-from typing import Mapping
+from typing import IO
 
 from ..core.humanize import bytes_human, percent_human, seconds_human, truncate
+from ..core.interfaces import Record
 from .base import BaseSink
 
 
 class ConsoleSink(BaseSink):
     """Prints one line per sample, plus a short report at the end."""
 
-    def __init__(self, stream=None, *, show_procs: int = 0) -> None:
-        self._stream = stream or sys.stderr
+    def __init__(self, stream: IO[str] | None = None, *, show_procs: int = 0) -> None:
+        self._stream: IO[str] = stream or sys.stderr
         self._show_procs = show_procs
 
-    def open(self, header: Mapping[str, object]) -> None:
+    def open(self, header: Record) -> None:
         matcher = header.get("matcher") or {}
         target = matcher.get("value") if isinstance(matcher, dict) else None
         if header.get("mode") == "run":
@@ -35,7 +36,7 @@ class ConsoleSink(BaseSink):
         for note in header.get("notes") or ():
             self._say(f"note: {note}")
 
-    def sample(self, record: Mapping[str, object]) -> None:
+    def sample(self, record: Record) -> None:
         memory = record.get("group_memory_bytes") or record.get("pss_bytes")
         label = "cg" if record.get("group_memory_bytes") else "pss"
         self._say(
@@ -54,7 +55,7 @@ class ConsoleSink(BaseSink):
                 f"{truncate(proc.get('cmdline') or proc.get('name') or '', 60)}"
             )
 
-    def close(self, summary: Mapping[str, object]) -> None:
+    def close(self, summary: Record) -> None:
         self._say("")
         self._say(
             f"samples={summary.get('samples')} "

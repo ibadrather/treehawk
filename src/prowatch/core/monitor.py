@@ -72,10 +72,8 @@ class Monitor:
     def run(self, *, exit_code: Callable[[], int | None] | None = None) -> RunSummary:
         """Sample until a stop condition fires. Always writes a summary."""
         self._config.validate()
-        started = self._clock.monotonic()
-
         if not self._tracker.seeded and not self._tracker.pinned_group:
-            self._await_workload(started)
+            self._await_workload()
 
         self._sink.open(
             header_record(
@@ -183,16 +181,19 @@ class Monitor:
             return True
         return False
 
-    def _await_workload(self, started: float) -> None:
-        """Seed the tracker, optionally polling until the workload shows up."""
-        deadline = None if self._config.wait is None else started + self._config.wait
+    def _await_workload(self) -> None:
+        """Seed the tracker, optionally polling until the workload shows up.
+
+        With ``wait`` set there is no timeout: prowatch is meant to be left
+        running, so it keeps looking until the process appears or the user
+        stops it.
+        """
         poll = min(0.2, self._config.interval)
         while True:
             if self._tracker.seed(self._source.scan()):
                 return
-            if deadline is None or self._clock.monotonic() >= deadline or self._stop:
-                raise WorkloadNotFound(
-                    "no process matched" if deadline is None
-                    else f"no process matched within {self._config.wait:g}s"
-                )
+            if not self._config.wait:
+                raise WorkloadNotFound("no process matched")
+            if self._stop:
+                raise WorkloadNotFound("stopped before a process matched")
             self._clock.sleep_until(self._clock.monotonic() + poll)

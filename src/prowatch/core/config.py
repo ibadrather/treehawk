@@ -33,8 +33,7 @@ class WatchConfig:
     per_process: bool = True
     want_pss: bool = True
     expand: tuple[ExpansionName, ...] = field(default_factory=lambda: DEFAULT_EXPANSIONS)
-    rescan: bool = False
-    wait: float | None = None
+    wait: bool = False
     stop_when_empty: bool = True
     top_n: int = 5
     collectors: tuple[str, ...] = ()

@@ -18,14 +18,18 @@ prowatch watch --pid 4213
 prowatch run -- python train.py --epochs 10
 ```
 
-Then read the log back:
+Either way it keeps sampling until the workload ends — no duration to set, and
+`Ctrl-C` or a shutdown `SIGTERM` still writes a complete summary. While it runs
+you get a live dashboard; afterwards, read the log back:
 
 ```bash
-prowatch report prowatch-20260913-100000.jsonl
+prowatch report prowatch-20260913-100000.jsonl   # summary in the terminal
+prowatch pdf    prowatch-20260913-100000.jsonl   # an 8-page PDF report
 ```
 
-Linux only for now. No third-party dependencies: everything comes from `/proc`
-and cgroup v2 directly, not from `ps`, `top` or `pidstat`.
+Linux only for now. Metrics come from `/proc` and cgroup v2 directly — not from
+`ps`, `top` or `pidstat`, and not from a third-party library. Typer and Rich are
+used for the interface, matplotlib only when you ask for a PDF.
 
 ## Install
 
@@ -114,28 +118,50 @@ Three are recorded because each is wrong in a different way:
 * **`group_memory_bytes`** — the kernel's own charge for the cgroup. Exact when
   a boundary exists, `null` otherwise.
 
-## Options worth knowing
+## The PDF report
+
+`prowatch pdf run.jsonl` renders the run as pages, each answering one question:
+
+| Page | Question |
+|---|---|
+| Overview | What happened, in five numbers, and how each process was found |
+| CPU over time | Was it busy, and did it stay busy? |
+| Memory over time | How much, by each of the three measures |
+| Process lifetimes | Who was alive, when — one bar per process |
+| CPU by process | Which process was burning the CPU |
+| Memory by process | Which process was holding the memory |
+| Biggest consumers | The two league tables |
+| Sampling quality | Can you trust the other seven pages? |
+
+Pages that need per-process detail are left out of an `--aggregate-only` log
+rather than printed blank.
+
+## Options
+
+Four options cover normal use; everything else is grouped under **Advanced** in
+`--help` so it stays out of the way.
 
 ```
 -i, --interval SECONDS   sampling period (default 1.0)
 -o, --output PATH        log file; '-' for stdout
--f, --format jsonl|csv
--d, --duration SECONDS   stop after this long
--n, --max-samples N      stop after N samples
-    --wait [SECONDS]     wait for the process to appear (watch)
-    --rescan             re-run the matcher every sample, catching restarts
-    --expand RULES       membership rules, or 'none'
+    --csv                write CSV instead of JSON Lines
+-q, --quiet              no dashboard, just write the log
+
+watch only:
+-p, --pid / -e, --exact / -r, --regex    other ways to name the process
+    --wait                               keep looking until it appears
+
+Advanced:
+-d, --duration SECONDS   stop early (default: run until the process ends)
+    --expand RULE        limit which membership rules may adopt processes
     --no-pss             skip smaps_rollup (cheaper at short intervals)
-    --no-per-process     log only the aggregate
-    --keep-going         keep sampling after the last process exits
-    --show-procs N       print the top N processes live
+    --aggregate-only     log only the workload total, not a row per process
     --no-isolate         (run) do not create a cgroup
-    --leave-running      (run) do not stop the workload when monitoring ends
--q, --quiet
 ```
 
 Sampling uses absolute deadlines, so intervals do not drift. A sample that
-takes longer than the interval is flagged `overrun` and counted in the summary.
+takes longer than the interval is flagged `overrun`, counted in the summary, and
+marked on the CPU chart.
 
 ## Limitations
 
@@ -146,10 +172,13 @@ takes longer than the interval is flagged `overrun` and counted in the summary.
   between samples.
 * **Another user's processes** expose `stat` but not `smaps_rollup`, so `pss`
   will be `null`. prowatch never fakes a value it could not read.
-* **`--rescan` with a keyword** will pick up any new process matching it, which
-  is what you want for a restarting service and not what you want otherwise.
 * prowatch never adopts its own ancestors (your shell, `uv`, `timeout`), since
   they carry the keyword you typed.
+* **A watch is meant to be left running.** Nothing accumulates without bound —
+  the sparkline history, the "seen this process before" set and the summary
+  table are all capped — but the log itself grows at roughly 1 KB per sample per
+  five processes (~90 MB/day at the default interval). Use `--aggregate-only`
+  or a longer interval for a run measured in days.
 
 ## Design
 
@@ -164,13 +193,21 @@ core/         platform-agnostic policy - models, interfaces, membership, samplin
 platforms/    concrete OS implementations of those protocols
   linux/          procfs.py, cgroup2.py, source.py, launcher.py
 gpu/          the seam for GPU metrics (protocol defined, nothing registered yet)
-sinks/        jsonl, csv, console, and a composite
-cli.py        the composition root: the only module that wires it all together
+sinks/        jsonl, csv, plain console, live dashboard, and a composite
+ui/           Rich rendering: one palette, the dashboard, the summary views
+charts/       matplotlib: log -> series -> pages -> PDF
+cli/          the composition root: options, wiring, commands
 ```
 
-`core` never imports `platforms`; the CLI injects the implementations. Adding a
-membership rule, an output format, a matcher or a metric collector means adding
-a class and a registry entry — not editing the loop.
+`core` never imports `platforms`, `ui` or `charts`; the CLI injects the
+implementations. Adding a membership rule, an output format, a matcher, a report
+page or a metric collector means adding a class and a registry entry — not
+editing the loop.
+
+Everything is fully annotated and checked under `mypy --strict`, including the
+protocols the layers meet at. `ui/theme.py` holds the one palette both the
+dashboard and the PDF draw from, so a process keeps its colour whether you watch
+it live or read it back later.
 
 **Adding GPU metrics** later: implement `MetricCollector` (`namespace`,
 `collect(snapshot)`, `close()`), register it in `gpu/__init__.py`, and its keys
@@ -184,8 +221,9 @@ register a builder in `platforms/registry.py`.
 ## Tests
 
 ```bash
-uv run pytest                     # everything
+uv run pytest                        # everything
 uv run pytest -m "not integration"   # fast: fixture /proc trees only
+uv run mypy                          # strict, whole package
 ```
 
 The unit tests run against fake `/proc` and cgroup trees (every reader takes its

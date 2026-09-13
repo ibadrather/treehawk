@@ -6,12 +6,20 @@ classes exist; registering a new format is a one-line change.
 
 from __future__ import annotations
 
+from typing import Callable
+
+from rich.console import Console
+
+from ..core.interfaces import Sink
 from .base import CompositeSink
 from .console import ConsoleSink
 from .csv_sink import CsvSink
 from .jsonl import JsonlSink
+from .live import LiveSink
 
-FORMATS = {
+FileSinkFactory = Callable[[str, bool], Sink]
+
+FORMATS: dict[str, FileSinkFactory] = {
     "jsonl": lambda path, per_process: JsonlSink(path),
     "csv": lambda path, per_process: CsvSink(path, per_process=per_process),
 }
@@ -23,9 +31,14 @@ def build_sink(
     output: str | None = None,
     per_process: bool = True,
     quiet: bool = False,
-    show_procs: int = 0,
-    stream=None,
+    console: Console | None = None,
 ) -> CompositeSink:
+    """Compose the file sink and the on-screen view for one run.
+
+    The on-screen half picks itself: a terminal gets the live dashboard, and
+    anything else - a pipe, a log file, CI - gets plain lines, because cursor
+    control in a captured stream is noise.
+    """
     sink = CompositeSink()
     if output:
         try:
@@ -36,5 +49,6 @@ def build_sink(
             ) from None
         sink.add(factory(output, per_process))
     if not quiet:
-        sink.add(ConsoleSink(stream, show_procs=show_procs))
+        console = console or Console(stderr=True)
+        sink.add(LiveSink(console) if console.is_terminal else ConsoleSink(console.file))
     return sink

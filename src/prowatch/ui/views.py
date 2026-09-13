@@ -36,7 +36,9 @@ def render_summary(
     ]
     present = [table for table in tables if table is not None]
     if present:
-        parts.append(Columns(present, expand=True, equal=True))
+        # Not forced equal-width: on a narrow terminal Rich stacks them, which
+        # is better than squeezing a value column until it has to truncate.
+        parts.append(Columns(present, padding=(0, 4)))
     return Panel(
         Group(*parts), title=title, title_align="left",
         border_style=palette.grid, padding=(0, 1),
@@ -128,12 +130,15 @@ def _ranking(
     if not rows:
         return None
     table = Table(
-        box=None, pad_edge=False, padding=(0, 1),
+        box=None, pad_edge=False, padding=(0, 1), collapse_padding=True,
         title=f"top by {title}", title_style=palette.text_muted, title_justify="left",
     )
-    table.add_column("pid", justify="right", width=7, style=palette.text_muted)
-    table.add_column(title, justify="right", width=10)
-    table.add_column("command", overflow="ellipsis", no_wrap=True)
+    # 7 digits covers the kernel default pid_max; never let it truncate.
+    table.add_column("pid", justify="right", width=7, no_wrap=True,
+                     style=palette.text_muted)
+    table.add_column(title.replace(" ", "\n"), justify="right", width=9,
+                     no_wrap=True)
+    table.add_column("command", overflow="ellipsis", no_wrap=True, max_width=64)
     formatter = render  # a humanize function; typed loosely to serve both columns
     for row in rows:
         via = str(row.get("via", "-"))

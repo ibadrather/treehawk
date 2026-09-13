@@ -60,7 +60,6 @@ class Tracker:
         self_group: str | None = None,
         self_sid: int = 0,
         pinned_group: str | None = None,
-        rescan: bool = False,
         exclude_pids: set[int] | None = None,
         seed_excluded: bool = False,
     ) -> None:
@@ -72,7 +71,6 @@ class Tracker:
         self._self_group = self_group
         self._self_sid = self_sid
         self._pinned_group = pinned_group
-        self._rescan = rescan
         # prowatch's own process and the shell/wrapper chain that started it.
         # They routinely carry the search keyword in their command line (you
         # typed it), and adopting them would track the terminal, not the work.
@@ -128,10 +126,6 @@ class Tracker:
     def refresh(self, procs: Mapping[int, ProcInfo]) -> RefreshResult:
         """Prune dead members, then grow the set with every strategy."""
         result = RefreshResult()
-
-        if self._rescan:
-            result.admitted.extend(info.identity for info in self.seed(procs))
-
         tracked_pids: set[int] = set()
         for identity, via in list(self._members.items()):
             pid, starttime = identity
