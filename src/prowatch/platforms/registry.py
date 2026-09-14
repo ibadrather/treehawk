@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable
 
+from prowatch.core.errors import UnsupportedPlatform
 from prowatch.core.interfaces import (
     GroupMetricSource,
     HostInfoSource,
@@ -18,59 +19,62 @@ from prowatch.core.interfaces import (
 )
 from prowatch.core.models import HostInfo
 
+__all__ = ["Platform", "UnsupportedPlatform", "build_linux", "get_platform"]
+
 
 @dataclass(frozen=True)
 class Platform:
     """The bundle of capabilities a platform provides (a tiny DI container)."""
 
     name: str
-    processes: ProcessSource
-    host: HostInfoSource
-    groups: GroupMetricSource | None = None
+    process_source: ProcessSource
+    host_source: HostInfoSource
+    group_source: GroupMetricSource | None = None
     launcher: ProcessLauncher | None = None
     notes: list[str] = field(default_factory=list)
 
     def host_info(self) -> HostInfo:
-        return self.host.host_info()
-
-
-class UnsupportedPlatform(RuntimeError):
-    """prowatch has no implementation for this operating system yet."""
+        return self.host_source.host_info()
 
 
 def build_linux(
     *, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
 ) -> Platform:
-    from prowatch.platforms.linux import CgroupV2Source, LinuxHostInfoSource, LinuxProcessSource
+    from prowatch.platforms.linux import (
+        CgroupV2Source,
+        LinuxHostInfoSource,
+        LinuxProcessSource,
+    )
     from prowatch.platforms.linux.launcher import default_launcher
 
-    host = LinuxHostInfoSource(proc_root)
-    info = host.host_info()
-    cgroups: CgroupV2Source | None = CgroupV2Source(cgroup_root)
+    host_source = LinuxHostInfoSource(proc_root)
+    host = host_source.host_info()
+
+    mounted = CgroupV2Source(cgroup_root)
+    cgroups: CgroupV2Source | None = mounted if mounted.available() else None
     notes: list[str] = []
-    if cgroups is not None and not cgroups.available():
+    if cgroups is None:
         notes.append(
             "cgroup v2 is not mounted: group-level CPU/memory totals are "
             "unavailable and detached children are tracked heuristically"
         )
-        cgroups = None
 
     return Platform(
         name="linux",
-        processes=LinuxProcessSource(proc_root, page_size=info.page_size),
-        host=host,
-        groups=cgroups,
+        process_source=LinuxProcessSource(proc_root, page_size=host.page_size),
+        host_source=host_source,
+        group_source=cgroups,
         launcher=default_launcher(cgroups),
         notes=notes,
     )
 
 
-PlatformBuilder = Callable[..., Platform]
+PlatformBuilder = Callable[[], Platform]
 
 PLATFORM_BUILDERS: dict[str, PlatformBuilder] = {"linux": build_linux}
 
 
-def get_platform(name: str | None = None, **kwargs: str) -> Platform:
+def get_platform(*, name: str | None = None) -> Platform:
     """Build the platform bundle for ``name`` (default: the current OS)."""
     name = name or sys.platform
     key = "linux" if name.startswith("linux") else name
@@ -81,4 +85,4 @@ def get_platform(name: str | None = None, **kwargs: str) -> Platform:
             f"prowatch has no backend for {name!r} yet; "
             f"supported: {', '.join(sorted(PLATFORM_BUILDERS))}"
         ) from None
-    return builder(**kwargs)
+    return builder()

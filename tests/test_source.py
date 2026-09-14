@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from conftest import write_proc
+from prowatch.core.config import MemoryDetail
 from prowatch.platforms.linux.source import LinuxProcessSource
 
 
@@ -36,7 +37,7 @@ def test_enrich_adds_cmdline_pss_and_cgroup(proc_root):
     source = LinuxProcessSource(str(proc_root), page_size=4096)
     info = source.scan()[100]
 
-    sample = source.enrich(info, want_pss=True)
+    sample = source.enrich(info=info, memory=MemoryDetail.PROPORTIONAL)
 
     assert sample.cmdline == "python train.py"
     assert sample.pss_bytes == 512 * 1024
@@ -47,7 +48,7 @@ def test_enrich_adds_cmdline_pss_and_cgroup(proc_root):
 def test_enrich_skips_pss_when_not_wanted(proc_root):
     write_proc(proc_root, 100, pss_kb=512)
     source = LinuxProcessSource(str(proc_root))
-    sample = source.enrich(source.scan()[100], want_pss=False)
+    sample = source.enrich(info=source.scan()[100], memory=MemoryDetail.RESIDENT)
     assert sample.pss_bytes is None
 
 
@@ -55,7 +56,7 @@ def test_enrich_tolerates_an_unreadable_process(proc_root):
     # Another user's process: stat is readable, smaps_rollup is not.
     write_proc(proc_root, 100, cmdline="secret", pss_kb=None)
     source = LinuxProcessSource(str(proc_root))
-    sample = source.enrich(source.scan()[100], want_pss=True)
+    sample = source.enrich(info=source.scan()[100], memory=MemoryDetail.PROPORTIONAL)
     assert sample.pss_bytes is None
     assert sample.info.rss_bytes is not None
 
@@ -64,10 +65,10 @@ def test_cmdline_is_cached_per_identity_and_dropped_on_exit(proc_root):
     write_proc(proc_root, 100, cmdline="first")
     source = LinuxProcessSource(str(proc_root))
     info = source.scan()[100]
-    assert source.enrich(info, want_pss=False).cmdline == "first"
+    assert source.enrich(info=info, memory=MemoryDetail.RESIDENT).cmdline == "first"
 
     write_proc(proc_root, 100, cmdline="second")  # same identity: cache wins
-    assert source.enrich(info, want_pss=False).cmdline == "first"
+    assert source.enrich(info=info, memory=MemoryDetail.RESIDENT).cmdline == "first"
 
     source.forget(info.identity)
-    assert source.enrich(info, want_pss=False).cmdline == "second"
+    assert source.enrich(info=info, memory=MemoryDetail.RESIDENT).cmdline == "second"

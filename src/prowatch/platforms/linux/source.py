@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from typing import Final, Mapping
 
+from prowatch.core.config import MemoryDetail
 from prowatch.core.models import Identity, ProcInfo, ProcSample
 from prowatch.platforms.linux.procfs import (
     ProcStatParseError,
@@ -45,10 +46,6 @@ class LinuxProcessSource:
         # are cached per identity rather than re-read every sample.
         self._cmdline_cache: dict[Identity, str] = {}
 
-    @property
-    def root(self) -> str:
-        return self._root
-
     def scan(self) -> Mapping[int, ProcInfo]:
         procs: dict[int, ProcInfo] = {}
         try:
@@ -64,7 +61,7 @@ class LinuxProcessSource:
         return procs
 
     def read_info(self, pid: int) -> ProcInfo | None:
-        text = self._read_text(pid, "stat")
+        text = self._read_text(pid=pid, name="stat")
         if text is None:
             return None
         try:
@@ -74,29 +71,31 @@ class LinuxProcessSource:
         return ProcInfo(**fields)
 
     def read_cmdline(self, pid: int) -> str:
-        raw = self._read_bytes(pid, "cmdline")
+        raw = self._read_bytes(pid=pid, name="cmdline")
         if raw is None:
             return ""
         return parse_cmdline(raw)
 
     def read_group_path(self, pid: int) -> str | None:
-        text = self._read_text(pid, "cgroup")
+        text = self._read_text(pid=pid, name="cgroup")
         if text is None:
             return None
         return parse_cgroup(text)
 
-    def enrich(self, info: ProcInfo, *, want_pss: bool = True) -> ProcSample:
+    def enrich(
+        self, *, info: ProcInfo, memory: MemoryDetail = MemoryDetail.PROPORTIONAL
+    ) -> ProcSample:
         sample = ProcSample(info=info)
         sample.cmdline = self._cached_cmdline(info)
         sample.cgroup = self.read_group_path(info.pid)
 
-        status = self._read_text(info.pid, "status")
+        status = self._read_text(pid=info.pid, name="status")
         if status:
-            memory = parse_status_memory(status)
-            sample.swap_bytes = memory.get("swap_bytes")
+            measured = parse_status_memory(status)
+            sample.swap_bytes = measured.get("swap_bytes")
 
-        if want_pss:
-            rollup = self._read_text(info.pid, "smaps_rollup")
+        if memory is MemoryDetail.PROPORTIONAL:
+            rollup = self._read_text(pid=info.pid, name="smaps_rollup")
             if rollup:
                 measured = parse_smaps_rollup(rollup)
                 sample.pss_bytes = measured.get("pss_bytes")
@@ -118,19 +117,19 @@ class LinuxProcessSource:
         self._cmdline_cache[identity] = cmdline
         return cmdline
 
-    def _path(self, pid: int, name: str) -> str:
+    def _path(self, *, pid: int, name: str) -> str:
         return os.path.join(self._root, str(pid), name)
 
-    def _read_text(self, pid: int, name: str) -> str | None:
+    def _read_text(self, *, pid: int, name: str) -> str | None:
         try:
-            with open(self._path(pid, name), "r", errors="replace") as handle:
+            with open(self._path(pid=pid, name=name), "r", errors="replace") as handle:
                 return handle.read()
         except OSError:
             return None
 
-    def _read_bytes(self, pid: int, name: str) -> bytes | None:
+    def _read_bytes(self, *, pid: int, name: str) -> bytes | None:
         try:
-            with open(self._path(pid, name), "rb") as handle:
+            with open(self._path(pid=pid, name=name), "rb") as handle:
                 return handle.read()
         except OSError:
             return None

@@ -6,9 +6,15 @@ import pytest
 from conftest import write_proc
 
 from prowatch.core.aggregate import Aggregator
-from prowatch.core.config import WatchConfig
+from prowatch.core.config import (
+    MemoryDetail,
+    MissingWorkload,
+    WatchConfig,
+    WhenEmpty,
+)
 from prowatch.core.matchers import build_matcher
-from prowatch.core.monitor import Monitor, WorkloadNotFound
+from prowatch.core.errors import WorkloadNotFound
+from prowatch.core.monitor import Monitor
 from prowatch.core.strategies import build_strategies
 from prowatch.core.tracker import Tracker
 from prowatch.platforms.linux.source import LinuxProcessSource
@@ -74,7 +80,7 @@ def build_monitor(source, config, sink=None, matcher=None, collectors=()):
         platform="linux", hostname="test", ncpu=4, clk_tck=100,
         page_size=4096, mem_total_bytes=1024,
     )
-    matcher = matcher or build_matcher("keyword", "train.py")
+    matcher = matcher or build_matcher(kind="keyword", value="train.py")
     tracker = Tracker(
         matcher=matcher,
         strategies=build_strategies(config.expand),
@@ -84,7 +90,7 @@ def build_monitor(source, config, sink=None, matcher=None, collectors=()):
     return Monitor(
         source=source,
         tracker=tracker,
-        aggregator=Aggregator(host),
+        aggregator=Aggregator(host=host),
         sink=sink or RecordingSink(),
         clock=FakeClock(),
         config=config,
@@ -95,7 +101,9 @@ def build_monitor(source, config, sink=None, matcher=None, collectors=()):
 
 @pytest.fixture
 def config():
-    return WatchConfig(interval=1.0, expand=("tree",), want_pss=False)
+    return WatchConfig(
+        interval=1.0, expand=("tree",), memory=MemoryDetail.RESIDENT
+    )
 
 
 def test_records_are_written_in_order(proc_root, config):
@@ -146,7 +154,7 @@ def test_keep_going_survives_an_empty_sample(proc_root, config):
     import shutil
 
     write_proc(proc_root, 100, cmdline="python train.py")
-    config.stop_when_empty = False
+    config.when_empty = WhenEmpty.KEEP_WATCHING
     config.max_samples = 3
     source = ScriptedSource(
         proc_root,
@@ -178,7 +186,7 @@ def test_a_missing_workload_is_reported_not_guessed(proc_root, config):
 
 
 def test_wait_polls_until_the_workload_appears(proc_root, config):
-    config.wait = True
+    config.missing_workload = MissingWorkload.WAIT
     config.max_samples = 1
     source = ScriptedSource(
         proc_root,
@@ -196,7 +204,7 @@ def test_wait_polls_until_the_workload_appears(proc_root, config):
 
 def test_wait_stops_cleanly_when_the_user_interrupts(proc_root, config):
     """No timeout: it waits until the process appears, or until asked to stop."""
-    config.wait = True
+    config.missing_workload = MissingWorkload.WAIT
     monitor = build_monitor(ScriptedSource(proc_root), config)
     monitor.request_stop()
 

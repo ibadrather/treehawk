@@ -9,10 +9,12 @@ Two small collaborators, each with one job:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Final, Iterable, TypedDict
+from typing import Any, Callable, Final, Iterable, Mapping, TypedDict
 
+from prowatch.core.config import CpuSource
 from prowatch.core.models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
 from prowatch.core.tracker import RefreshResult
+from prowatch.core.values import peak_of
 
 
 class Aggregator:
@@ -28,9 +30,11 @@ class Aggregator:
       come and go, and why it is not merely the sum of the per-process values.
     """
 
-    def __init__(self, host: HostInfo, *, prefer_group_cpu: bool = False) -> None:
+    def __init__(
+        self, *, host: HostInfo, cpu_source: CpuSource = CpuSource.PROCESSES
+    ) -> None:
         self._host = host
-        self._prefer_group_cpu = prefer_group_cpu
+        self._cpu_source = cpu_source
         self._prev_proc_ticks: dict[tuple[int, int], int] = {}
         self._prev_total_cpu: float | None = None
         self._baseline_cpu: float | None = None
@@ -66,7 +70,11 @@ class Aggregator:
             self._prev_proc_ticks.pop(identity, None)
 
         total_cpu = refresh.total_cpu_ticks / clk_tck
-        if self._prefer_group_cpu and group is not None and group.cpu_usec is not None:
+        if (
+            self._cpu_source is CpuSource.GROUP
+            and group is not None
+            and group.cpu_usec is not None
+        ):
             total_cpu = group.cpu_usec / 1_000_000.0
         if self._baseline_cpu is None:
             self._baseline_cpu = total_cpu
@@ -138,28 +146,36 @@ class SummaryAccumulator:
         self._top_n = top_n
         self._seen: dict[Identity, ProcessTotals] = {}
 
-    def add(self, snap: Snapshot) -> None:
-        s = self._summary
-        s.samples += 1
-        s.duration_s = round(snap.t, 3)
-        s.cpu_seconds_total = snap.cpu_seconds_total
-        s.cpu_seconds_used = snap.cpu_seconds_used
-        s.peak_n_procs = max(s.peak_n_procs, snap.n_procs)
-        if snap.overrun:
-            s.overruns += 1
-        if snap.cpu_percent is not None:
-            s.peak_cpu_percent = _max(s.peak_cpu_percent, snap.cpu_percent)
-            self._cpu_sum += snap.cpu_percent
-            self._cpu_n += 1
-            s.mean_cpu_percent = round(self._cpu_sum / self._cpu_n, 2)
-        s.peak_rss_bytes = _max(s.peak_rss_bytes, snap.rss_bytes)
-        s.peak_pss_bytes = _max(s.peak_pss_bytes, snap.pss_bytes)
-        if snap.group is not None:
-            s.peak_group_memory_bytes = _max(
-                s.peak_group_memory_bytes,
-                snap.group.memory_peak_bytes or snap.group.memory_bytes,
+    def add(self, snapshot: Snapshot) -> None:
+        summary = self._summary
+        summary.samples += 1
+        summary.duration_s = round(snapshot.t, 3)
+        summary.cpu_seconds_total = snapshot.cpu_seconds_total
+        summary.cpu_seconds_used = snapshot.cpu_seconds_used
+        summary.peak_n_procs = max(summary.peak_n_procs, snapshot.n_procs)
+        if snapshot.overrun:
+            summary.overruns += 1
+        if snapshot.cpu_percent is not None:
+            summary.peak_cpu_percent = peak_of(
+                current=summary.peak_cpu_percent, candidate=snapshot.cpu_percent
             )
-        for sample in snap.procs:
+            self._cpu_sum += snapshot.cpu_percent
+            self._cpu_n += 1
+            summary.mean_cpu_percent = round(self._cpu_sum / self._cpu_n, 2)
+        summary.peak_rss_bytes = peak_of(
+            current=summary.peak_rss_bytes, candidate=snapshot.rss_bytes
+        )
+        summary.peak_pss_bytes = peak_of(
+            current=summary.peak_pss_bytes, candidate=snapshot.pss_bytes
+        )
+        if snapshot.group is not None:
+            summary.peak_group_memory_bytes = peak_of(
+                current=summary.peak_group_memory_bytes,
+                candidate=(
+                    snapshot.group.memory_peak_bytes or snapshot.group.memory_bytes
+                ),
+            )
+        for sample in snapshot.procs:
             self._record_process(sample)
         if len(self._seen) > PROCESS_TABLE_LIMIT:
             self._prune()
@@ -177,13 +193,18 @@ class SummaryAccumulator:
             )
             self._seen[sample.identity] = entry
         entry["cpu_seconds"] = round(sample.info.cpu_ticks / self._clk_tck, 3)
-        if sample.info.rss_bytes:
-            entry["peak_rss_bytes"] = max(entry["peak_rss_bytes"], sample.info.rss_bytes)
+        rss = sample.info.rss_bytes
+        if rss:
+            entry["peak_rss_bytes"] = max(entry["peak_rss_bytes"], rss)
 
     def _prune(self) -> None:
         """Keep only processes that could still reach a top table."""
-        keep = set(_rank(self._seen.values(), _by_cpu, PRUNE_KEEP))
-        keep |= set(_rank(self._seen.values(), _by_memory, PRUNE_KEEP))
+        keep = set(
+            _rank(entries=self._seen.values(), key=cpu_seconds_of, limit=PRUNE_KEEP)
+        )
+        keep |= set(
+            _rank(entries=self._seen.values(), key=peak_rss_of, limit=PRUNE_KEEP)
+        )
         self._seen = {
             identity: totals
             for identity, totals in self._seen.items()
@@ -191,13 +212,17 @@ class SummaryAccumulator:
         }
 
     def finish(self, *, exit_code: int | None = None) -> RunSummary:
-        s = self._summary
-        s.exit_code = exit_code
-        s.total_procs_seen = len(self._seen)
+        summary = self._summary
+        summary.exit_code = exit_code
+        summary.total_procs_seen = len(self._seen)
         entries = list(self._seen.values())
-        s.top_by_cpu = sorted(entries, key=_by_cpu, reverse=True)[: self._top_n]
-        s.top_by_memory = sorted(entries, key=_by_memory, reverse=True)[: self._top_n]
-        return s
+        summary.top_by_cpu = sorted(entries, key=cpu_seconds_of, reverse=True)[
+            : self._top_n
+        ]
+        summary.top_by_memory = sorted(entries, key=peak_rss_of, reverse=True)[
+            : self._top_n
+        ]
+        return summary
 
 
 PROCESS_TABLE_LIMIT: Final = 4096
@@ -208,19 +233,23 @@ PRUNE_KEEP: Final = 256
 
 
 def _rank(
+    *,
     entries: Iterable[ProcessTotals],
     key: Callable[[ProcessTotals], float],
     limit: int,
 ) -> list[int]:
-    return [e["pid"] for e in sorted(entries, key=key, reverse=True)[:limit]]
+    ranked = sorted(entries, key=key, reverse=True)[:limit]
+    return [entry["pid"] for entry in ranked]
 
 
-def _by_cpu(entry: ProcessTotals) -> float:
-    return entry["cpu_seconds"]
+def cpu_seconds_of(entry: Mapping[str, Any]) -> float:
+    """Ranking key: CPU seconds accumulated over the run."""
+    return float(entry["cpu_seconds"])
 
 
-def _by_memory(entry: ProcessTotals) -> int:
-    return entry["peak_rss_bytes"]
+def peak_rss_of(entry: Mapping[str, Any]) -> int:
+    """Ranking key: the highest RSS this process ever reached."""
+    return int(entry["peak_rss_bytes"])
 
 
 def _sum_or_none(values: Iterable[int | None]) -> int | None:
@@ -230,9 +259,3 @@ def _sum_or_none(values: Iterable[int | None]) -> int | None:
             continue
         total = value if total is None else total + value
     return total
-
-
-def _max[T: (int, float)](current: T | None, candidate: T | None) -> T | None:
-    if candidate is None:
-        return current
-    return candidate if current is None else max(current, candidate)

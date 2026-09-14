@@ -6,7 +6,8 @@ import json
 
 import pytest
 
-from prowatch.report import ReportError, build_report
+from prowatch.core.errors import ReportError
+from prowatch.report import build_report
 
 
 def write_log(path, records):

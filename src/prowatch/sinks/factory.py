@@ -1,54 +1,64 @@
-"""Builds the sink graph from CLI options.
+"""Builds the sinks a run writes to.
 
 Isolated here so that neither the CLI nor the monitor needs to know which sink
 classes exist; registering a new format is a one-line change.
+
+There are two kinds of destination and they are chosen for different reasons,
+so they are built by different functions: the log file is whatever the user
+asked for, while the on-screen view picks itself from the terminal it has.
 """
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Protocol
 
 from rich.console import Console
 
+from prowatch.core.config import LogDetail, LogFormat
+from prowatch.core.errors import ConfigError
 from prowatch.core.interfaces import Sink
-from prowatch.sinks.base import CompositeSink
 from prowatch.sinks.console import ConsoleSink
 from prowatch.sinks.csv_sink import CsvSink
 from prowatch.sinks.jsonl import JsonlSink
 from prowatch.sinks.live import LiveSink
 
-FileSinkFactory = Callable[[str, bool], Sink]
 
-FORMATS: dict[str, FileSinkFactory] = {
-    "jsonl": lambda path, per_process: JsonlSink(path),
-    "csv": lambda path, per_process: CsvSink(path, per_process=per_process),
+class FileSinkFactory(Protocol):
+    """Builds one file sink. Declared as a protocol so the registry is typed."""
+
+    def __call__(self, *, path: str, detail: LogDetail) -> Sink: ...
+
+
+def _build_jsonl(*, path: str, detail: LogDetail) -> Sink:
+    return JsonlSink(path)
+
+
+def _build_csv(*, path: str, detail: LogDetail) -> Sink:
+    return CsvSink(path, detail=detail)
+
+
+FILE_FORMATS: dict[LogFormat, FileSinkFactory] = {
+    LogFormat.JSONL: _build_jsonl,
+    LogFormat.CSV: _build_csv,
 }
 
 
-def build_sink(
-    *,
-    fmt: str = "jsonl",
-    output: str | None = None,
-    per_process: bool = True,
-    quiet: bool = False,
-    console: Console | None = None,
-) -> CompositeSink:
-    """Compose the file sink and the on-screen view for one run.
+def build_file_sink(*, fmt: LogFormat, path: str, detail: LogDetail) -> Sink:
+    """The sink that writes the log. Unknown formats raise :class:`ConfigError`."""
+    try:
+        factory = FILE_FORMATS[fmt]
+    except KeyError:
+        known = ", ".join(sorted(str(name) for name in FILE_FORMATS))
+        raise ConfigError(f"unknown format {fmt!r}; known: {known}") from None
+    return factory(path=path, detail=detail)
 
-    The on-screen half picks itself: a terminal gets the live dashboard, and
-    anything else - a pipe, a log file, CI - gets plain lines, because cursor
-    control in a captured stream is noise.
+
+def build_screen_sink(*, console: Console) -> Sink:
+    """The on-screen view, which picks itself.
+
+    A terminal gets the live dashboard; anything else - a pipe, a log file, CI -
+    gets plain lines, because cursor control in a captured stream is noise.
     """
-    sink = CompositeSink()
-    if output:
-        try:
-            factory = FORMATS[fmt]
-        except KeyError:
-            raise ValueError(
-                f"unknown format {fmt!r}; known: {', '.join(sorted(FORMATS))}"
-            ) from None
-        sink.add(factory(output, per_process))
-    if not quiet:
-        console = console or Console(stderr=True)
-        sink.add(LiveSink(console) if console.is_terminal else ConsoleSink(console.file))
-    return sink
+    if console.is_terminal:
+        return LiveSink(console=console)
+    return ConsoleSink(console.file)

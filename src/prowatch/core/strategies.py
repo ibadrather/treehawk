@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Callable, Iterable, Mapping
 
 from prowatch.core.config import ExpansionName
+from prowatch.core.errors import ConfigError
 from prowatch.core.interfaces import ExpansionContext, ExpansionStrategy
 from prowatch.core.models import ProcInfo
 
@@ -22,12 +23,12 @@ class TreeExpansion:
     def name(self) -> str:
         return "tree"
 
-    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
+    def expand(self, context: ExpansionContext) -> Mapping[int, str]:
         found: dict[int, str] = {}
-        queue = list(ctx.tracked_pids)
-        seen = set(ctx.tracked_pids)
+        queue = list(context.tracked_pids)
+        seen = set(context.tracked_pids)
         while queue:
-            for child in ctx.children.get(queue.pop(), ()):
+            for child in context.children.get(queue.pop(), ()):
                 if child in seen:
                     continue
                 seen.add(child)
@@ -66,36 +67,37 @@ class GroupExpansion:
     def accepted(self) -> set[str]:
         return set(self._accepted)
 
-    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
-        if ctx.groups is None:
+    def expand(self, context: ExpansionContext) -> Mapping[int, str]:
+        if context.groups is None:
             return {}
-        if ctx.pinned_group:
-            self._accepted.add(ctx.pinned_group)
+        if context.pinned_group:
+            self._accepted.add(context.pinned_group)
 
-        for pid in ctx.tracked_pids:
-            path = ctx.group_of(pid)
+        for pid in context.tracked_pids:
+            path = context.group_of(pid)
             if path and path not in self._accepted and path not in self._rejected:
-                if self._is_ours(ctx, path):
+                if self._is_ours(context=context, path=path):
                     self._accepted.add(path)
                 else:
                     self._rejected.add(path)
 
         found: dict[int, str] = {}
         for path in list(self._accepted):
-            for pid in ctx.groups.pids_in(path) or ():
-                if pid not in ctx.tracked_pids and pid != ctx.self_pid:
+            for pid in context.groups.pids_in(path) or ():
+                if pid not in context.tracked_pids and pid != context.self_pid:
                     found[pid] = self.name
         return found
 
-    def _is_ours(self, ctx: ExpansionContext, path: str) -> bool:
-        if ctx.self_group and (
-            ctx.self_group == path or ctx.self_group.startswith(path.rstrip("/") + "/")
+    def _is_ours(self, *, context: ExpansionContext, path: str) -> bool:
+        inside = context.self_group
+        if inside and (
+            inside == path or inside.startswith(path.rstrip("/") + "/")
         ):
             return False  # we are inside it, so it is broader than the workload
-        members = ctx.groups.pids_in(path) if ctx.groups else None
+        members = context.groups.pids_in(path) if context.groups else None
         if not members:
             return False
-        return all(pid in ctx.tracked_pids for pid in members)
+        return all(pid in context.tracked_pids for pid in members)
 
 
 class SessionExpansion:
@@ -112,10 +114,10 @@ class SessionExpansion:
     def name(self) -> str:
         return "session"
 
-    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
-        for pid in ctx.tracked_pids:
-            info = ctx.procs.get(pid)
-            if info is None or info.sid == ctx.self_sid or info.sid <= 0:
+    def expand(self, context: ExpansionContext) -> Mapping[int, str]:
+        for pid in context.tracked_pids:
+            info = context.procs.get(pid)
+            if info is None or info.sid == context.self_sid or info.sid <= 0:
                 continue
             if info.sid == info.pid:  # a session leader we are tracking
                 self._accepted.add(info.sid)
@@ -123,11 +125,11 @@ class SessionExpansion:
         if not self._accepted:
             return {}
         found: dict[int, str] = {}
-        for pid, info in ctx.procs.items():
+        for pid, info in context.procs.items():
             if (
                 info.sid in self._accepted
-                and pid not in ctx.tracked_pids
-                and pid != ctx.self_pid
+                and pid not in context.tracked_pids
+                and pid != context.self_pid
             ):
                 found[pid] = self.name
         return found
@@ -165,33 +167,35 @@ class OrphanExpansion:
     def name(self) -> str:
         return "orphan"
 
-    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
+    def expand(self, context: ExpansionContext) -> Mapping[int, str]:
         self._groups |= {
-            group for group in (ctx.group_of(pid) for pid in ctx.tracked_pids) if group
+            group
+            for group in (context.group_of(pid) for pid in context.tracked_pids)
+            if group
         }
-        if not ctx.new_pids or not self._groups:
+        if not context.new_pids or not self._groups:
             return {}
         tracked_groups = self._groups
 
         found: dict[int, str] = {}
-        for pid in ctx.new_pids:
-            info = ctx.procs.get(pid)
-            if info is None or pid in ctx.tracked_pids or pid == ctx.self_pid:
+        for pid in context.new_pids:
+            info = context.procs.get(pid)
+            if info is None or pid in context.tracked_pids or pid == context.self_pid:
                 continue
-            group = ctx.group_of(pid)
+            group = context.group_of(pid)
             if group is None or group not in tracked_groups:
                 continue
-            if self._was_reparented(ctx, info, group):
+            if self._was_reparented(context=context, info=info, group=group):
                 found[pid] = self.name
         return found
 
     @staticmethod
     def _was_reparented(
-        ctx: ExpansionContext, info: ProcInfo, group: str
+        *, context: ExpansionContext, info: ProcInfo, group: str
     ) -> bool:
-        if info.ppid <= 1 or info.ppid not in ctx.procs:
+        if info.ppid <= 1 or info.ppid not in context.procs:
             return True  # adopted by init, or the parent is already gone
-        return ctx.group_of(info.ppid) != group
+        return context.group_of(info.ppid) != group
 
 
 StrategyFactory = Callable[[], ExpansionStrategy]
@@ -211,7 +215,7 @@ def build_strategies(names: Iterable[str]) -> list[ExpansionStrategy]:
         try:
             factory = STRATEGY_KINDS[name]
         except KeyError:
-            raise ValueError(
+            raise ConfigError(
                 f"unknown expansion strategy {name!r}; "
                 f"known: {', '.join(sorted(STRATEGY_KINDS))}"
             ) from None

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
+from prowatch.core.errors import ConfigError
 from prowatch.core.interfaces import MetricCollector
 
 CollectorFactory = Callable[[], MetricCollector]
@@ -27,6 +28,8 @@ def build_collectors(names: Iterable[str] = ()) -> list[MetricCollector]:
             factory = COLLECTOR_KINDS[name]
         except KeyError:
             known = ", ".join(sorted(COLLECTOR_KINDS)) or "none available yet"
-            raise ValueError(f"unknown metric collector {name!r}; known: {known}")
+            raise ConfigError(
+                f"unknown metric collector {name!r}; known: {known}"
+            ) from None
         collectors.append(factory())
     return collectors

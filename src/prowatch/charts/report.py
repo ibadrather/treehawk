@@ -46,11 +46,15 @@ PAGES: Final[tuple[Page, ...]] = (
 """In reading order: what happened, then cpu, then memory, then who did it,
 then whether the sampling was good enough to believe."""
 
+FOOTER_BAND = 0.05
+"""Anything a page has already drawn below this is its own footer, and the
+writer must not draw a second one over it."""
+
 
 def write_pdf_report(
+    *,
     log_path: str,
     destination: str,
-    *,
     pages: Sequence[Page] = PAGES,
     palette: Palette = PRINT,
 ) -> int:
@@ -64,25 +68,27 @@ def write_pdf_report(
         for number, page in enumerate(pages, start=1):
             figure = plt.figure(figsize=style.PAGE_SIZE)
             try:
-                if not page.draw(figure, series, palette):
+                if not page.draw(figure, series=series, palette=palette):
                     continue
-                _footer(figure, series, number, palette)
+                _add_footer(figure, number=number, palette=palette)
                 pdf.savefig(figure)
                 written += 1
             finally:
                 plt.close(figure)
-        _describe(pdf, series, written)
+        _describe_pdf(pdf, series=series, pages=written)
     return written
 
 
-def _footer(
-    figure: Figure, series: RunSeries, number: int, palette: Palette
-) -> None:
-    if not any(text.get_position()[1] < 0.05 for text in figure.texts):
-        style.footer(figure, f"prowatch {__version__}", str(number), palette)
+def _add_footer(figure: Figure, *, number: int, palette: Palette) -> None:
+    if any(text.get_position()[1] < FOOTER_BAND for text in figure.texts):
+        return  # the page drew its own footer and it says something better
+    style.draw_footer(
+        figure, left=f"prowatch {__version__}", right=str(number), palette=palette
+    )
 
 
-def _describe(pdf: PdfPages, series: RunSeries, pages: int) -> None:
+def _describe_pdf(pdf: PdfPages, *, series: RunSeries, pages: int) -> None:
+    """Fill in the document metadata a reader sees in their PDF viewer."""
     info = pdf.infodict()  # type: ignore[no-untyped-call]
     info["Title"] = f"prowatch report - {series.target}"
     info["Author"] = f"prowatch {__version__}"

@@ -6,7 +6,7 @@ Sinks receive plain dictionaries, so they never depend on the domain model.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 
 from prowatch.core.interfaces import Record, Sink
 
@@ -31,15 +31,17 @@ class BaseSink:
 class CompositeSink(BaseSink):
     """Fans every record out to several sinks; itself a sink.
 
-    One failing destination must not cost the others their data, so failures
-    are collected and re-raised only after everyone has been given the record.
+    This is where an observability tool earns its keep: one failing destination
+    must not cost the others their data, and it must certainly not end the run
+    that is producing it. Failures are therefore recorded in :attr:`errors`
+    rather than raised, and the command line reports them once the run is over.
     """
 
     def __init__(self, sinks: Iterable[Sink] = ()) -> None:
         self._sinks: list[Sink] = list(sinks)
         self.errors: list[BaseException] = []
 
-    def add(self, sink: Sink) -> "CompositeSink":
+    def add_sink(self, sink: Sink) -> "CompositeSink":
         self._sinks.append(sink)
         return self
 
@@ -47,17 +49,17 @@ class CompositeSink(BaseSink):
         return len(self._sinks)
 
     def open(self, header: Record) -> None:
-        self._each("open", header)
+        self._deliver(lambda sink: sink.open(header))
 
     def sample(self, record: Record) -> None:
-        self._each("sample", record)
+        self._deliver(lambda sink: sink.sample(record))
 
     def close(self, summary: Record) -> None:
-        self._each("close", summary)
+        self._deliver(lambda sink: sink.close(summary))
 
-    def _each(self, method: str, payload: Record) -> None:
+    def _deliver(self, send: Callable[[Sink], None]) -> None:
         for sink in self._sinks:
             try:
-                getattr(sink, method)(payload)
-            except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
+                send(sink)
+            except BaseException as exc:  # noqa: BLE001 - recorded, not swallowed
                 self.errors.append(exc)

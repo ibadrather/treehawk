@@ -10,6 +10,8 @@ import csv
 import json
 import os
 from typing import TextIO
+
+from prowatch.core.config import LogDetail
 from prowatch.core.interfaces import Record
 from prowatch.sinks.base import BaseSink
 
@@ -53,12 +55,15 @@ PROC_COLUMNS = (
 class CsvSink(BaseSink):
     """Writes the aggregate (and optionally per-process) rows as CSV."""
 
-    def __init__(self, path: str, *, per_process: bool = True) -> None:
+    def __init__(
+        self, path: str, *, detail: LogDetail = LogDetail.PER_PROCESS
+    ) -> None:
         base, ext = os.path.splitext(path)
         self._path = path if ext else path + ".csv"
-        self._procs_path = f"{base}.procs.csv" if per_process else None
+        self._procs_path = (
+            f"{base}.procs.csv" if detail is LogDetail.PER_PROCESS else None
+        )
         self._header_path = f"{base}.header.json"
-        self._per_process = per_process
         self._handle: TextIO | None = None
         self._writer: csv.DictWriter[str] | None = None
         self._procs_handle: TextIO | None = None

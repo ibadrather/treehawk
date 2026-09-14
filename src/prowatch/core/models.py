@@ -129,12 +129,19 @@ class LaunchedWorkload(ABC):
         pid: int,
         argv: list[str],
         group_path: str | None = None,
-        isolated: bool = False,
     ) -> None:
         self.pid = pid
         self.argv = argv
         self.group_path = group_path
-        self.isolated = isolated
+
+    @property
+    def isolated(self) -> bool:
+        """True when the workload has an accounting boundary of its own.
+
+        Derived rather than declared: owning a cgroup path *is* what being
+        isolated means, so the two cannot drift apart.
+        """
+        return self.group_path is not None
 
     @abstractmethod
     def poll(self) -> int | None:

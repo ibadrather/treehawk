@@ -21,14 +21,10 @@ class CgroupV2Source:
     def __init__(self, root: str = DEFAULT_CGROUP_ROOT) -> None:
         self._root = root
 
-    @property
-    def root(self) -> str:
-        return self._root
-
     def available(self) -> bool:
         return os.path.isfile(os.path.join(self._root, "cgroup.controllers"))
 
-    def _abs(self, path: str) -> str:
+    def _absolute(self, path: str) -> str:
         return os.path.join(self._root, path.lstrip("/"))
 
     def pids_in(self, path: str) -> set[int] | None:
@@ -37,7 +33,7 @@ class CgroupV2Source:
         Descendants matter: systemd and container runtimes nest groups, and a
         child moved into a sub-group is still part of the workload.
         """
-        base = self._abs(path)
+        base = self._absolute(path)
         if not os.path.isdir(base):
             return None
         pids: set[int] = set()
@@ -45,7 +41,7 @@ class CgroupV2Source:
         for dirpath, _dirnames, filenames in os.walk(base):
             if "cgroup.procs" not in filenames:
                 continue
-            text = _read(os.path.join(dirpath, "cgroup.procs"))
+            text = _read_file(os.path.join(dirpath, "cgroup.procs"))
             if text is None:
                 continue
             found = True
@@ -57,18 +53,18 @@ class CgroupV2Source:
         return pids if found else None
 
     def metrics(self, path: str) -> GroupMetrics | None:
-        base = self._abs(path)
+        base = self._absolute(path)
         if not os.path.isdir(base):
             return None
         return GroupMetrics(
             path=path,
             cpu_usec=self._cpu_usec(base),
-            memory_bytes=_read_int(os.path.join(base, "memory.current")),
-            memory_peak_bytes=_read_int(os.path.join(base, "memory.peak")),
+            memory_bytes=_read_int_file(os.path.join(base, "memory.current")),
+            memory_peak_bytes=_read_int_file(os.path.join(base, "memory.peak")),
         )
 
     def _cpu_usec(self, base: str) -> int | None:
-        text = _read(os.path.join(base, "cpu.stat"))
+        text = _read_file(os.path.join(base, "cpu.stat"))
         if text is None:
             return None
         for line in text.splitlines():
@@ -81,7 +77,7 @@ class CgroupV2Source:
         return None
 
 
-def _read(path: str) -> str | None:
+def _read_file(path: str) -> str | None:
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             return handle.read()
@@ -89,8 +85,8 @@ def _read(path: str) -> str | None:
         return None  # vanished, or not delegated to us
 
 
-def _read_int(path: str) -> int | None:
-    text = _read(path)
+def _read_int_file(path: str) -> int | None:
+    text = _read_file(path)
     if text is None:
         return None
     text = text.strip()

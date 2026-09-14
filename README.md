@@ -102,7 +102,7 @@ still leaves a readable log.
 
 `via` says which rule found each process — useful when a result surprises you.
 
-`--format csv` writes `run.csv` (one row per sample) and `run.procs.csv` (one
+`--csv` writes `run.csv` (one row per sample) and `run.procs.csv` (one
 row per process per sample, joinable on `seq`), with the header and summary
 alongside as JSON.
 

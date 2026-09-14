@@ -7,8 +7,17 @@ import json
 
 import pytest
 
-from prowatch.sinks import CompositeSink, CsvSink, JsonlSink, build_sink
+from prowatch.core.config import LogDetail, LogFormat
+from prowatch.core.errors import ConfigError
+from prowatch.sinks import (
+    CompositeSink,
+    CsvSink,
+    JsonlSink,
+    build_file_sink,
+    build_screen_sink,
+)
 from prowatch.sinks.base import BaseSink
+from prowatch.sinks.console import ConsoleSink
 
 HEADER = {"type": "header", "schema": 1, "interval": 1.0, "mode": "watch"}
 SAMPLE = {
@@ -47,7 +56,7 @@ def test_jsonl_flushes_so_a_killed_run_still_leaves_a_readable_log(tmp_path):
 
 
 def test_csv_splits_aggregate_and_per_process_rows(tmp_path):
-    sink = CsvSink(str(tmp_path / "run.csv"), per_process=True)
+    sink = CsvSink(str(tmp_path / "run.csv"), detail=LogDetail.PER_PROCESS)
 
     sink.open(HEADER)
     sink.sample(SAMPLE)
@@ -64,7 +73,7 @@ def test_csv_splits_aggregate_and_per_process_rows(tmp_path):
 
 
 def test_csv_without_per_process_writes_one_file(tmp_path):
-    sink = CsvSink(str(tmp_path / "run.csv"), per_process=False)
+    sink = CsvSink(str(tmp_path / "run.csv"), detail=LogDetail.AGGREGATE)
     sink.open(HEADER)
     sink.sample(SAMPLE)
     sink.close(SUMMARY)
@@ -93,12 +102,32 @@ def test_composite_delivers_to_every_sink_even_if_one_fails():
     assert isinstance(composite.errors[0], OSError)
 
 
-def test_build_sink_honours_quiet_and_output(tmp_path):
-    assert len(build_sink(output=str(tmp_path / "a.jsonl"), quiet=True)) == 1
-    assert len(build_sink(output=str(tmp_path / "a.jsonl"), quiet=False)) == 2
-    assert len(build_sink(output=None, quiet=True)) == 0
+def test_the_file_sink_matches_the_requested_format(tmp_path):
+    jsonl = build_file_sink(
+        fmt=LogFormat.JSONL,
+        path=str(tmp_path / "a.jsonl"),
+        detail=LogDetail.PER_PROCESS,
+    )
+    csv_sink = build_file_sink(
+        fmt=LogFormat.CSV,
+        path=str(tmp_path / "a.csv"),
+        detail=LogDetail.PER_PROCESS,
+    )
+
+    assert isinstance(jsonl, JsonlSink)
+    assert isinstance(csv_sink, CsvSink)
 
 
-def test_build_sink_rejects_an_unknown_format(tmp_path):
-    with pytest.raises(ValueError, match="unknown format"):
-        build_sink(fmt="parquet", output=str(tmp_path / "a"))
+def test_build_file_sink_rejects_an_unknown_format(tmp_path):
+    with pytest.raises(ConfigError, match="unknown format"):
+        build_file_sink(
+            fmt="parquet", path=str(tmp_path / "a"), detail=LogDetail.PER_PROCESS
+        )
+
+
+def test_the_screen_sink_picks_itself_from_the_console(tmp_path):
+    """A pipe gets plain lines; only a real terminal gets cursor control."""
+    from rich.console import Console
+
+    piped = build_screen_sink(console=Console(file=(tmp_path / "out").open("w")))
+    assert isinstance(piped, ConsoleSink)

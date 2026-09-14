@@ -12,8 +12,8 @@ from conftest import write_log
 from pypdf import PdfReader
 
 from prowatch.charts.report import PAGES, write_pdf_report
-from prowatch.charts.series import load_series, stack_for
-from prowatch.report import ReportError
+from prowatch.charts.series import Metric, load_series, stack_for
+from prowatch.core.errors import ReportError
 
 
 # -- reshaping ------------------------------------------------------------
@@ -60,7 +60,7 @@ def test_the_other_band_comes_from_untracked_processes_not_from_arithmetic(log):
     that could not be computed yet; neither belongs to a visible process.
     """
     series = load_series(log)
-    bands, other = stack_for(series, series.tracks, "cpu")
+    bands, other = stack_for(series=series, tracks=series.tracks, metric=Metric.CPU)
 
     assert len(bands) == 2
     assert all(value == 0.0 for value in other)
@@ -70,7 +70,7 @@ def test_the_other_band_holds_what_was_left_out(log):
     series = load_series(log)
     charted = [track for track in series.tracks if track.pid == 100]
 
-    bands, other = stack_for(series, charted, "cpu")
+    bands, other = stack_for(series=series, tracks=charted, metric=Metric.CPU)
 
     assert len(bands) == 1
     assert other[2] == pytest.approx(70.0)  # the worker, not charted
@@ -97,7 +97,7 @@ def test_a_truncated_log_still_loads(tmp_path):
 def test_every_page_is_written_for_a_full_log(log, tmp_path):
     destination = tmp_path / "report.pdf"
 
-    pages = write_pdf_report(log, str(destination))
+    pages = write_pdf_report(log_path=log, destination=str(destination))
 
     assert pages == len(PAGES)
     assert destination.stat().st_size > 10_000
@@ -105,7 +105,7 @@ def test_every_page_is_written_for_a_full_log(log, tmp_path):
 
 def test_the_pdf_is_readable_and_describes_itself(log, tmp_path):
     destination = tmp_path / "report.pdf"
-    write_pdf_report(log, str(destination))
+    write_pdf_report(log_path=log, destination=str(destination))
 
     reader = PdfReader(str(destination))
 
@@ -120,7 +120,7 @@ def test_per_process_pages_are_skipped_when_the_log_has_no_detail(tmp_path):
     """An --aggregate-only log gets fewer pages, not blank ones."""
     aggregate = write_log(tmp_path / "agg.jsonl", per_process=False)
 
-    pages = write_pdf_report(aggregate, str(tmp_path / "agg.pdf"))
+    pages = write_pdf_report(log_path=aggregate, destination=str(tmp_path / "agg.pdf"))
 
     assert 0 < pages < len(PAGES)
     reader = PdfReader(str(tmp_path / "agg.pdf"))
@@ -133,6 +133,6 @@ def test_a_two_sample_log_still_renders(tmp_path):
     """Short runs happen; the sampling page needs three points and bows out."""
     short = write_log(tmp_path / "short.jsonl", samples=2)
 
-    pages = write_pdf_report(short, str(tmp_path / "short.pdf"))
+    pages = write_pdf_report(log_path=short, destination=str(tmp_path / "short.pdf"))
 
     assert pages >= 5

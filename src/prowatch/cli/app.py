@@ -4,21 +4,25 @@ This is the composition root: the only module that knows about every layer. It
 reads arguments, picks implementations, and hands them to the monitor - which
 sees nothing but interfaces.
 
-Three commands, and the default behaviour of each is the one you want most of
+It is also the only place that handles errors. Everything underneath raises a
+:class:`ProwatchError` and lets it travel; :func:`_guard` turns it into a line
+of text and an exit code here, once, rather than at forty catch sites.
+
+Four commands, and the default behaviour of each is the one you want most of
 the time: ``watch`` and ``run`` sample until the workload ends, ``report`` and
 ``pdf`` read a finished log back.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import signal
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
-from typing import Annotated, Final, NoReturn
+from typing import Annotated, Callable, Final
 
 import typer
 from rich.console import Console
@@ -35,21 +39,32 @@ from prowatch.cli.options import (
     Output,
     Quiet,
 )
-from prowatch.cli.wiring import assemble
-from prowatch.core.config import DEFAULT_EXPANSIONS, ExpansionName, WatchConfig
-from prowatch.core.interfaces import ProcessLauncher, ProcessMatcher, Sink
+from prowatch.cli.wiring import build_session
+from prowatch.core.config import (
+    DEFAULT_EXPANSIONS,
+    ExpansionName,
+    Isolation,
+    LogDetail,
+    LogFormat,
+    MemoryDetail,
+    MissingWorkload,
+    WatchConfig,
+)
+from prowatch.core.errors import ConfigError, ProwatchError
+from prowatch.core.interfaces import ProcessLauncher, ProcessMatcher
 from prowatch.core.matchers import build_matcher
 from prowatch.core.models import LaunchedWorkload
-from prowatch.core.monitor import Monitor, WorkloadNotFound
-from prowatch.platforms.registry import Platform, UnsupportedPlatform, get_platform
-from prowatch.report import Report, ReportError, build_report
-from prowatch.sinks import build_sink
+from prowatch.core.monitor import Monitor
+from prowatch.platforms.registry import Platform, get_platform
+from prowatch.report import Report, build_report
+from prowatch.sinks import CompositeSink, build_file_sink, build_screen_sink
 from prowatch.ui.theme import PALETTE
 from prowatch.ui.views import render_header_facts, render_summary
 
-EXIT_ERROR: Final = 1
-EXIT_NOT_FOUND: Final = 2
 TERMINATE_GRACE: Final = 5.0
+"""Seconds a workload is given to exit on SIGTERM before it is killed."""
+
+STDOUT_PATH: Final = "-"
 
 app = typer.Typer(
     name="prowatch",
@@ -60,8 +75,26 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
-err = Console(stderr=True)
-out = Console()
+stderr_console = Console(stderr=True)
+stdout_console = Console()
+
+
+def _guard[**P](command: Callable[P, None]) -> Callable[P, None]:
+    """Turn any deliberate failure into one line of text and an exit code.
+
+    Applied to every command, so nothing below the CLI has to know how a
+    failure should be presented or what it is worth exiting with.
+    """
+
+    @functools.wraps(command)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+        try:
+            command(*args, **kwargs)
+        except ProwatchError as exc:
+            stderr_console.print(f"[bold]prowatch:[/bold] {exc}")
+            raise typer.Exit(exc.exit_code) from None
+
+    return wrapper
 
 
 @app.callback(invoke_without_command=True)
@@ -73,14 +106,15 @@ def main_callback(
     ] = False,
 ) -> None:
     if version:
-        out.print(f"prowatch {__version__}")
+        stdout_console.print(f"prowatch {__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
-        out.print(ctx.get_help())
+        stdout_console.print(ctx.get_help())
         raise typer.Exit()
 
 
 @app.command()
+@_guard
 def watch(
     target: Annotated[
         str | None,
@@ -98,7 +132,9 @@ def watch(
     ] = None,
     regex: Annotated[
         str | None,
-        typer.Option("--regex", "-r", help="A regular expression over the command line."),
+        typer.Option(
+            "--regex", "-r", help="A regular expression over the command line."
+        ),
     ] = None,
     wait: Annotated[
         bool,
@@ -118,30 +154,40 @@ def watch(
     [dim]prowatch watch train.py
     prowatch watch --pid 4213[/dim]
     """
-    matcher = _matcher(target=target, pid=pid, exact=exact, regex=regex)
-    platform = _platform()
-    config = _config(
-        interval=interval, duration=duration, expand=expand, no_pss=no_pss,
-        aggregate_only=aggregate_only, wait=wait,
+    matcher = _select_matcher(target=target, pid=pid, exact=exact, regex=regex)
+    fmt = LogFormat.CSV if csv else LogFormat.JSONL
+    config = _build_config(
+        interval=interval,
+        duration=duration,
+        expand=expand,
+        detail=LogDetail.AGGREGATE if aggregate_only else LogDetail.PER_PROCESS,
+        memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
+        missing_workload=MissingWorkload.WAIT if wait else MissingWorkload.FAIL,
     )
-    sink, path = _sink(output=output, csv=csv, quiet=quiet, config=config)
-    session = assemble(
-        platform=platform, config=config, sink=sink, matcher=matcher,
+    platform = get_platform()
+    path = output or _default_log_path(fmt)
+    sinks = _build_sinks(
+        path=path,
+        fmt=fmt,
+        detail=config.detail,
+        screen=None if quiet else stderr_console,
+    )
+    session = build_session(
+        platform=platform, config=config, sink=sinks, matcher=matcher,
         mode="watch", notes=tuple(platform.notes),
     )
-    _install_signal_handlers(session.monitor)
-    _announce(path, quiet=quiet)
+    _install_signal_handlers(monitor=session.monitor)
+    if not quiet:
+        _announce_log_path(path)
 
-    try:
-        session.monitor.run()
-    except WorkloadNotFound as exc:
-        err.print(f"[bold]prowatch:[/bold] {exc}")
-        raise typer.Exit(EXIT_NOT_FOUND) from None
+    session.monitor.run()
+    _report_sink_errors(sinks)
 
 
 @app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
 )
+@_guard
 def run(
     ctx: typer.Context,
     interval: Interval = 1.0,
@@ -168,41 +214,56 @@ def run(
 
     [dim]prowatch run -- python train.py --epochs 10[/dim]
     """
-    argv = [arg for arg in ctx.args if arg != "--"]
+    argv = [argument for argument in ctx.args if argument != "--"]
     if not argv:
-        err.print("[bold]prowatch:[/bold] nothing to run; put the command after --")
-        raise typer.Exit(EXIT_ERROR)
+        raise ConfigError("nothing to run; put the command after --")
 
-    platform = _platform()
-    config = _config(
-        interval=interval, duration=duration, expand=expand, no_pss=no_pss,
-        aggregate_only=aggregate_only, wait=False,
+    fmt = LogFormat.CSV if csv else LogFormat.JSONL
+    config = _build_config(
+        interval=interval,
+        duration=duration,
+        expand=expand,
+        detail=LogDetail.AGGREGATE if aggregate_only else LogDetail.PER_PROCESS,
+        memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
+        missing_workload=MissingWorkload.FAIL,
     )
-    sink, path = _sink(output=output, csv=csv, quiet=quiet, config=config)
-    launcher = _launcher(platform, isolate=not no_isolate)
+    platform = get_platform()
+    path = output or _default_log_path(fmt)
+    sinks = _build_sinks(
+        path=path,
+        fmt=fmt,
+        detail=config.detail,
+        screen=None if quiet else stderr_console,
+    )
+    launcher = _select_launcher(
+        platform, isolation=Isolation.NONE if no_isolate else Isolation.CGROUP
+    )
 
-    _announce(path, quiet=quiet)
+    if not quiet:
+        _announce_log_path(path)
     workload = launcher.launch(argv)
     notes = tuple(platform.notes) + tuple(getattr(launcher, "notes", ()))
 
-    session = assemble(
-        platform=platform, config=config, sink=sink,
-        matcher=build_matcher("pid", workload.pid),
+    session = build_session(
+        platform=platform, config=config, sink=sinks,
+        matcher=build_matcher(kind="pid", value=workload.pid),
         mode="run", argv=argv, pinned_group=workload.group_path, notes=notes,
     )
     # The workload already exists, so seed now rather than searching for it.
-    session.tracker.seed(platform.processes.scan())
-    _install_signal_handlers(session.monitor, workload)
+    session.tracker.seed(platform.process_source.scan())
+    _install_signal_handlers(monitor=session.monitor, workload=workload)
 
     try:
-        session.monitor.run(exit_code=workload.poll)
+        session.monitor.run(read_exit_code=workload.poll)
     finally:
-        code = _finalize(workload)
+        code = _stop_workload(workload)
+    _report_sink_errors(sinks)
     if code:
         raise typer.Exit(code)
 
 
 @app.command()
+@_guard
 def report(
     path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
     as_json: Annotated[
@@ -210,16 +271,21 @@ def report(
     ] = False,
 ) -> None:
     """Summarise a finished run."""
-    data = _load_report(path)
+    data: Report = build_report(str(path))
     if as_json:
-        out.print_json(json.dumps(data, default=str))
+        stdout_console.print_json(json.dumps(data, default=str))
         return
     header, summary = data["header"], data["summary"]
-    out.print(render_header_facts(header, PALETTE))
-    out.print(render_summary(summary, header, PALETTE, title=path.name))
+    stdout_console.print(render_header_facts(header=header, palette=PALETTE))
+    stdout_console.print(
+        render_summary(
+            summary=summary, header=header, palette=PALETTE, title=path.name
+        )
+    )
 
 
 @app.command()
+@_guard
 def pdf(
     path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
     output: Annotated[
@@ -232,108 +298,102 @@ def pdf(
     from prowatch.charts.report import write_pdf_report
 
     destination = output or path.with_suffix(".pdf")
-    try:
-        pages = write_pdf_report(str(path), str(destination))
-    except ReportError as exc:
-        err.print(f"[bold]prowatch:[/bold] {exc}")
-        raise typer.Exit(EXIT_ERROR) from None
-    out.print(f"wrote [bold]{destination}[/bold] ({pages} pages)")
+    pages = write_pdf_report(log_path=str(path), destination=str(destination))
+    stdout_console.print(f"wrote [bold]{destination}[/bold] ({pages} pages)")
 
 
 # --------------------------------------------------------------------------
 # helpers
 # --------------------------------------------------------------------------
 
-def _matcher(
+def _select_matcher(
     *, target: str | None, pid: int | None, exact: str | None, regex: str | None
 ) -> ProcessMatcher:
     given = [value for value in (target, pid, exact, regex) if value is not None]
     if len(given) > 1:
-        _fail("give just one of KEYWORD, --pid, --exact or --regex")
+        raise ConfigError("give just one of KEYWORD, --pid, --exact or --regex")
     if pid is not None:
-        return build_matcher("pid", pid)
+        return build_matcher(kind="pid", value=pid)
     if exact is not None:
-        return build_matcher("exact", exact)
+        return build_matcher(kind="exact", value=exact)
     if regex is not None:
-        return build_matcher("regex", regex)
+        return build_matcher(kind="regex", value=regex)
     if target is not None:
-        return build_matcher("keyword", target)
-    _fail("give a keyword, or one of --pid, --exact, --regex")
+        return build_matcher(kind="keyword", value=target)
+    raise ConfigError("give a keyword, or one of --pid, --exact, --regex")
 
 
-def _platform() -> Platform:
-    try:
-        return get_platform()
-    except UnsupportedPlatform as exc:
-        _fail(str(exc))
-
-
-def _launcher(platform: Platform, *, isolate: bool) -> ProcessLauncher:
+def _select_launcher(platform: Platform, *, isolation: Isolation) -> ProcessLauncher:
     if platform.launcher is None:
-        _fail("this platform cannot start processes")
-    if isolate:
+        raise ConfigError("this platform cannot start processes")
+    if isolation is Isolation.CGROUP:
         return platform.launcher
     from prowatch.platforms.linux.launcher import DirectLauncher, FallbackLauncher
 
     return FallbackLauncher([DirectLauncher()])
 
 
-def _config(
+def _build_config(
     *,
     interval: float,
     duration: float | None,
     expand: list[ExpansionName] | None,
-    no_pss: bool,
-    aggregate_only: bool,
-    wait: bool,
+    detail: LogDetail,
+    memory: MemoryDetail,
+    missing_workload: MissingWorkload,
 ) -> WatchConfig:
     config = WatchConfig(
         interval=interval,
         duration=duration,
-        per_process=not aggregate_only,
-        want_pss=not no_pss,
+        detail=detail,
+        memory=memory,
         expand=tuple(expand) if expand else DEFAULT_EXPANSIONS,
-        wait=wait,
+        missing_workload=missing_workload,
     )
-    try:
-        config.validate()
-    except ValueError as exc:
-        _fail(str(exc))
+    config.validate()
     return config
 
 
-def _sink(
-    *, output: str | None, csv: bool, quiet: bool, config: WatchConfig
-) -> tuple[Sink, str]:
-    path = output or (
-        f"prowatch-{datetime.now().strftime('%Y%m%d-%H%M%S')}."
-        f"{'csv' if csv else 'jsonl'}"
+def _default_log_path(fmt: LogFormat) -> str:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"prowatch-{stamp}.{fmt}"
+
+
+def _build_sinks(
+    *, path: str, fmt: LogFormat, detail: LogDetail, screen: Console | None
+) -> CompositeSink:
+    """The log, plus the on-screen view - or no view at all when ``screen`` is
+    ``None``, which is what ``--quiet`` means."""
+    sinks = CompositeSink()
+    sinks.add_sink(build_file_sink(fmt=fmt, path=path, detail=detail))
+    if screen is not None:
+        sinks.add_sink(build_screen_sink(console=screen))
+    return sinks
+
+
+def _announce_log_path(path: str) -> None:
+    if path != STDOUT_PATH:
+        stderr_console.print(f"[dim]logging to[/dim] {path}")
+
+
+def _report_sink_errors(sinks: CompositeSink) -> None:
+    """Say what a destination lost, once the data that survived is safe.
+
+    A sink that fails mid-run is reported rather than raised: losing the screen
+    is no reason to lose the log, and by the time we get here the log has
+    already been closed out.
+    """
+    if not sinks.errors:
+        return
+    first = sinks.errors[0]
+    stderr_console.print(
+        f"[bold]prowatch:[/bold] {len(sinks.errors)} output error(s); "
+        f"first was {type(first).__name__}: {first}"
     )
-    sink = build_sink(
-        fmt="csv" if csv else "jsonl",
-        output=path,
-        per_process=config.per_process,
-        quiet=quiet,
-        console=err,
-    )
-    return sink, path
-
-
-def _announce(path: str, *, quiet: bool) -> None:
-    if not quiet and path != "-":
-        err.print(f"[dim]logging to[/dim] {path}")
-
-
-def _load_report(path: Path) -> Report:
-    try:
-        return build_report(str(path))
-    except ReportError as exc:
-        err.print(f"[bold]prowatch:[/bold] {exc}")
-        raise typer.Exit(EXIT_ERROR) from None
 
 
 def _install_signal_handlers(
-    monitor: Monitor, workload: LaunchedWorkload | None = None
+    *, monitor: Monitor, workload: LaunchedWorkload | None = None
 ) -> None:
     def handler(signum: int, _frame: FrameType | None) -> None:
         if workload is not None:
@@ -344,7 +404,7 @@ def _install_signal_handlers(
         signal.signal(signum, handler)
 
 
-def _finalize(workload: LaunchedWorkload) -> int | None:
+def _stop_workload(workload: LaunchedWorkload) -> int | None:
     """Stop the workload if monitoring ended first, and report its exit code."""
     code = workload.poll()
     if code is not None:
@@ -358,11 +418,6 @@ def _finalize(workload: LaunchedWorkload) -> int | None:
         time.sleep(0.05)
     workload.signal(signal.SIGKILL)
     return workload.poll()
-
-
-def _fail(message: str) -> NoReturn:
-    err.print(f"[bold]prowatch:[/bold] {message}")
-    raise typer.Exit(EXIT_ERROR)
 
 
 def main() -> None:

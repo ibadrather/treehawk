@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
+from prowatch.core.errors import ConfigError
 from prowatch.core.interfaces import ProcessMatcher, Record
 from prowatch.core.models import ProcInfo
 
@@ -24,7 +25,11 @@ class PidMatcher:
     def needs_cmdline(self) -> bool:
         return False
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool:
+    @property
+    def names_one_process(self) -> bool:
+        return True
+
+    def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
         return info.pid == self._pid
 
     def describe(self) -> Record:
@@ -42,7 +47,11 @@ class KeywordMatcher:
     def needs_cmdline(self) -> bool:
         return True
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool:
+    @property
+    def names_one_process(self) -> bool:
+        return False
+
+    def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
         return self._needle in (cmdline or info.comm).lower()
 
     def describe(self) -> Record:
@@ -59,7 +68,11 @@ class ExactMatcher:
     def needs_cmdline(self) -> bool:
         return True
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool:
+    @property
+    def names_one_process(self) -> bool:
+        return False
+
+    def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
         return cmdline.strip() == self._command
 
     def describe(self) -> Record:
@@ -77,7 +90,11 @@ class RegexMatcher:
     def needs_cmdline(self) -> bool:
         return True
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool:
+    @property
+    def names_one_process(self) -> bool:
+        return False
+
+    def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
         return self._regex.search(cmdline or info.comm) is not None
 
     def describe(self) -> Record:
@@ -94,12 +111,12 @@ MATCHER_KINDS: dict[str, MatcherFactory] = {
 }
 
 
-def build_matcher(kind: str, value: object) -> ProcessMatcher:
-    """Create a matcher by name. Unknown names raise ``ValueError``."""
+def build_matcher(*, kind: str, value: object) -> ProcessMatcher:
+    """Create a matcher by name. Unknown names raise :class:`ConfigError`."""
     try:
         factory = MATCHER_KINDS[kind]
     except KeyError:
-        raise ValueError(
+        raise ConfigError(
             f"unknown matcher {kind!r}; known: {', '.join(sorted(MATCHER_KINDS))}"
         ) from None
     return factory(value)

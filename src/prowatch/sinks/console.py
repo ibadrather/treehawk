@@ -9,8 +9,15 @@ from __future__ import annotations
 import sys
 from typing import IO
 
-from prowatch.core.humanize import bytes_human, percent_human, seconds_human, truncate
+from prowatch.core.humanize import (
+    format_bytes,
+    format_percent,
+    format_seconds,
+    truncate,
+)
 from prowatch.core.interfaces import Record
+from prowatch.core.records import target_of
+from prowatch.core.values import as_float
 from prowatch.sinks.base import BaseSink
 
 
@@ -22,62 +29,65 @@ class ConsoleSink(BaseSink):
         self._show_procs = show_procs
 
     def open(self, header: Record) -> None:
-        matcher = header.get("matcher") or {}
-        target = matcher.get("value") if isinstance(matcher, dict) else None
-        if header.get("mode") == "run":
-            target = " ".join(header.get("argv") or [])
-        group = header.get("group_path")
-        self._say(
-            f"prowatch {header.get('prowatch_version')} | mode={header.get('mode')} "
-            f"| target={target!r} | interval={header.get('interval')}s"
+        self._write_line(
+            f"prowatch {header.get('prowatch_version')} "
+            f"| mode={header.get('mode')} "
+            f"| target={target_of(header)!r} "
+            f"| interval={header.get('interval')}s"
         )
-        if group:
-            self._say(f"accounting boundary: {group}")
+        boundary = header.get("group_path")
+        if boundary:
+            self._write_line(f"accounting boundary: {boundary}")
         for note in header.get("notes") or ():
-            self._say(f"note: {note}")
+            self._write_line(f"note: {note}")
 
     def sample(self, record: Record) -> None:
-        memory = record.get("group_memory_bytes") or record.get("pss_bytes")
-        label = "cg" if record.get("group_memory_bytes") else "pss"
-        self._say(
-            f"[{record.get('t'):>8.2f}s] procs={record.get('n_procs'):<4} "
-            f"cpu={percent_human(record.get('cpu_percent')):>8} "
-            f"rss={bytes_human(record.get('rss_bytes')):>9} "
-            f"{label}={bytes_human(memory):>9} "
-            f"cpu_time={seconds_human(record.get('cpu_seconds_used'))}"
+        group_memory = record.get("group_memory_bytes")
+        memory = group_memory if group_memory is not None else record.get("pss_bytes")
+        label = "cg" if group_memory is not None else "pss"
+        elapsed = as_float(record.get("t")) or 0.0
+        self._write_line(
+            f"[{elapsed:>8.2f}s] procs={record.get('n_procs'):<4} "
+            f"cpu={format_percent(as_float(record.get('cpu_percent'))):>8} "
+            f"rss={format_bytes(as_float(record.get('rss_bytes'))):>9} "
+            f"{label}={format_bytes(as_float(memory)):>9} "
+            f"cpu_time={format_seconds(as_float(record.get('cpu_seconds_used')))}"
             + (" OVERRUN" if record.get("overrun") else "")
         )
         for proc in (record.get("procs") or ())[: self._show_procs]:
-            self._say(
+            self._write_line(
                 f"    pid={proc['pid']:<8} via={proc['via']:<8} "
-                f"cpu={percent_human(proc.get('cpu_percent')):>7} "
-                f"rss={bytes_human(proc.get('rss_bytes')):>9} "
-                f"{truncate(proc.get('cmdline') or proc.get('name') or '', 60)}"
+                f"cpu={format_percent(as_float(proc.get('cpu_percent'))):>7} "
+                f"rss={format_bytes(as_float(proc.get('rss_bytes'))):>9} "
+                + truncate(str(proc.get("cmdline") or proc.get("name") or ""), width=60)
             )
 
     def close(self, summary: Record) -> None:
-        self._say("")
-        self._say(
+        self._write_line("")
+        self._write_line(
             f"samples={summary.get('samples')} "
-            f"duration={seconds_human(summary.get('duration_s'))} "
+            f"duration={format_seconds(as_float(summary.get('duration_s')))} "
             f"processes_seen={summary.get('total_procs_seen')} "
             f"peak_procs={summary.get('peak_n_procs')}"
         )
-        self._say(
-            f"cpu: peak={percent_human(summary.get('peak_cpu_percent'))} "
-            f"mean={percent_human(summary.get('mean_cpu_percent'))} "
-            f"total={seconds_human(summary.get('cpu_seconds_used'))} of cpu time"
+        self._write_line(
+            f"cpu: peak={format_percent(as_float(summary.get('peak_cpu_percent')))} "
+            f"mean={format_percent(as_float(summary.get('mean_cpu_percent')))} "
+            f"total={format_seconds(as_float(summary.get('cpu_seconds_used')))} "
+            "of cpu time"
         )
-        self._say(
-            f"memory: peak_rss={bytes_human(summary.get('peak_rss_bytes'))} "
-            f"peak_pss={bytes_human(summary.get('peak_pss_bytes'))} "
-            f"peak_cgroup={bytes_human(summary.get('peak_group_memory_bytes'))}"
+        self._write_line(
+            f"memory: "
+            f"peak_rss={format_bytes(as_float(summary.get('peak_rss_bytes')))} "
+            f"peak_pss={format_bytes(as_float(summary.get('peak_pss_bytes')))} "
+            f"peak_cgroup="
+            f"{format_bytes(as_float(summary.get('peak_group_memory_bytes')))}"
         )
         if summary.get("overruns"):
-            self._say(
+            self._write_line(
                 f"warning: {summary['overruns']} sample(s) took longer than the "
                 "interval - consider a larger --interval or --no-pss"
             )
 
-    def _say(self, text: str) -> None:
+    def _write_line(self, text: str) -> None:
         print(text, file=self._stream, flush=True)

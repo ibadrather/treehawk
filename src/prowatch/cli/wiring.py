@@ -12,13 +12,17 @@ from dataclasses import dataclass
 
 from prowatch.core.aggregate import Aggregator
 from prowatch.core.clock import SystemClock
-from prowatch.core.config import WatchConfig
+from prowatch.core.config import CpuSource, WatchConfig
 from prowatch.core.interfaces import ProcessMatcher, ProcessSource, Sink
 from prowatch.core.monitor import Monitor
 from prowatch.core.strategies import build_strategies
 from prowatch.core.tracker import Tracker
 from prowatch.gpu import build_collectors
 from prowatch.platforms.registry import Platform
+
+ANCESTOR_LIMIT = 64
+"""How far up the parent chain to walk before giving up. A process tree that
+deep is a loop we have failed to detect, not a real wrapper chain."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +34,7 @@ class Session:
     platform: Platform
 
 
-def assemble(
+def build_session(
     *,
     platform: Platform,
     config: WatchConfig,
@@ -42,34 +46,42 @@ def assemble(
     notes: tuple[str, ...] = (),
 ) -> Session:
     host = platform.host_info()
-    source = platform.processes
+    source = platform.process_source
     self_pid = os.getpid()
     # prowatch's own wrapper chain (shell, uv, timeout, ...) is never part of
     # the workload: it carries the keyword because the user typed it there, and
-    # adopting it would drag in the whole terminal. An explicit --pid may still
-    # name one of them as the seed.
-    by_pid = matcher.describe().get("kind") == "pid"
+    # adopting it would drag in the whole terminal. An explicit --pid names its
+    # target outright, so it is allowed to seed from that chain - but nothing
+    # may ever be *adopted* from it.
+    unrelated = frozenset({self_pid}) | ancestors_of(source=source, pid=self_pid)
     tracker = Tracker(
         matcher=matcher,
         strategies=build_strategies(config.expand),
         source=source,
-        groups=platform.groups,
+        groups=platform.group_source,
         self_pid=self_pid,
         self_group=source.read_group_path(self_pid),
-        self_sid=_session_id(source, self_pid),
+        self_sid=session_id_of(source=source, pid=self_pid),
         pinned_group=pinned_group,
-        exclude_pids={self_pid} | ancestors_of(source, self_pid),
-        seed_excluded=by_pid,
+        exclude_from_seed=(
+            frozenset() if matcher.names_one_process else unrelated
+        ),
+        exclude_from_expansion=unrelated,
     )
     monitor = Monitor(
         source=source,
         tracker=tracker,
-        aggregator=Aggregator(host, prefer_group_cpu=pinned_group is not None),
+        aggregator=Aggregator(
+            host=host,
+            cpu_source=(
+                CpuSource.GROUP if pinned_group is not None else CpuSource.PROCESSES
+            ),
+        ),
         sink=sink,
         clock=SystemClock(),
         config=config,
         host=host,
-        groups=platform.groups,
+        groups=platform.group_source,
         collectors=build_collectors(config.collectors),
         mode=mode,
         matcher=matcher.describe(),
@@ -79,7 +91,9 @@ def assemble(
     return Session(monitor=monitor, tracker=tracker, platform=platform)
 
 
-def ancestors_of(source: ProcessSource, pid: int, *, limit: int = 64) -> set[int]:
+def ancestors_of(
+    *, source: ProcessSource, pid: int, limit: int = ANCESTOR_LIMIT
+) -> frozenset[int]:
     """Every process between ``pid`` and PID 1."""
     found: set[int] = set()
     current = pid
@@ -89,9 +103,10 @@ def ancestors_of(source: ProcessSource, pid: int, *, limit: int = 64) -> set[int
             break
         found.add(info.ppid)
         current = info.ppid
-    return found
+    return frozenset(found)
 
 
-def _session_id(source: ProcessSource, pid: int) -> int:
+def session_id_of(*, source: ProcessSource, pid: int) -> int:
+    """The session ``pid`` belongs to, or 0 if it cannot be read."""
     info = source.read_info(pid)
     return info.sid if info is not None else 0

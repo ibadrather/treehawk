@@ -99,7 +99,6 @@ def discovery_group(via: str) -> str:
     return DISCOVERY_GROUPS.get(via, "detached")
 
 
-def discovery_color(via: str, palette: Palette) -> str:
+def discovery_color(*, via: str, palette: Palette) -> str:
     """Stable colour for a membership rule, by its presentation group."""
-    group = discovery_group(via)
-    return palette.slot(DISCOVERY_ORDER.index(group))
+    return palette.slot(DISCOVERY_ORDER.index(discovery_group(via)))

@@ -13,7 +13,7 @@ from typing import Any, Final
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from prowatch.core.humanize import bytes_human
+from prowatch.core.humanize import format_bytes
 from prowatch.ui.theme import PRINT, Palette
 
 PAGE_SIZE: Final = (11.69, 8.27)
@@ -60,7 +60,9 @@ def rc_params(palette: Palette = PRINT) -> dict[str, Any]:
     }
 
 
-def page(fig: Figure, title: str, subtitle: str, palette: Palette = PRINT) -> None:
+def draw_heading(
+    fig: Figure, *, title: str, subtitle: str, palette: Palette = PRINT
+) -> None:
     """Put a consistent heading on a page."""
     fig.suptitle(title, x=0.06, y=0.965, ha="left", fontsize=16, fontweight="bold",
                  color=palette.text_primary)
@@ -68,23 +70,25 @@ def page(fig: Figure, title: str, subtitle: str, palette: Palette = PRINT) -> No
              color=palette.text_secondary)
 
 
-def footer(fig: Figure, left: str, right: str, palette: Palette = PRINT) -> None:
+def draw_footer(
+    fig: Figure, *, left: str, right: str, palette: Palette = PRINT
+) -> None:
     fig.text(0.06, 0.035, left, ha="left", fontsize=7.5, color=palette.text_muted)
     fig.text(0.94, 0.035, right, ha="right", fontsize=7.5, color=palette.text_muted)
 
 
-def bytes_axis(ax: Axes, palette: Palette = PRINT) -> None:
+def format_bytes_axis(ax: Axes) -> None:
     """Label a byte axis in KiB/MiB/GiB rather than scientific notation."""
-    ax.yaxis.set_major_formatter(lambda value, _pos: bytes_human(value))
+    ax.yaxis.set_major_formatter(lambda value, _pos: format_bytes(value))
 
 
-def seconds_axis(ax: Axes, duration: float) -> None:
+def format_time_axis(ax: Axes, *, duration: float) -> None:
     """Label the time axis in the unit the run is actually read in."""
     if duration >= 7200:
-        ax.xaxis.set_major_formatter(lambda v, _p: f"{v / 3600:.1f}h")
+        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value / 3600:.1f}h")
         ax.set_xlabel("elapsed (hours)")
     elif duration >= 180:
-        ax.xaxis.set_major_formatter(lambda v, _p: f"{v / 60:.0f}m")
+        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value / 60:.0f}m")
         ax.set_xlabel("elapsed (minutes)")
     else:
         ax.set_xlabel("elapsed (seconds)")
@@ -92,6 +96,7 @@ def seconds_axis(ax: Axes, duration: float) -> None:
 
 def annotate_peak(
     ax: Axes,
+    *,
     x: float,
     y: float,
     text: str,
@@ -107,7 +112,7 @@ def annotate_peak(
     )
 
 
-def empty(ax: Axes, message: str, palette: Palette = PRINT) -> None:
+def draw_placeholder(ax: Axes, *, message: str, palette: Palette = PRINT) -> None:
     """Say why a chart is blank instead of showing empty axes."""
     ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=10,
             color=palette.text_muted, transform=ax.transAxes)

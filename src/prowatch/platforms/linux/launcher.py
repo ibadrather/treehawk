@@ -21,6 +21,7 @@ import subprocess
 import time
 from typing import Final
 
+from prowatch.core.errors import LaunchFailed
 from prowatch.core.interfaces import ProcessLauncher
 from prowatch.core.models import LaunchedWorkload
 from prowatch.platforms.linux.cgroup2 import CgroupV2Source
@@ -38,15 +39,12 @@ class SubprocessWorkload(LaunchedWorkload):
 
     def __init__(
         self,
+        *,
         process: "subprocess.Popen[bytes]",
         argv: list[str],
-        *,
         group_path: str | None = None,
-        isolated: bool = False,
     ) -> None:
-        super().__init__(
-            pid=process.pid, argv=list(argv), group_path=group_path, isolated=isolated
-        )
+        super().__init__(pid=process.pid, argv=list(argv), group_path=group_path)
         self._process = process
 
     def poll(self) -> int | None:
@@ -76,7 +74,7 @@ class DirectLauncher:
 
     def launch(self, argv: list[str]) -> LaunchedWorkload:
         process = subprocess.Popen(argv, start_new_session=True)
-        return SubprocessWorkload(process, argv)
+        return SubprocessWorkload(process=process, argv=argv)
 
 
 class ScopeLauncher:
@@ -113,21 +111,21 @@ class ScopeLauncher:
             *argv,
         ]
         process = subprocess.Popen(wrapper, start_new_session=True)
-        group = self._resolve_group(process, unit)
+        group = self._resolve_group(process=process, unit=unit)
         if group is None:
             raise ScopeUnavailable(
                 f"could not place the workload in a cgroup (unit {unit})"
             )
-        return SubprocessWorkload(process, argv, group_path=group, isolated=True)
+        return SubprocessWorkload(process=process, argv=argv, group_path=group)
 
     def _resolve_group(
-        self, process: "subprocess.Popen[bytes]", unit: str
+        self, *, process: "subprocess.Popen[bytes]", unit: str
     ) -> str | None:
         """Wait for the child to appear inside the new scope's cgroup."""
         needle = f"{unit}.scope"
         deadline = time.monotonic() + self._timeout
         while time.monotonic() < deadline:
-            path = _read_cgroup(self._proc_root, process.pid)
+            path = _read_cgroup(proc_root=self._proc_root, pid=process.pid)
             if path and needle in path:
                 return path
             if process.poll() is not None and process.returncode != 0:
@@ -136,7 +134,7 @@ class ScopeLauncher:
         return None
 
 
-class ScopeUnavailable(RuntimeError):
+class ScopeUnavailable(LaunchFailed):
     """systemd-run is present but could not give us an accounting boundary."""
 
 
@@ -177,7 +175,7 @@ class FallbackLauncher:
                 )
             self.notes.extend(errors)
             return workload
-        raise RuntimeError("could not start the workload: " + "; ".join(errors))
+        raise LaunchFailed("could not start the workload: " + "; ".join(errors))
 
 
 def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:
@@ -185,7 +183,7 @@ def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:
     return FallbackLauncher([ScopeLauncher(cgroups), DirectLauncher()])
 
 
-def _read_cgroup(proc_root: str, pid: int) -> str | None:
+def _read_cgroup(*, proc_root: str, pid: int) -> str | None:
     try:
         with open(os.path.join(proc_root, str(pid), "cgroup")) as handle:
             return parse_cgroup(handle.read())

@@ -87,7 +87,10 @@ def test_membership_rules_are_presented_as_three_groups():
 
 
 def test_each_group_keeps_its_own_colour():
-    colors = {discovery_color(via, PALETTE) for via in ("match", "tree", "orphan")}
+    colors = {
+        discovery_color(via=via, palette=PALETTE)
+        for via in ("match", "tree", "orphan")
+    }
     assert len(colors) == 3
 
 
@@ -100,7 +103,7 @@ def test_the_palette_never_cycles_hues():
 # -- dashboard ------------------------------------------------------------
 
 def test_dashboard_shows_the_workload_and_its_processes():
-    dashboard = Dashboard(PALETTE)
+    dashboard = Dashboard(palette=PALETTE)
     dashboard.start(header())
     dashboard.update(sample())
 
@@ -114,7 +117,7 @@ def test_dashboard_shows_the_workload_and_its_processes():
 
 
 def test_dashboard_remembers_the_peak_after_it_has_passed():
-    dashboard = Dashboard(PALETTE)
+    dashboard = Dashboard(palette=PALETTE)
     dashboard.start(header())
     dashboard.update(sample(cpu_percent=400.0))
     dashboard.update(sample(cpu_percent=10.0))
@@ -125,7 +128,7 @@ def test_dashboard_remembers_the_peak_after_it_has_passed():
 
 
 def test_dashboard_survives_a_sample_with_nothing_in_it():
-    dashboard = Dashboard(PALETTE)
+    dashboard = Dashboard(palette=PALETTE)
     dashboard.start(header())
     dashboard.update(sample(procs=[], n_procs=0, cpu_percent=None, rss_bytes=None,
                             pss_bytes=None, group_memory_bytes=None))
@@ -136,7 +139,7 @@ def test_dashboard_survives_a_sample_with_nothing_in_it():
 
 
 def test_dashboard_caps_the_table_and_says_how_many_are_hidden():
-    dashboard = Dashboard(PALETTE, max_rows=1)
+    dashboard = Dashboard(palette=PALETTE, max_rows=1)
     dashboard.start(header())
     dashboard.update(sample())
 
@@ -145,7 +148,7 @@ def test_dashboard_caps_the_table_and_says_how_many_are_hidden():
 
 def test_dashboard_history_is_bounded():
     """A watch may run for days; the sparkline must not accumulate for ever."""
-    dashboard = Dashboard(PALETTE, history=10)
+    dashboard = Dashboard(palette=PALETTE, history=10)
     dashboard.start(header())
     for index in range(500):
         dashboard.update(sample(cpu_percent=float(index)))
@@ -167,7 +170,7 @@ def test_summary_reports_the_headline_figures():
         "top_by_memory": [],
     }
 
-    text = draw(render_summary(summary, header(), PALETTE))
+    text = draw(render_summary(summary=summary, header=header(), palette=PALETTE))
 
     assert "180.0% peak" in text
     assert "66.8MiB peak rss" in text
@@ -176,12 +179,16 @@ def test_summary_reports_the_headline_figures():
 
 
 def test_summary_warns_about_overruns():
-    text = draw(render_summary({"samples": 3, "overruns": 2}, header(), PALETTE))
+    text = draw(render_summary(
+        summary={"samples": 3, "overruns": 2}, header=header(), palette=PALETTE
+    ))
     assert "longer than the interval" in text
 
 
 def test_header_facts_include_the_boundary_and_notes():
-    text = draw(render_header_facts(header(notes=["cgroup v2 is not mounted"]), PALETTE))
+    text = draw(render_header_facts(
+        header=header(notes=["cgroup v2 is not mounted"]), palette=PALETTE
+    ))
     assert "prowatch-1.scope" in text
     assert "cgroup v2 is not mounted" in text
 
@@ -191,7 +198,7 @@ def test_header_facts_include_the_boundary_and_notes():
 def test_live_sink_leaves_the_summary_behind(tmp_path):
     """The live region is transient; what stays in the scrollback is the result."""
     console = Console(record=True, width=120, file=open(tmp_path / "out", "w"))
-    sink = LiveSink(console)
+    sink = LiveSink(console=console)
 
     sink.open(header())
     sink.sample(sample())

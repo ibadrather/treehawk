@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from prowatch.core.aggregate import Aggregator, SummaryAccumulator
+from prowatch.core.config import CpuSource
 from prowatch.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample
 from prowatch.core.tracker import RefreshResult
 
@@ -39,13 +40,13 @@ def build(agg, samples, *, seq, dt, elapsed=None, **kwargs):
 
 def test_first_sample_reports_no_cpu_rate():
     """There is nothing to subtract from yet; a made-up number would be worse."""
-    snap = build(Aggregator(HOST), [proc(ticks=500)], seq=0, dt=0.0)
+    snap = build(Aggregator(host=HOST), [proc(ticks=500)], seq=0, dt=0.0)
     assert snap.cpu_percent is None
     assert snap.procs[0].cpu_percent is None
 
 
 def test_cpu_percent_comes_from_the_counter_delta():
-    agg = Aggregator(HOST)
+    agg = Aggregator(host=HOST)
     build(agg, [proc(ticks=0)], seq=0, dt=0.0)
     # 100 ticks at 100 Hz = 1.0s of cpu in 1.0s of wall time = one core busy.
     snap = build(agg, [proc(ticks=100)], seq=1, dt=1.0)
@@ -57,7 +58,7 @@ def test_cpu_percent_comes_from_the_counter_delta():
 
 def test_aggregate_cpu_includes_a_child_that_exited_mid_interval():
     """The per-process rows cannot show this; the total must not lose it."""
-    agg = Aggregator(HOST)
+    agg = Aggregator(host=HOST)
     build(agg, [proc(pid=100, ticks=0), proc(pid=200, ticks=0)], seq=0, dt=0.0)
 
     survivor = proc(pid=100, ticks=50)
@@ -71,7 +72,7 @@ def test_aggregate_cpu_includes_a_child_that_exited_mid_interval():
 
 
 def test_cpu_total_never_goes_backwards():
-    agg = Aggregator(HOST)
+    agg = Aggregator(host=HOST)
     build(agg, [proc(ticks=1000)], seq=0, dt=0.0)
     snap = build(agg, [], seq=1, dt=1.0, refresh=refresh([]))
 
@@ -80,7 +81,7 @@ def test_cpu_total_never_goes_backwards():
 
 
 def test_cpu_seconds_used_excludes_work_done_before_we_attached():
-    agg = Aggregator(HOST)
+    agg = Aggregator(host=HOST)
     build(agg, [proc(ticks=3000)], seq=0, dt=0.0)  # 30s already burned
     snap = build(agg, [proc(ticks=3100)], seq=1, dt=1.0)
 
@@ -90,7 +91,7 @@ def test_cpu_seconds_used_excludes_work_done_before_we_attached():
 
 def test_group_cpu_is_preferred_when_the_workload_owns_a_cgroup():
     """The kernel counter also covers processes we never managed to sample."""
-    agg = Aggregator(HOST, prefer_group_cpu=True)
+    agg = Aggregator(host=HOST, cpu_source=CpuSource.GROUP)
     group = GroupMetrics(path="/app.scope", cpu_usec=5_000_000, memory_bytes=2048)
     snap = build(agg, [proc(ticks=100)], seq=0, dt=0.0, group=group)
 
@@ -99,7 +100,7 @@ def test_group_cpu_is_preferred_when_the_workload_owns_a_cgroup():
 
 def test_memory_is_summed_per_source_and_stays_none_when_unavailable():
     snap = build(
-        Aggregator(HOST),
+        Aggregator(host=HOST),
         [proc(pid=100, rss=1000, pss=600), proc(pid=200, rss=1000, pss=400)],
         seq=0, dt=0.0,
     )
@@ -109,7 +110,7 @@ def test_memory_is_summed_per_source_and_stays_none_when_unavailable():
 
 
 def test_summary_tracks_peaks_and_means():
-    agg = Aggregator(HOST)
+    agg = Aggregator(host=HOST)
     acc = SummaryAccumulator(clk_tck=100)
     for seq, ticks in enumerate((0, 100, 150)):
         acc.add(build(agg, [proc(ticks=ticks, rss=1000 * (seq + 1))], seq=seq, dt=1.0))

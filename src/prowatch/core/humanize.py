@@ -1,11 +1,16 @@
-"""Small display helpers, shared by the console sink and the report command."""
+"""Formatting numbers for people, shared by every renderer.
+
+Named ``format_*`` because that is all they do: they take a measurement and
+return text. ``None`` always renders as ``-``, so "we could not measure it"
+never reads as zero.
+"""
 
 from __future__ import annotations
 
 _UNITS = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
 
 
-def bytes_human(value: float | None, *, precision: int = 1) -> str:
+def format_bytes(value: float | None, *, precision: int = 1) -> str:
     if value is None:
         return "-"
     size = float(value)
@@ -18,11 +23,11 @@ def bytes_human(value: float | None, *, precision: int = 1) -> str:
     return f"{size:.{precision}f}{_UNITS[-1]}"
 
 
-def percent_human(value: float | None) -> str:
+def format_percent(value: float | None) -> str:
     return "-" if value is None else f"{value:.1f}%"
 
 
-def seconds_human(value: float | None) -> str:
+def format_seconds(value: float | None) -> str:
     if value is None:
         return "-"
     if value < 60:
@@ -34,7 +39,7 @@ def seconds_human(value: float | None) -> str:
     return f"{hours}h{minutes:02d}m{seconds:04.1f}s"
 
 
-def truncate(text: str, width: int) -> str:
+def truncate(text: str, *, width: int) -> str:
     text = text.strip()
     if width <= 1 or len(text) <= width:
         return text

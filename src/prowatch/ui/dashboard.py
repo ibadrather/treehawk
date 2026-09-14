@@ -9,20 +9,28 @@ to a string.
 from __future__ import annotations
 
 from collections import deque
-from typing import Final, Iterable, Sequence
+from typing import Final, Sequence
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from prowatch.core.humanize import bytes_human, seconds_human, truncate
+from prowatch.core.humanize import (
+    format_bytes,
+    format_percent,
+    format_seconds,
+    truncate,
+)
 from prowatch.core.interfaces import Record
+from prowatch.core.records import target_of
+from prowatch.core.values import as_float, as_int
 from prowatch.ui.theme import Palette, discovery_color
 from prowatch.ui.widgets import elapsed_clock, sparkline
 
 HISTORY: Final = 60
-"""Samples kept for the sparklines. Bounded: a watch may run for days."""
+"""Samples kept for the sparklines, and the width of the column that shows
+them. Bounded: a watch may run for days."""
 
 
 class Dashboard:
@@ -30,8 +38,8 @@ class Dashboard:
 
     def __init__(
         self,
-        palette: Palette,
         *,
+        palette: Palette,
         max_rows: int = 12,
         history: int = HISTORY,
     ) -> None:
@@ -55,17 +63,17 @@ class Dashboard:
     def update(self, record: Record) -> None:
         self._latest = record
         self._samples += 1
-        cpu = _number(record.get("cpu_percent"))
+        cpu = as_float(record.get("cpu_percent"))
         self._cpu.append(cpu)
         if cpu is not None and (self._peak_cpu is None or cpu > self._peak_cpu):
             self._peak_cpu = cpu
-        memory = _memory_of(record)
+        memory = _memory_reading(record)
         self._memory.append(None if memory is None else float(memory))
         if memory is not None and (
             self._peak_memory is None or memory > self._peak_memory
         ):
             self._peak_memory = memory
-        self._peak_procs = max(self._peak_procs, int(record.get("n_procs") or 0))
+        self._peak_procs = max(self._peak_procs, as_int(record.get("n_procs")) or 0)
         if record.get("overrun"):
             self._overruns += 1
 
@@ -80,11 +88,10 @@ class Dashboard:
 
     def _title(self) -> RenderableType:
         header = self._header
-        target = _target_of(header)
         line = Text(no_wrap=True, overflow="ellipsis")
         line.append(str(header.get("mode", "watch")), style=f"bold {self._accent(0)}")
         line.append("  ")
-        line.append(target, style=self._muted)
+        line.append(target_of(header), style=self._muted)
         detail = Text(overflow="ellipsis", no_wrap=True)
         boundary = header.get("group_path")
         detail.append(
@@ -109,26 +116,31 @@ class Dashboard:
         table = Table.grid(padding=(0, 2))
         table.add_column(style=self._muted, width=4)
         table.add_column(justify="right", width=11)
-        table.add_column(width=HISTORY_COLUMN)
+        table.add_column(width=HISTORY)
         table.add_column(style=self._muted)
 
-        cpu = _number(record.get("cpu_percent"))
+        ncpu = (self._header.get("host") or {}).get("ncpu", "?")
+        normalised = as_float(record.get("cpu_percent_norm"))
         table.add_row(
             "cpu",
-            Text(_percent(cpu), style=f"bold {self._accent(0)}"),
+            Text(
+                format_percent(as_float(record.get("cpu_percent"))),
+                style=f"bold {self._accent(0)}",
+            ),
             Text(sparkline(list(self._cpu)), style=self._accent(0)),
-            f"peak {_percent(self._peak_cpu)} · {_percent(record.get('cpu_percent_norm'))}"
-            f" of {self._header.get('host', {}).get('ncpu', '?')} cpus",
+            f"peak {format_percent(self._peak_cpu)} · "
+            f"{format_percent(normalised)} of {ncpu} cpus",
         )
-        memory = _memory_of(record)
+        memory = _memory_reading(record)
         table.add_row(
             "mem",
-            Text(bytes_human(memory), style=f"bold {self._accent(2)}"),
+            Text(format_bytes(memory), style=f"bold {self._accent(2)}"),
             Text(sparkline(list(self._memory)), style=self._accent(2)),
-            f"peak {bytes_human(self._peak_memory)} · {_memory_source(record)}",
+            f"peak {format_bytes(self._peak_memory)} · {_memory_source(record)}",
         )
-        elapsed = float(record.get("t") or 0.0)
-        procs = int(record.get("n_procs") or 0)
+        elapsed = as_float(record.get("t")) or 0.0
+        procs = as_int(record.get("n_procs")) or 0
+        cpu_time = format_seconds(as_float(record.get("cpu_seconds_used")))
         table.add_row(
             "run",
             Text(elapsed_clock(elapsed), style="bold"),
@@ -137,7 +149,7 @@ class Dashboard:
                 style=self._secondary,
             ),
             f"peak {self._peak_procs} · {self._samples} samples · "
-            f"{seconds_human(record.get('cpu_seconds_used'))} cpu time"
+            f"{cpu_time} cpu time"
             + (f" · {self._overruns} overrun" if self._overruns else ""),
         )
         return Panel(table, border_style=self._palette.grid, padding=(0, 1))
@@ -161,17 +173,18 @@ class Dashboard:
         table.add_column("found", width=8)
         table.add_column("command", overflow="ellipsis", no_wrap=True)
 
-        ordered = sorted(procs, key=_by_cpu, reverse=True)
+        ordered = sorted(procs, key=_cpu_percent_of, reverse=True)
         for proc in ordered[: self._max_rows]:
             via = str(proc.get("via", "-"))
+            command = str(proc.get("cmdline") or proc.get("name") or "")
             table.add_row(
                 str(proc.get("pid", "?")),
-                _percent(_number(proc.get("cpu_percent"))),
-                bytes_human(proc.get("rss_bytes")),
-                bytes_human(proc.get("pss_bytes")),
+                format_percent(as_float(proc.get("cpu_percent"))),
+                format_bytes(as_float(proc.get("rss_bytes"))),
+                format_bytes(as_float(proc.get("pss_bytes"))),
                 str(proc.get("threads", "-")),
-                Text(via, style=discovery_color(via, self._palette)),
-                truncate(str(proc.get("cmdline") or proc.get("name") or ""), 160),
+                Text(via, style=discovery_color(via=via, palette=self._palette)),
+                truncate(command, width=160),
             )
         hidden = len(ordered) - self._max_rows
         if hidden > 0:
@@ -198,44 +211,25 @@ class Dashboard:
         return self._palette.text_secondary
 
 
-HISTORY_COLUMN: Final = HISTORY
-
-
-def _number(value: object) -> float | None:
-    """Records come from JSON, where a field may legitimately be null."""
-    return float(value) if isinstance(value, (int, float)) else None
-
-
-def _by_cpu(proc: Record) -> float:
-    value = _number(proc.get("cpu_percent"))
+def _cpu_percent_of(proc: Record) -> float:
+    """Sort key: a process with no rate yet sorts below one that has any."""
+    value = as_float(proc.get("cpu_percent"))
     return value if value is not None else -1.0
 
 
-def _memory_of(record: Record) -> int | None:
-    """The best memory figure available, in the order we trust them."""
+def _memory_reading(record: Record) -> int | None:
+    """The best memory figure in this sample, in the order we trust them."""
     for key in ("group_memory_bytes", "pss_bytes", "rss_bytes"):
-        value = record.get(key)
+        value = as_int(record.get(key))
         if value is not None:
-            return int(value)
+            return value
     return None
 
 
 def _memory_source(record: Record) -> str:
+    """Which measure :func:`_memory_reading` actually found."""
     if record.get("group_memory_bytes") is not None:
         return "cgroup"
     if record.get("pss_bytes") is not None:
         return "pss"
     return "rss"
-
-
-def _percent(value: float | None) -> str:
-    return "-" if value is None else f"{value:.1f}%"
-
-
-def _target_of(header: Record) -> str:
-    argv: Iterable[str] = header.get("argv") or ()
-    joined = " ".join(argv)
-    if joined:
-        return joined
-    matcher = header.get("matcher") or {}
-    return str(matcher.get("value", "?"))

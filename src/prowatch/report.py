@@ -14,7 +14,12 @@ from __future__ import annotations
 import json
 from typing import Iterator, TypedDict
 
+from prowatch.core.aggregate import cpu_seconds_of, peak_rss_of
+from prowatch.core.errors import ReportError
 from prowatch.core.interfaces import Record
+from prowatch.core.values import peak_of
+
+__all__ = ["Report", "ReportError", "build_report", "read_records"]
 
 
 class Report(TypedDict):
@@ -22,10 +27,6 @@ class Report(TypedDict):
 
     header: Record
     summary: Record
-
-
-class ReportError(RuntimeError):
-    """The log could not be read or contained no samples."""
 
 
 def read_records(path: str) -> Iterator[Record]:
@@ -79,8 +80,8 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
                 ("peak_pss_bytes", "pss_bytes"),
                 ("peak_group_memory_bytes", "group_memory_bytes"),
             ):
-                recomputed[peak_key] = _max(
-                    recomputed[peak_key], record.get(sample_key)
+                recomputed[peak_key] = peak_of(
+                    current=recomputed[peak_key], candidate=record.get(sample_key)
                 )
             if record.get("cpu_percent") is not None:
                 cpu_sum += record["cpu_percent"]
@@ -115,16 +116,11 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
 
     if not merged.get("top_by_cpu") and procs:
         entries = list(procs.values())
-        merged["top_by_cpu"] = sorted(
-            entries, key=lambda e: e["cpu_seconds"], reverse=True
-        )[:top_n]
-        merged["top_by_memory"] = sorted(
-            entries, key=lambda e: e["peak_rss_bytes"], reverse=True
-        )[:top_n]
+        merged["top_by_cpu"] = sorted(entries, key=cpu_seconds_of, reverse=True)[
+            :top_n
+        ]
+        merged["top_by_memory"] = sorted(entries, key=peak_rss_of, reverse=True)[
+            :top_n
+        ]
     return Report(header=header, summary=merged)
 
-
-def _max[T: (int, float)](current: T | None, candidate: T | None) -> T | None:
-    if candidate is None:
-        return current
-    return candidate if current is None else max(current, candidate)

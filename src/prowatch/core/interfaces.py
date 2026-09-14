@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Protocol, TypeAlias, runtime_checkable
 
+from prowatch.core.config import MemoryDetail
 from prowatch.core.models import (
     GroupMetrics,
     HostInfo,
@@ -44,7 +45,7 @@ class ProcessSource(Protocol):
         """Return the process' group boundary path (cgroup), if any."""
         ...
 
-    def enrich(self, info: ProcInfo, *, want_pss: bool) -> ProcSample:
+    def enrich(self, *, info: ProcInfo, memory: MemoryDetail) -> ProcSample:
         """Add the costlier fields (command line, PSS, swap, group) to ``info``."""
         ...
 
@@ -90,7 +91,16 @@ class ProcessMatcher(Protocol):
         """True if :meth:`matches` inspects the command line."""
         ...
 
-    def matches(self, info: ProcInfo, cmdline: str) -> bool: ...
+    @property
+    def names_one_process(self) -> bool:
+        """True if the matcher names a single process outright.
+
+        The exclusions that stop a keyword from matching the shell you typed it
+        in do not apply to a matcher this specific - you meant that process.
+        """
+        ...
+
+    def matches(self, *, info: ProcInfo, cmdline: str) -> bool: ...
 
     def describe(self) -> Record:
         """Serializable description, recorded in the log header."""
@@ -108,7 +118,7 @@ class ExpansionStrategy(Protocol):
     @property
     def name(self) -> str: ...
 
-    def expand(self, ctx: ExpansionContext) -> Mapping[int, str]:
+    def expand(self, context: ExpansionContext) -> Mapping[int, str]:
         """Return ``{pid: reason}`` for processes to adopt into the workload."""
         ...
 

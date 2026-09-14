@@ -73,9 +73,9 @@ def parse_status_memory(text: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for line in text.splitlines():
         if line.startswith("VmRSS:"):
-            out["rss_bytes"] = _kb(line)
+            out["rss_bytes"] = _bytes_from_kb(line)
         elif line.startswith("VmSwap:"):
-            out["swap_bytes"] = _kb(line)
+            out["swap_bytes"] = _bytes_from_kb(line)
         elif out.get("rss_bytes") is not None and out.get("swap_bytes") is not None:
             break
     return out
@@ -91,9 +91,9 @@ def parse_smaps_rollup(text: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for line in text.splitlines():
         if line.startswith("Pss:"):
-            out["pss_bytes"] = _kb(line)
+            out["pss_bytes"] = _bytes_from_kb(line)
         elif line.startswith("Swap:"):
-            out["swap_bytes"] = _kb(line)
+            out["swap_bytes"] = _bytes_from_kb(line)
     return out
 
 
@@ -109,9 +109,10 @@ def parse_cgroup(text: str) -> str | None:
 def parse_meminfo_total(text: str) -> int | None:
     for line in text.splitlines():
         if line.startswith("MemTotal:"):
-            return _kb(line)
+            return _bytes_from_kb(line)
     return None
 
 
-def _kb(line: str) -> int:
+def _bytes_from_kb(line: str) -> int:
+    """``VmRSS:\t2048 kB`` -> bytes."""
     return int(line.split()[1]) * 1024

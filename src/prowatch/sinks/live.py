@@ -23,15 +23,15 @@ class LiveSink(BaseSink):
 
     def __init__(
         self,
-        console: Console | None = None,
         *,
+        console: Console | None = None,
         palette: Palette = PALETTE,
         max_rows: int = 12,
         refresh_per_second: float = 4.0,
     ) -> None:
         self._console = console or Console(stderr=True)
         self._palette = palette
-        self._dashboard = Dashboard(palette, max_rows=max_rows)
+        self._dashboard = Dashboard(palette=palette, max_rows=max_rows)
         self._refresh = refresh_per_second
         self._live: Live | None = None
         self._header: Record = {}
@@ -58,4 +58,8 @@ class LiveSink(BaseSink):
         if self._live is not None:
             self._live.stop()
             self._live = None
-        self._console.print(render_summary(summary, self._header, self._palette))
+        self._console.print(
+            render_summary(
+                summary=summary, header=self._header, palette=self._palette
+            )
+        )

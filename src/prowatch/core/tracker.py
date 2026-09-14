@@ -47,7 +47,16 @@ class RefreshResult:
 
 
 class Tracker:
-    """Maintains the workload's membership set across samples."""
+    """Maintains the workload's membership set across samples.
+
+    The two exclusion sets are separate because they answer different
+    questions. prowatch's own process and the shell/wrapper chain that started
+    it routinely carry the search keyword in their command line - you typed it
+    there - so they must never be *seeded*. An explicit ``--pid`` names its
+    target outright, and then the seed exclusions do not apply at all; the
+    expansion exclusions still do, because adopting our own shell would track
+    the terminal rather than the work.
+    """
 
     def __init__(
         self,
@@ -60,8 +69,8 @@ class Tracker:
         self_group: str | None = None,
         self_sid: int = 0,
         pinned_group: str | None = None,
-        exclude_pids: set[int] | None = None,
-        seed_excluded: bool = False,
+        exclude_from_seed: frozenset[int] = frozenset(),
+        exclude_from_expansion: frozenset[int] = frozenset(),
     ) -> None:
         self._matcher = matcher
         self._strategies = strategies
@@ -71,14 +80,8 @@ class Tracker:
         self._self_group = self_group
         self._self_sid = self_sid
         self._pinned_group = pinned_group
-        # prowatch's own process and the shell/wrapper chain that started it.
-        # They routinely carry the search keyword in their command line (you
-        # typed it), and adopting them would track the terminal, not the work.
-        self._excluded = set(exclude_pids or ()) | {self_pid}
-        # An explicit --pid names the process directly, so the exclusions (which
-        # exist to stop a keyword matching the shell that typed it) should not
-        # veto the seed. They still veto everything expansion tries to adopt.
-        self._seed_excluded = seed_excluded
+        self._exclude_from_seed = frozenset(exclude_from_seed)
+        self._exclude_from_expansion = frozenset(exclude_from_expansion) | {self_pid}
 
         self._members: dict[Identity, str] = {}
         self._seen_pids: set[int] = set()
@@ -89,6 +92,10 @@ class Tracker:
     @property
     def pinned_group(self) -> str | None:
         return self._pinned_group
+
+    @property
+    def seeded(self) -> bool:
+        return self._seeded
 
     @property
     def group_paths(self) -> set[str]:
@@ -108,20 +115,16 @@ class Tracker:
         # workload spawned, so the "new since last sample" rules must not see it.
         self._seen_pids |= set(procs)
         for pid, info in procs.items():
-            if pid in self._excluded and not self._seed_excluded:
+            if pid in self._exclude_from_seed:
                 continue
             cmdline = self._source.read_cmdline(pid) if needs_cmdline else ""
-            if self._matcher.matches(info, cmdline):
+            if self._matcher.matches(info=info, cmdline=cmdline):
                 if info.identity not in self._members:
                     self._members[info.identity] = "match"
                     admitted.append(info)
         if admitted:
             self._seeded = True
         return admitted
-
-    @property
-    def seeded(self) -> bool:
-        return self._seeded
 
     def refresh(self, procs: Mapping[int, ProcInfo]) -> RefreshResult:
         """Prune dead members, then grow the set with every strategy."""
@@ -157,7 +160,12 @@ class Tracker:
         # last visible process just exited may have left a detached child that
         # is about to appear.
         if tracked_pids or self._pinned_group or self._seeded:
-            self._expand(procs, tracked_pids, new_pids, result)
+            self._expand(
+                procs=procs,
+                tracked_pids=tracked_pids,
+                new_pids=new_pids,
+                result=result,
+            )
 
         for pid in sorted(tracked_pids):
             info = procs[pid]
@@ -176,17 +184,17 @@ class Tracker:
 
     def _expand(
         self,
+        *,
         procs: Mapping[int, ProcInfo],
         tracked_pids: set[int],
         new_pids: set[int],
         result: RefreshResult,
     ) -> None:
-        children = _children_map(procs)
-        ctx = ExpansionContext(
+        context = ExpansionContext(
             procs=procs,
             tracked_pids=tracked_pids,
             new_pids=new_pids,
-            children=children,
+            children=_children_map(procs),
             source=self._source,
             groups=self._groups,
             self_pid=self._self_pid,
@@ -197,8 +205,8 @@ class Tracker:
         for _ in range(MAX_EXPANSION_ROUNDS):
             grew = False
             for strategy in self._strategies:
-                for pid, reason in strategy.expand(ctx).items():
-                    if pid in tracked_pids or pid in self._excluded:
+                for pid, reason in strategy.expand(context).items():
+                    if pid in tracked_pids or pid in self._exclude_from_expansion:
                         continue
                     info = procs.get(pid)
                     if info is None:
