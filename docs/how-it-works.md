@@ -28,8 +28,8 @@ PDF colour processes by it: matched (blue), child (orange), detached (green).
 
 ## run and watch
 
-![run gives the command its own cgroup; watch infers membership](assets/diagrams/run-vs-watch.light.svg#only-light)
-![run gives the command its own cgroup; watch infers membership](assets/diagrams/run-vs-watch.dark.svg#only-dark)
+![On Linux run gives the command its own cgroup and watch infers membership; on macOS both infer it](assets/diagrams/run-vs-watch.light.svg#only-light)
+![On Linux run gives the command its own cgroup and watch infers membership; on macOS both infer it](assets/diagrams/run-vs-watch.dark.svg#only-dark)
 
 On Linux `run` creates the cgroup, so membership is a kernel fact, and CPU and
 memory totals come from `cpu.stat` and `memory.current`. `watch` infers
