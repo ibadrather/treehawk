@@ -1,0 +1,53 @@
+site_name: treehawk
+site_description: Log the CPU and RAM of a process and every process it spawns, including ones that detach.
+site_url: https://ibadrather.github.io/treehawk/
+repo_url: https://github.com/ibadrather/treehawk
+repo_name: ibadrather/treehawk
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/brand/logo.svg
+  favicon: assets/brand/logo.svg
+  font: false # brand fonts are loaded by stylesheets/extra.css
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: treehawk-light
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: treehawk-dark
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+exclude_docs: |
+  /scripts/
+
+nav:
+  - Introduction: index.md
+  - Usage: usage.md
+  - How it works: how-it-works.md
+  - Output: output.md
+  - Development: development.md

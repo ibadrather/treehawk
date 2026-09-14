@@ -34,3 +34,6 @@ treehawk-*.pdf
 .idea/
 *.swp
 .DS_Store
+
+# MkDocs build output
+site/
