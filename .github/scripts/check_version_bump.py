@@ -12,10 +12,11 @@ used instead.
 from __future__ import annotations
 
 import os
+import pathlib
 import subprocess
 import sys
-import tomllib
 
+import tomllib
 from packaging.version import InvalidVersion, Version
 
 PACKAGE_PATHS = ("src/", "pyproject.toml")
@@ -49,7 +50,7 @@ def summary(line: str) -> None:
     print(line)
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if path:
-        with open(path, "a") as handle:
+        with pathlib.Path(path).open("a") as handle:
             handle.write(line + "\n")
 
 
@@ -60,7 +61,7 @@ def fail(message: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    with open("pyproject.toml", "rb") as handle:
+    with pathlib.Path("pyproject.toml").open("rb") as handle:
         raw = str(tomllib.load(handle)["project"]["version"])
     try:
         current = Version(raw)
@@ -77,11 +78,7 @@ def main(argv: list[str]) -> int:
             return 0
         print(f"No usable base commit; comparing with the latest release tag {base}.")
 
-    changed = [
-        path
-        for path in git("diff", "--name-only", base, "HEAD").splitlines()
-        if path.startswith(PACKAGE_PATHS)
-    ]
+    changed = [path for path in git("diff", "--name-only", base, "HEAD").splitlines() if path.startswith(PACKAGE_PATHS)]
     if not changed:
         summary(f"No package files changed since {base[:12]}; no version bump needed.")
         return 0

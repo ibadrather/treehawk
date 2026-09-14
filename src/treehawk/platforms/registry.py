@@ -7,8 +7,8 @@ interfaces and registering a builder here. No other module changes.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from treehawk.core.errors import UnsupportedPlatform
 from treehawk.core.interfaces import (
@@ -37,9 +37,7 @@ class Platform:
         return self.host_source.host_info()
 
 
-def build_linux(
-    *, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
-) -> Platform:
+def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup") -> Platform:
     from treehawk.platforms.linux import (
         CgroupV2Source,
         LinuxHostInfoSource,
@@ -82,7 +80,6 @@ def get_platform(*, name: str | None = None) -> Platform:
         builder = PLATFORM_BUILDERS[key]
     except KeyError:
         raise UnsupportedPlatform(
-            f"treehawk has no backend for {name!r} yet; "
-            f"supported: {', '.join(sorted(PLATFORM_BUILDERS))}"
+            f"treehawk has no backend for {name!r} yet; supported: {', '.join(sorted(PLATFORM_BUILDERS))}"
         ) from None
     return builder()

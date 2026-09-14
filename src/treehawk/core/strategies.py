@@ -8,7 +8,7 @@ whatever any of them finds.
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 from treehawk.core.config import ExpansionName
 from treehawk.core.errors import ConfigError
@@ -90,9 +90,7 @@ class GroupExpansion:
 
     def _is_ours(self, *, context: ExpansionContext, path: str) -> bool:
         inside = context.self_group
-        if inside and (
-            inside == path or inside.startswith(path.rstrip("/") + "/")
-        ):
+        if inside and (inside == path or inside.startswith(path.rstrip("/") + "/")):
             return False  # we are inside it, so it is broader than the workload
         members = context.groups.pids_in(path) if context.groups else None
         if not members:
@@ -126,11 +124,7 @@ class SessionExpansion:
             return {}
         found: dict[int, str] = {}
         for pid, info in context.procs.items():
-            if (
-                info.sid in self._accepted
-                and pid not in context.tracked_pids
-                and pid != context.self_pid
-            ):
+            if info.sid in self._accepted and pid not in context.tracked_pids and pid != context.self_pid:
                 found[pid] = self.name
         return found
 
@@ -168,11 +162,7 @@ class OrphanExpansion:
         return "orphan"
 
     def expand(self, context: ExpansionContext) -> Mapping[int, str]:
-        self._groups |= {
-            group
-            for group in (context.group_of(pid) for pid in context.tracked_pids)
-            if group
-        }
+        self._groups |= {group for group in (context.group_of(pid) for pid in context.tracked_pids) if group}
         if not context.new_pids or not self._groups:
             return {}
         tracked_groups = self._groups
@@ -190,9 +180,7 @@ class OrphanExpansion:
         return found
 
     @staticmethod
-    def _was_reparented(
-        *, context: ExpansionContext, info: ProcInfo, group: str
-    ) -> bool:
+    def _was_reparented(*, context: ExpansionContext, info: ProcInfo, group: str) -> bool:
         if info.ppid <= 1 or info.ppid not in context.procs:
             return True  # adopted by init, or the parent is already gone
         return context.group_of(info.ppid) != group
@@ -216,8 +204,7 @@ def build_strategies(names: Iterable[str]) -> list[ExpansionStrategy]:
             factory = STRATEGY_KINDS[name]
         except KeyError:
             raise ConfigError(
-                f"unknown expansion strategy {name!r}; "
-                f"known: {', '.join(sorted(STRATEGY_KINDS))}"
+                f"unknown expansion strategy {name!r}; known: {', '.join(sorted(STRATEGY_KINDS))}"
             ) from None
         built.append(factory())
     return built

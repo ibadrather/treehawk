@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import socket
 
 from treehawk.core.models import HostInfo
@@ -27,7 +28,7 @@ class LinuxHostInfoSource:
 
     def _mem_total(self) -> int | None:
         try:
-            with open(os.path.join(self._proc_root, "meminfo")) as handle:
-                return parse_meminfo_total(handle.read())
+            text = (pathlib.Path(self._proc_root) / "meminfo").read_text()
         except OSError:
             return None
+        return parse_meminfo_total(text)

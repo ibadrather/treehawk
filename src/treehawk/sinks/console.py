@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from typing import IO
 
+from treehawk.core.compat import override
 from treehawk.core.humanize import (
     format_bytes,
     format_percent,
@@ -17,7 +18,7 @@ from treehawk.core.humanize import (
 )
 from treehawk.core.interfaces import Record
 from treehawk.core.records import target_of
-from treehawk.core.values import as_float
+from treehawk.core.values import as_float, as_records, as_sequence
 from treehawk.sinks.base import BaseSink
 
 
@@ -28,6 +29,7 @@ class ConsoleSink(BaseSink):
         self._stream: IO[str] = stream or sys.stderr
         self._show_procs = show_procs
 
+    @override
     def open(self, header: Record) -> None:
         self._write_line(
             f"treehawk {header.get('treehawk_version')} "
@@ -38,9 +40,10 @@ class ConsoleSink(BaseSink):
         boundary = header.get("group_path")
         if boundary:
             self._write_line(f"accounting boundary: {boundary}")
-        for note in header.get("notes") or ():
+        for note in as_sequence(header.get("notes")):
             self._write_line(f"note: {note}")
 
+    @override
     def sample(self, record: Record) -> None:
         group_memory = record.get("group_memory_bytes")
         memory = group_memory if group_memory is not None else record.get("pss_bytes")
@@ -54,7 +57,7 @@ class ConsoleSink(BaseSink):
             f"cpu_time={format_seconds(as_float(record.get('cpu_seconds_used')))}"
             + (" OVERRUN" if record.get("overrun") else "")
         )
-        for proc in (record.get("procs") or ())[: self._show_procs]:
+        for proc in as_records(record.get("procs"))[: self._show_procs]:
             self._write_line(
                 f"    pid={proc['pid']:<8} via={proc['via']:<8} "
                 f"cpu={format_percent(as_float(proc.get('cpu_percent'))):>7} "
@@ -62,6 +65,7 @@ class ConsoleSink(BaseSink):
                 + truncate(str(proc.get("cmdline") or proc.get("name") or ""), width=60)
             )
 
+    @override
     def close(self, summary: Record) -> None:
         self._write_line("")
         self._write_line(

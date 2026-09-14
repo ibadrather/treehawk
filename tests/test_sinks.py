@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import csv
 import json
+import pathlib
 
 import pytest
 
+from treehawk.core.compat import override
 from treehawk.core.config import LogDetail, LogFormat
 from treehawk.core.errors import ConfigError
+from treehawk.core.interfaces import Record
 from treehawk.sinks import (
     CompositeSink,
     CsvSink,
@@ -18,20 +21,33 @@ from treehawk.sinks import (
 )
 from treehawk.sinks.base import BaseSink
 from treehawk.sinks.console import ConsoleSink
+from treehawk.sinks.factory import FILE_FORMATS
 
-HEADER = {"type": "header", "schema": 1, "interval": 1.0, "mode": "watch"}
-SAMPLE = {
-    "type": "sample", "seq": 0, "t": 0.0, "ts": "2026-01-01T00:00:00Z",
-    "n_procs": 1, "cpu_percent": 12.5, "rss_bytes": 2048,
+HEADER: Record = {"type": "header", "schema": 1, "interval": 1.0, "mode": "watch"}
+SAMPLE: Record = {
+    "type": "sample",
+    "seq": 0,
+    "t": 0.0,
+    "ts": "2026-01-01T00:00:00Z",
+    "n_procs": 1,
+    "cpu_percent": 12.5,
+    "rss_bytes": 2048,
     "procs": [
-        {"pid": 100, "ppid": 1, "name": "worker", "cmdline": "python worker.py",
-         "cpu_percent": 12.5, "rss_bytes": 2048, "via": "match"}
+        {
+            "pid": 100,
+            "ppid": 1,
+            "name": "worker",
+            "cmdline": "python worker.py",
+            "cpu_percent": 12.5,
+            "rss_bytes": 2048,
+            "via": "match",
+        }
     ],
 }
-SUMMARY = {"type": "summary", "samples": 1, "peak_rss_bytes": 2048}
+SUMMARY: Record = {"type": "summary", "samples": 1, "peak_rss_bytes": 2048}
 
 
-def test_jsonl_writes_one_record_per_line(tmp_path):
+def test_jsonl_writes_one_record_per_line(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "run.jsonl"
     sink = JsonlSink(str(path))
 
@@ -44,7 +60,7 @@ def test_jsonl_writes_one_record_per_line(tmp_path):
     assert records[1]["procs"][0]["pid"] == 100
 
 
-def test_jsonl_flushes_so_a_killed_run_still_leaves_a_readable_log(tmp_path):
+def test_jsonl_flushes_so_a_killed_run_still_leaves_a_readable_log(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "run.jsonl"
     sink = JsonlSink(str(path))
     sink.open(HEADER)
@@ -55,7 +71,7 @@ def test_jsonl_flushes_so_a_killed_run_still_leaves_a_readable_log(tmp_path):
     assert len(records) == 2
 
 
-def test_csv_splits_aggregate_and_per_process_rows(tmp_path):
+def test_csv_splits_aggregate_and_per_process_rows(tmp_path: pathlib.Path) -> None:
     sink = CsvSink(str(tmp_path / "run.csv"), detail=LogDetail.PER_PROCESS)
 
     sink.open(HEADER)
@@ -72,7 +88,7 @@ def test_csv_splits_aggregate_and_per_process_rows(tmp_path):
     assert json.loads((tmp_path / "run.summary.json").read_text())["samples"] == 1
 
 
-def test_csv_without_per_process_writes_one_file(tmp_path):
+def test_csv_without_per_process_writes_one_file(tmp_path: pathlib.Path) -> None:
     sink = CsvSink(str(tmp_path / "run.csv"), detail=LogDetail.AGGREGATE)
     sink.open(HEADER)
     sink.sample(SAMPLE)
@@ -81,16 +97,18 @@ def test_csv_without_per_process_writes_one_file(tmp_path):
     assert not (tmp_path / "run.procs.csv").exists()
 
 
-def test_composite_delivers_to_every_sink_even_if_one_fails():
+def test_composite_delivers_to_every_sink_even_if_one_fails() -> None:
     class Broken(BaseSink):
-        def sample(self, record):
-            raise OSError("disk full")
+        @override
+        def sample(self, record: Record) -> None:
+            raise OSError(f"disk full at sample {record.get('seq')}")
 
     class Good(BaseSink):
-        def __init__(self):
-            self.samples = []
+        def __init__(self) -> None:
+            self.samples: list[Record] = []
 
-        def sample(self, record):
+        @override
+        def sample(self, record: Record) -> None:
             self.samples.append(record)
 
     good = Good()
@@ -102,7 +120,7 @@ def test_composite_delivers_to_every_sink_even_if_one_fails():
     assert isinstance(composite.errors[0], OSError)
 
 
-def test_the_file_sink_matches_the_requested_format(tmp_path):
+def test_the_file_sink_matches_the_requested_format(tmp_path: pathlib.Path) -> None:
     jsonl = build_file_sink(
         fmt=LogFormat.JSONL,
         path=str(tmp_path / "a.jsonl"),
@@ -118,14 +136,13 @@ def test_the_file_sink_matches_the_requested_format(tmp_path):
     assert isinstance(csv_sink, CsvSink)
 
 
-def test_build_file_sink_rejects_an_unknown_format(tmp_path):
+def test_build_file_sink_rejects_an_unknown_format(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(FILE_FORMATS, LogFormat.CSV)
     with pytest.raises(ConfigError, match="unknown format"):
-        build_file_sink(
-            fmt="parquet", path=str(tmp_path / "a"), detail=LogDetail.PER_PROCESS
-        )
+        build_file_sink(fmt=LogFormat.CSV, path=str(tmp_path / "a"), detail=LogDetail.PER_PROCESS)
 
 
-def test_the_screen_sink_picks_itself_from_the_console(tmp_path):
+def test_the_screen_sink_picks_itself_from_the_console(tmp_path: pathlib.Path) -> None:
     """A pipe gets plain lines; only a real terminal gets cursor control."""
     from rich.console import Console
 

@@ -30,6 +30,7 @@ class FileSinkFactory(Protocol):
 
 
 def _build_jsonl(*, path: str, detail: LogDetail) -> Sink:
+    del detail  # a JSON line holds whatever the sample record carries
     return JsonlSink(path)
 
 

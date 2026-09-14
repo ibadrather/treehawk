@@ -98,9 +98,7 @@ class WatchConfig:
     max_samples: int | None = None
     detail: LogDetail = LogDetail.PER_PROCESS
     memory: MemoryDetail = MemoryDetail.PROPORTIONAL
-    expand: tuple[ExpansionName, ...] = field(
-        default_factory=lambda: DEFAULT_EXPANSIONS
-    )
+    expand: tuple[ExpansionName, ...] = field(default_factory=lambda: DEFAULT_EXPANSIONS)
     missing_workload: MissingWorkload = MissingWorkload.FAIL
     when_empty: WhenEmpty = WhenEmpty.STOP
     top_n: int = 5

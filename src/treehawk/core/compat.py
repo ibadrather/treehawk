@@ -9,6 +9,11 @@ from __future__ import annotations
 
 import sys
 
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
+
 if sys.version_info >= (3, 11):
     from enum import StrEnum
 else:
@@ -28,4 +33,4 @@ else:
             return str(self.value).__format__(format_spec)
 
 
-__all__ = ["StrEnum"]
+__all__ = ["StrEnum", "override"]

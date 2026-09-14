@@ -1,6 +1,6 @@
 [project]
 name = "treehawk"
-version = "0.3.0"
+version = "0.3.1"
 description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,7 @@ dependencies = [
     "matplotlib>=3.10",
     "rich>=15.0.0",
     "typer>=0.27.2",
+    "typing-extensions>=4.12; python_version < '3.12'",
 ]
 
 [project.urls]
@@ -50,16 +51,31 @@ packages = ["src/treehawk"]
 include = ["src/treehawk", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.mypy]
+# Maximum strictness short of disallow_any_expr. Never loosen these settings,
+# and never silence an error with a bare ignore: fix the code instead.
+files = ["src", "tests", ".github/scripts"]
+mypy_path = ["src", "tests"]
 strict = true
-files = ["src/treehawk"]
-python_version = "3.10"
 warn_unreachable = true
-warn_unused_ignores = true
+strict_equality_for_none = true
+disallow_any_explicit = true
+disallow_any_decorated = true
+disallow_any_unimported = true
 enable_error_code = [
-    "redundant-expr",
-    "possibly-undefined",
-    "truthy-bool",
+    "deprecated",
+    "exhaustive-match",
+    "explicit-override",
     "ignore-without-code",
+    "mutable-override",
+    "narrowed-type-not-subtype",
+    "possibly-undefined",
+    "redundant-expr",
+    "redundant-self",
+    "truthy-bool",
+    "truthy-iterable",
+    "unimported-reveal",
+    "unused-awaitable",
+    "unused-ignore",
 ]
 
 [dependency-groups]
@@ -67,6 +83,7 @@ dev = [
     "mypy>=2.3.1",
     "pypdf>=6.18.1",
     "pytest>=8",
+    "ruff>=0.16.7",
 ]
 
 [tool.pytest.ini_options]

@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
+import pathlib
+from collections.abc import Callable, Iterable, Mapping
+
 import pytest
 from conftest import write_proc
 
 from treehawk.core.aggregate import Aggregator
+from treehawk.core.compat import override
 from treehawk.core.config import (
+    ExpansionName,
     MemoryDetail,
     MissingWorkload,
     WatchConfig,
     WhenEmpty,
 )
-from treehawk.core.matchers import build_matcher
 from treehawk.core.errors import WorkloadNotFound
+from treehawk.core.interfaces import MetricCollector, ProcessMatcher, ProcessSource, Record, Sink
+from treehawk.core.matchers import build_matcher
+from treehawk.core.models import HostInfo, ProcInfo, Snapshot
 from treehawk.core.monitor import Monitor
 from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
+from treehawk.core.values import as_mapping, as_records
 from treehawk.platforms.linux.source import LinuxProcessSource
 from treehawk.sinks.base import BaseSink
 
@@ -24,63 +32,74 @@ from treehawk.sinks.base import BaseSink
 class FakeClock:
     """Time only moves when the loop asks it to."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.t = 0.0
-        self.sleeps = []
+        self.sleeps: list[float] = []
 
-    def monotonic(self):
+    def monotonic(self) -> float:
         return self.t
 
-    def now_iso(self):
+    def now_iso(self) -> str:
         return f"2026-01-01T00:00:{self.t:06.3f}Z"
 
-    def sleep_until(self, deadline):
+    def sleep_until(self, deadline: float) -> None:
         self.sleeps.append(deadline)
         self.t = max(self.t, deadline)
 
 
 class RecordingSink(BaseSink):
-    def __init__(self):
-        self.header = None
-        self.samples = []
-        self.summary = None
+    def __init__(self) -> None:
+        self.header: Record | None = None
+        self.samples: list[Record] = []
+        self.summary: Record | None = None
 
-    def open(self, header):
+    @override
+    def open(self, header: Record) -> None:
         self.header = header
 
-    def sample(self, record):
+    @override
+    def sample(self, record: Record) -> None:
         self.samples.append(record)
 
-    def close(self, summary):
+    @override
+    def close(self, summary: Record) -> None:
         self.summary = summary
 
 
-class ScriptedSource:
-    """Wraps the real /proc reader and lets a test edit the tree per sample."""
+class ScriptedSource(LinuxProcessSource):
+    """The real /proc reader, with a script that edits the tree before each scan."""
 
-    def __init__(self, root, script=()):
-        self._inner = LinuxProcessSource(str(root), page_size=4096)
+    def __init__(self, root: pathlib.Path, script: Iterable[Callable[[], object]] = ()) -> None:
+        super().__init__(str(root), page_size=4096)
         self._script = list(script)
         self.scans = 0
 
-    def scan(self):
+    @override
+    def scan(self) -> Mapping[int, ProcInfo]:
         if self._script:
             self._script.pop(0)()
         self.scans += 1
-        return self._inner.scan()
-
-    def __getattr__(self, name):
-        return getattr(self._inner, name)
+        return super().scan()
 
 
-def build_monitor(source, config, sink=None, matcher=None, collectors=()):
-    from treehawk.core.models import HostInfo
-
+def build_monitor(
+    source: ProcessSource,
+    config: WatchConfig,
+    sink: Sink | None = None,
+    *,
+    matcher: ProcessMatcher | None = None,
+    clock: FakeClock | None = None,
+    collectors: Iterable[MetricCollector] = (),
+) -> Monitor:
     host = HostInfo(
-        platform="linux", hostname="test", ncpu=4, clk_tck=100,
-        page_size=4096, mem_total_bytes=1024,
+        platform="linux",
+        hostname="test",
+        ncpu=4,
+        clk_tck=100,
+        page_size=4096,
+        mem_total_bytes=1024,
     )
-    matcher = matcher or build_matcher(kind="keyword", value="train.py")
+    matcher = matcher if matcher is not None else build_matcher(kind="keyword", value="train.py")
     tracker = Tracker(
         matcher=matcher,
         strategies=build_strategies(config.expand),
@@ -91,22 +110,21 @@ def build_monitor(source, config, sink=None, matcher=None, collectors=()):
         source=source,
         tracker=tracker,
         aggregator=Aggregator(host=host),
-        sink=sink or RecordingSink(),
-        clock=FakeClock(),
+        sink=sink if sink is not None else RecordingSink(),
+        clock=clock if clock is not None else FakeClock(),
         config=config,
         host=host,
+        collectors=collectors,
         matcher=matcher.describe(),
     )
 
 
 @pytest.fixture
-def config():
-    return WatchConfig(
-        interval=1.0, expand=("tree",), memory=MemoryDetail.RESIDENT
-    )
+def config() -> WatchConfig:
+    return WatchConfig(interval=1.0, expand=(ExpansionName.TREE,), memory=MemoryDetail.RESIDENT)
 
 
-def test_records_are_written_in_order(proc_root, config):
+def test_records_are_written_in_order(proc_root: pathlib.Path, config: WatchConfig) -> None:
     write_proc(proc_root, 100, cmdline="python train.py", utime=10)
     config.max_samples = 2
     sink = RecordingSink()
@@ -114,25 +132,30 @@ def test_records_are_written_in_order(proc_root, config):
 
     monitor.run()
 
+    assert sink.header is not None
     assert sink.header["type"] == "header"
-    assert sink.header["matcher"]["value"] == "train.py"
+    assert as_mapping(sink.header["matcher"])["value"] == "train.py"
     assert [r["seq"] for r in sink.samples] == [0, 1]
+    assert sink.summary is not None
     assert sink.summary["samples"] == 2
-    assert sink.samples[0]["procs"][0]["pid"] == 100
+    assert as_records(sink.samples[0]["procs"])[0]["pid"] == 100
 
 
-def test_sampling_uses_absolute_deadlines_so_drift_cannot_accumulate(proc_root, config):
+def test_sampling_uses_absolute_deadlines_so_drift_cannot_accumulate(
+    proc_root: pathlib.Path, config: WatchConfig
+) -> None:
     write_proc(proc_root, 100, cmdline="python train.py")
     config.max_samples = 4
     config.interval = 0.5
-    monitor = build_monitor(ScriptedSource(proc_root), config)
+    clock = FakeClock()
+    monitor = build_monitor(ScriptedSource(proc_root), config, clock=clock)
 
     monitor.run()
 
-    assert monitor._clock.sleeps == [0.0, 0.5, 1.0, 1.5]
+    assert clock.sleeps == [0.0, 0.5, 1.0, 1.5]
 
 
-def test_the_run_ends_when_the_last_process_exits(proc_root, config):
+def test_the_run_ends_when_the_last_process_exits(proc_root: pathlib.Path, config: WatchConfig) -> None:
     import shutil
 
     write_proc(proc_root, 100, cmdline="python train.py")
@@ -150,7 +173,7 @@ def test_the_run_ends_when_the_last_process_exits(proc_root, config):
     assert sink.samples[-1]["n_procs"] == 0
 
 
-def test_keep_going_survives_an_empty_sample(proc_root, config):
+def test_keep_going_survives_an_empty_sample(proc_root: pathlib.Path, config: WatchConfig) -> None:
     import shutil
 
     write_proc(proc_root, 100, cmdline="python train.py")
@@ -167,7 +190,7 @@ def test_keep_going_survives_an_empty_sample(proc_root, config):
     assert len(sink.samples) == 3
 
 
-def test_duration_stops_the_run(proc_root, config):
+def test_duration_stops_the_run(proc_root: pathlib.Path, config: WatchConfig) -> None:
     write_proc(proc_root, 100, cmdline="python train.py")
     config.duration = 2.0
     sink = RecordingSink()
@@ -177,7 +200,7 @@ def test_duration_stops_the_run(proc_root, config):
     assert [r["t"] for r in sink.samples] == [0.0, 1.0, 2.0]
 
 
-def test_a_missing_workload_is_reported_not_guessed(proc_root, config):
+def test_a_missing_workload_is_reported_not_guessed(proc_root: pathlib.Path, config: WatchConfig) -> None:
     write_proc(proc_root, 100, cmdline="unrelated")
     monitor = build_monitor(ScriptedSource(proc_root), config)
 
@@ -185,7 +208,7 @@ def test_a_missing_workload_is_reported_not_guessed(proc_root, config):
         monitor.run()
 
 
-def test_wait_polls_until_the_workload_appears(proc_root, config):
+def test_wait_polls_until_the_workload_appears(proc_root: pathlib.Path, config: WatchConfig) -> None:
     config.missing_workload = MissingWorkload.WAIT
     config.max_samples = 1
     source = ScriptedSource(
@@ -202,7 +225,7 @@ def test_wait_polls_until_the_workload_appears(proc_root, config):
     assert sink.samples[0]["n_procs"] == 1
 
 
-def test_wait_stops_cleanly_when_the_user_interrupts(proc_root, config):
+def test_wait_stops_cleanly_when_the_user_interrupts(proc_root: pathlib.Path, config: WatchConfig) -> None:
     """No timeout: it waits until the process appears, or until asked to stop."""
     config.missing_workload = MissingWorkload.WAIT
     monitor = build_monitor(ScriptedSource(proc_root), config)
@@ -212,24 +235,24 @@ def test_wait_stops_cleanly_when_the_user_interrupts(proc_root, config):
         monitor.run()
 
 
-def test_a_collector_contributes_its_own_namespace(proc_root, config):
+def test_a_collector_contributes_its_own_namespace(proc_root: pathlib.Path, config: WatchConfig) -> None:
     """The seam GPU support will use: extra keys, no schema surgery."""
 
     class FakeGpu:
         namespace = "gpu"
+        closed = False
 
-        def collect(self, snapshot):
+        def collect(self, snapshot: Snapshot) -> dict[str, object]:
             return {"utilization_percent": 42, "procs": snapshot.n_procs}
 
-        def close(self):
+        def close(self) -> None:
             self.closed = True
 
     write_proc(proc_root, 100, cmdline="python train.py")
     config.max_samples = 1
     sink = RecordingSink()
     gpu = FakeGpu()
-    monitor = build_monitor(ScriptedSource(proc_root), config, sink)
-    monitor._collectors = [gpu]
+    monitor = build_monitor(ScriptedSource(proc_root), config, sink, collectors=[gpu])
 
     monitor.run()
 
@@ -237,21 +260,20 @@ def test_a_collector_contributes_its_own_namespace(proc_root, config):
     assert gpu.closed is True
 
 
-def test_a_broken_collector_cannot_cost_us_the_log(proc_root, config):
+def test_a_broken_collector_cannot_cost_us_the_log(proc_root: pathlib.Path, config: WatchConfig) -> None:
     class Broken:
         namespace = "broken"
 
-        def collect(self, snapshot):
-            raise RuntimeError("driver exploded")
+        def collect(self, snapshot: Snapshot) -> dict[str, object]:
+            raise RuntimeError(f"driver exploded on sample {snapshot.seq}")
 
-        def close(self):
+        def close(self) -> None:
             raise RuntimeError("still exploding")
 
     write_proc(proc_root, 100, cmdline="python train.py")
     config.max_samples = 1
     sink = RecordingSink()
-    monitor = build_monitor(ScriptedSource(proc_root), config, sink)
-    monitor._collectors = [Broken()]
+    monitor = build_monitor(ScriptedSource(proc_root), config, sink, collectors=[Broken()])
 
     monitor.run()
 
@@ -260,9 +282,10 @@ def test_a_broken_collector_cannot_cost_us_the_log(proc_root, config):
     assert sink.summary is not None
 
 
-def test_the_summary_is_written_even_when_a_sink_fails_mid_run(proc_root, config):
+def test_the_summary_is_written_even_when_a_sink_fails_mid_run(proc_root: pathlib.Path, config: WatchConfig) -> None:
     class Exploding(RecordingSink):
-        def sample(self, record):
+        @override
+        def sample(self, record: Record) -> None:
             super().sample(record)
             raise OSError("disk full")
 

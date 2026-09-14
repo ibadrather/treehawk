@@ -14,7 +14,9 @@ Neither is exceptional here, so both yield partial data rather than an error.
 from __future__ import annotations
 
 import os
-from typing import Final, Mapping
+import pathlib
+from collections.abc import Mapping
+from typing import Final
 
 from treehawk.core.config import MemoryDetail
 from treehawk.core.models import Identity, ProcInfo, ProcSample
@@ -49,7 +51,7 @@ class LinuxProcessSource:
     def scan(self) -> Mapping[int, ProcInfo]:
         procs: dict[int, ProcInfo] = {}
         try:
-            entries = os.listdir(self._root)
+            entries = [entry.name for entry in pathlib.Path(self._root).iterdir()]
         except OSError:
             return procs
         for entry in entries:
@@ -82,9 +84,7 @@ class LinuxProcessSource:
             return None
         return parse_cgroup(text)
 
-    def enrich(
-        self, *, info: ProcInfo, memory: MemoryDetail = MemoryDetail.PROPORTIONAL
-    ) -> ProcSample:
+    def enrich(self, *, info: ProcInfo, memory: MemoryDetail = MemoryDetail.PROPORTIONAL) -> ProcSample:
         sample = ProcSample(info=info)
         sample.cmdline = self._cached_cmdline(info)
         sample.cgroup = self.read_group_path(info.pid)
@@ -117,19 +117,17 @@ class LinuxProcessSource:
         self._cmdline_cache[identity] = cmdline
         return cmdline
 
-    def _path(self, *, pid: int, name: str) -> str:
-        return os.path.join(self._root, str(pid), name)
+    def _path(self, *, pid: int, name: str) -> pathlib.Path:
+        return pathlib.Path(self._root, str(pid), name)
 
     def _read_text(self, *, pid: int, name: str) -> str | None:
         try:
-            with open(self._path(pid=pid, name=name), "r", errors="replace") as handle:
-                return handle.read()
+            return self._path(pid=pid, name=name).read_text(errors="replace")
         except OSError:
             return None
 
     def _read_bytes(self, *, pid: int, name: str) -> bytes | None:
         try:
-            with open(self._path(pid=pid, name=name), "rb") as handle:
-                return handle.read()
+            return self._path(pid=pid, name=name).read_bytes()
         except OSError:
             return None

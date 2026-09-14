@@ -4,16 +4,18 @@ The default format because it is append-only (a killed run still leaves a valid
 file up to the last line) and self-describing, so later additions such as GPU
 fields do not break existing readers.
 
-Every record is flushed as it is written: the run this is recording may be
-killed at any moment, and an unflushed buffer is data that was never collected.
+Each record is appended and the file closed again straight away: the run this
+is recording may be killed at any moment, and a record still sitting in an open
+buffer is data that was never collected.
 """
 
 from __future__ import annotations
 
 import json
+import pathlib
 import sys
-from typing import TextIO
 
+from treehawk.core.compat import override
 from treehawk.core.interfaces import Record
 from treehawk.sinks.base import BaseSink
 
@@ -26,31 +28,35 @@ class JsonlSink(BaseSink):
 
     def __init__(self, path: str) -> None:
         self._path = path
-        self._handle: TextIO | None = None
+        self._writing = False
 
     @property
     def path(self) -> str:
         return self._path
 
+    @override
     def open(self, header: Record) -> None:
-        if self._path == STDOUT_PATH:
-            self._handle = sys.stdout
-        else:
-            self._handle = open(self._path, "w", encoding="utf-8")
+        if self._path != STDOUT_PATH:
+            pathlib.Path(self._path).write_text("", encoding="utf-8")  # a fresh log, not an old one extended
+        self._writing = True
         self._write(header)
 
+    @override
     def sample(self, record: Record) -> None:
         self._write(record)
 
+    @override
     def close(self, summary: Record) -> None:
         self._write(summary)
-        if self._handle is not None and self._path != STDOUT_PATH:
-            self._handle.close()
-        self._handle = None
+        self._writing = False
 
     def _write(self, record: Record) -> None:
-        if self._handle is None:
+        if not self._writing:
             return
-        json.dump(record, self._handle, separators=(",", ":"), default=str)
-        self._handle.write("\n")
-        self._handle.flush()
+        line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
+        if self._path == STDOUT_PATH:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            return
+        with pathlib.Path(self._path).open("a", encoding="utf-8") as handle:
+            handle.write(line)

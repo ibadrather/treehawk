@@ -9,7 +9,8 @@ to a string.
 from __future__ import annotations
 
 from collections import deque
-from typing import Final, Sequence
+from collections.abc import Sequence
+from typing import Final
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -24,7 +25,7 @@ from treehawk.core.humanize import (
 )
 from treehawk.core.interfaces import Record
 from treehawk.core.records import target_of
-from treehawk.core.values import as_float, as_int
+from treehawk.core.values import as_float, as_int, as_mapping, as_records
 from treehawk.ui.theme import Palette, discovery_color
 from treehawk.ui.widgets import elapsed_clock, sparkline
 
@@ -57,6 +58,11 @@ class Dashboard:
 
     # -- state ------------------------------------------------------------
 
+    @property
+    def cpu_history(self) -> list[float | None]:
+        """The CPU readings the sparkline draws from, oldest first."""
+        return list(self._cpu)
+
     def start(self, header: Record) -> None:
         self._header = header
 
@@ -69,9 +75,7 @@ class Dashboard:
             self._peak_cpu = cpu
         memory = _memory_reading(record)
         self._memory.append(None if memory is None else float(memory))
-        if memory is not None and (
-            self._peak_memory is None or memory > self._peak_memory
-        ):
+        if memory is not None and (self._peak_memory is None or memory > self._peak_memory):
             self._peak_memory = memory
         self._peak_procs = max(self._peak_procs, as_int(record.get("n_procs")) or 0)
         if record.get("overrun"):
@@ -119,7 +123,7 @@ class Dashboard:
         table.add_column(width=HISTORY)
         table.add_column(style=self._muted)
 
-        ncpu = (self._header.get("host") or {}).get("ncpu", "?")
+        ncpu = as_mapping(self._header.get("host")).get("ncpu", "?")
         normalised = as_float(record.get("cpu_percent_norm"))
         table.add_row(
             "cpu",
@@ -128,8 +132,7 @@ class Dashboard:
                 style=f"bold {self._accent(0)}",
             ),
             Text(sparkline(list(self._cpu)), style=self._accent(0)),
-            f"peak {format_percent(self._peak_cpu)} · "
-            f"{format_percent(normalised)} of {ncpu} cpus",
+            f"peak {format_percent(self._peak_cpu)} · {format_percent(normalised)} of {ncpu} cpus",
         )
         memory = _memory_reading(record)
         table.add_row(
@@ -149,13 +152,12 @@ class Dashboard:
                 style=self._secondary,
             ),
             f"peak {self._peak_procs} · {self._samples} samples · "
-            f"{cpu_time} cpu time"
-            + (f" · {self._overruns} overrun" if self._overruns else ""),
+            f"{cpu_time} cpu time" + (f" · {self._overruns} overrun" if self._overruns else ""),
         )
         return Panel(table, border_style=self._palette.grid, padding=(0, 1))
 
     def _processes(self) -> RenderableType | None:
-        procs: Sequence[Record] = (self._latest or {}).get("procs") or ()
+        procs: Sequence[Record] = as_records((self._latest or {}).get("procs"))
         if not procs:
             return None
         table = Table(

@@ -11,6 +11,7 @@ from __future__ import annotations
 from rich.console import Console
 from rich.live import Live
 
+from treehawk.core.compat import override
 from treehawk.core.interfaces import Record
 from treehawk.sinks.base import BaseSink
 from treehawk.ui.dashboard import Dashboard
@@ -36,6 +37,7 @@ class LiveSink(BaseSink):
         self._live: Live | None = None
         self._header: Record = {}
 
+    @override
     def open(self, header: Record) -> None:
         self._header = header
         self._dashboard.start(header)
@@ -47,19 +49,17 @@ class LiveSink(BaseSink):
         )
         self._live.start()
 
+    @override
     def sample(self, record: Record) -> None:
         self._dashboard.update(record)
         if self._live is not None:
             self._live.update(self._dashboard.render())
 
+    @override
     def close(self, summary: Record) -> None:
         # The live region is transient, so it disappears and leaves the summary
         # as the only thing in the scrollback - which is what you want to keep.
         if self._live is not None:
             self._live.stop()
             self._live = None
-        self._console.print(
-            render_summary(
-                summary=summary, header=self._header, palette=self._palette
-            )
-        )
+        self._console.print(render_summary(summary=summary, header=self._header, palette=self._palette))

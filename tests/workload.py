@@ -46,7 +46,9 @@ def main() -> int:
     parser.add_argument("--detach", action="store_true", help="daemonize the children")
     parser.add_argument("--parent-seconds", type=float, default=1.0)
     parser.add_argument(
-        "--spawn-delay", type=float, default=0.0,
+        "--spawn-delay",
+        type=float,
+        default=0.0,
         help="wait before spawning, so a monitor attaches first",
     )
     args = parser.parse_args()

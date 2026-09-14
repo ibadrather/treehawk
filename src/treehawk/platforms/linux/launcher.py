@@ -14,13 +14,16 @@ not usable (no user bus, a container, a non-systemd distribution).
 
 from __future__ import annotations
 
+import contextlib
 import os
+import pathlib
 import shutil
 import signal
 import subprocess
 import time
 from typing import Final
 
+from treehawk.core.compat import override
 from treehawk.core.errors import LaunchFailed
 from treehawk.core.interfaces import ProcessLauncher
 from treehawk.core.models import LaunchedWorkload
@@ -40,21 +43,21 @@ class SubprocessWorkload(LaunchedWorkload):
     def __init__(
         self,
         *,
-        process: "subprocess.Popen[bytes]",
+        process: subprocess.Popen[bytes],
         argv: list[str],
         group_path: str | None = None,
     ) -> None:
         super().__init__(pid=process.pid, argv=list(argv), group_path=group_path)
         self._process = process
 
+    @override
     def poll(self) -> int | None:
         return self._process.poll()
 
+    @override
     def signal(self, signum: int = signal.SIGTERM) -> None:
-        try:
+        with contextlib.suppress(ProcessLookupError, PermissionError):  # already gone, or no longer ours to signal
             os.killpg(os.getpgid(self._process.pid), signum)
-        except (ProcessLookupError, PermissionError):
-            pass  # already gone, or no longer ours to signal
 
 
 class DirectLauncher:
@@ -113,14 +116,10 @@ class ScopeLauncher:
         process = subprocess.Popen(wrapper, start_new_session=True)
         group = self._resolve_group(process=process, unit=unit)
         if group is None:
-            raise ScopeUnavailable(
-                f"could not place the workload in a cgroup (unit {unit})"
-            )
+            raise ScopeUnavailable(f"could not place the workload in a cgroup (unit {unit})")
         return SubprocessWorkload(process=process, argv=argv, group_path=group)
 
-    def _resolve_group(
-        self, *, process: "subprocess.Popen[bytes]", unit: str
-    ) -> str | None:
+    def _resolve_group(self, *, process: subprocess.Popen[bytes], unit: str) -> str | None:
         """Wait for the child to appear inside the new scope's cgroup."""
         needle = f"{unit}.scope"
         deadline = time.monotonic() + self._timeout
@@ -185,7 +184,7 @@ def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:
 
 def _read_cgroup(*, proc_root: str, pid: int) -> str | None:
     try:
-        with open(os.path.join(proc_root, str(pid), "cgroup")) as handle:
-            return parse_cgroup(handle.read())
+        text = (pathlib.Path(proc_root) / str(pid) / "cgroup").read_text()
     except OSError:
         return None
+    return parse_cgroup(text)

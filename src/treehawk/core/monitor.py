@@ -8,7 +8,8 @@ OS means providing new implementations, not touching this file.
 
 from __future__ import annotations
 
-from typing import Callable, Iterable
+import contextlib
+from collections.abc import Callable, Iterable
 
 from treehawk.core.aggregate import Aggregator, RunSummary, SummaryAccumulator
 from treehawk.core.config import MissingWorkload, WatchConfig, WhenEmpty
@@ -24,7 +25,6 @@ from treehawk.core.interfaces import (
 from treehawk.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
 from treehawk.core.records import header_record, sample_record, summary_record
 from treehawk.core.tracker import RefreshResult, Tracker
-
 
 __all__ = ["Monitor", "WorkloadNotFound"]
 
@@ -69,9 +69,7 @@ class Monitor:
         """Ask the loop to finish after the current sample (signal-safe)."""
         self._stop = True
 
-    def run(
-        self, *, read_exit_code: Callable[[], int | None] | None = None
-    ) -> RunSummary:
+    def run(self, *, read_exit_code: Callable[[], int | None] | None = None) -> RunSummary:
         """Sample until a stop condition fires. Always writes a summary."""
         self._config.validate()
         if not self._tracker.seeded and not self._tracker.pinned_group:
@@ -102,10 +100,7 @@ class Monitor:
                     seq=seq,
                     elapsed=sampled_at - origin,
                     dt=dt,
-                    overrun=(
-                        previous_at is not None
-                        and dt > self._config.interval * 1.5
-                    ),
+                    overrun=(previous_at is not None and dt > self._config.interval * 1.5),
                 )
                 previous_at = sampled_at
                 seq += 1
@@ -134,22 +129,16 @@ class Monitor:
 
     def _close_collectors(self) -> None:
         for collector in self._collectors:
-            try:
+            with contextlib.suppress(Exception):  # a broken collector must not cost us the log
                 collector.close()
-            except Exception:  # a broken collector must not cost us the log
-                pass
 
-    def _sample(
-        self, *, seq: int, elapsed: float, dt: float, overrun: bool
-    ) -> Snapshot:
+    def _sample(self, *, seq: int, elapsed: float, dt: float, overrun: bool) -> Snapshot:
         procs = self._source.scan()
         refresh = self._tracker.refresh(procs)
         for identity in refresh.exited:
             self._source.forget(identity)
 
-        samples = [
-            self._enrich(info=info, refresh=refresh) for info in refresh.alive
-        ]
+        samples = [self._enrich(info=info, refresh=refresh) for info in refresh.alive]
         snapshot = self._aggregator.build(
             seq=seq,
             elapsed=elapsed,
@@ -184,17 +173,13 @@ class Monitor:
         path = self._tracker.pinned_group or min(paths, key=lambda p: (p.count("/"), p))
         return self._groups.metrics(path)
 
-    def _should_finish(
-        self, *, snapshot: Snapshot, samples_taken: int, elapsed: float
-    ) -> bool:
+    def _should_finish(self, *, snapshot: Snapshot, samples_taken: int, elapsed: float) -> bool:
         config = self._config
         if config.max_samples is not None and samples_taken >= config.max_samples:
             return True
         if config.duration is not None and elapsed >= config.duration:
             return True
-        if config.when_empty is WhenEmpty.STOP and snapshot.n_procs == 0:
-            return True
-        return False
+        return config.when_empty is WhenEmpty.STOP and snapshot.n_procs == 0
 
     def _await_workload(self) -> None:
         """Seed the tracker, optionally polling until the workload shows up.
