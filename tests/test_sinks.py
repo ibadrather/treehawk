@@ -7,17 +7,17 @@ import json
 
 import pytest
 
-from prowatch.core.config import LogDetail, LogFormat
-from prowatch.core.errors import ConfigError
-from prowatch.sinks import (
+from treehawk.core.config import LogDetail, LogFormat
+from treehawk.core.errors import ConfigError
+from treehawk.sinks import (
     CompositeSink,
     CsvSink,
     JsonlSink,
     build_file_sink,
     build_screen_sink,
 )
-from prowatch.sinks.base import BaseSink
-from prowatch.sinks.console import ConsoleSink
+from treehawk.sinks.base import BaseSink
+from treehawk.sinks.console import ConsoleSink
 
 HEADER = {"type": "header", "schema": 1, "interval": 1.0, "mode": "watch"}
 SAMPLE = {

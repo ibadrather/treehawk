@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from conftest import write_cgroup
-from prowatch.platforms.linux.cgroup2 import CgroupV2Source
+from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 
 
 def test_pids_in_includes_nested_groups(cgroup_root):

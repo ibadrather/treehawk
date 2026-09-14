@@ -10,7 +10,7 @@ import pytest
 from conftest import write_log
 from typer.testing import CliRunner
 
-from prowatch.cli import app
+from treehawk.cli import app
 
 runner = CliRunner()
 
@@ -18,7 +18,7 @@ runner = CliRunner()
 def test_version_is_reported():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "prowatch" in result.stdout
+    assert "treehawk" in result.stdout
 
 
 def test_bare_invocation_shows_help():

@@ -12,11 +12,11 @@ import shutil
 import pytest
 from conftest import write_cgroup, write_proc
 
-from prowatch.core.matchers import build_matcher
-from prowatch.core.strategies import build_strategies
-from prowatch.core.tracker import Tracker
-from prowatch.platforms.linux.cgroup2 import CgroupV2Source
-from prowatch.platforms.linux.source import LinuxProcessSource
+from treehawk.core.matchers import build_matcher
+from treehawk.core.strategies import build_strategies
+from treehawk.core.tracker import Tracker
+from treehawk.platforms.linux.cgroup2 import CgroupV2Source
+from treehawk.platforms.linux.source import LinuxProcessSource
 
 WORKLOAD_CGROUP = "/user.slice/app.scope"
 REAPER_CGROUP = "/user.slice"
@@ -97,9 +97,9 @@ def test_pid_reuse_is_not_mistaken_for_the_original_process(world):
     assert result.exited == [(100, 1100)]
 
 
-def test_an_ancestor_of_prowatch_is_never_adopted(world):
-    """The shell that ran prowatch carries the keyword; it is not the workload."""
-    world.spawn(50, comm="bash", cmdline="bash -c 'prowatch watch train.py'")
+def test_an_ancestor_of_treehawk_is_never_adopted(world):
+    """The shell that ran treehawk carries the keyword; it is not the workload."""
+    world.spawn(50, comm="bash", cmdline="bash -c 'treehawk watch train.py'")
     world.spawn(100, ppid=50, cmdline="python train.py")
     tracker = world.tracker(
         build_matcher(kind="keyword", value="train.py"), exclude={50}
@@ -212,7 +212,7 @@ def test_cgroup_expansion_refuses_a_group_shared_with_strangers(world):
     assert {info.pid for info in world.refresh(tracker).alive} == {100}
 
 
-def test_cgroup_expansion_refuses_a_group_that_contains_prowatch(world):
+def test_cgroup_expansion_refuses_a_group_that_contains_treehawk(world):
     """Even if we are the only other member: that group is our terminal."""
     world.spawn(100, cmdline="python train.py")
     write_cgroup(world.cgroup_root, WORKLOAD_CGROUP, pids=[100])

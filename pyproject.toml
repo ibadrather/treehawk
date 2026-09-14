@@ -1,28 +1,56 @@
 [project]
-name = "prowatch"
-version = "0.1.0"
+name = "treehawk"
+version = "0.2.0"
 description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
 readme = "README.md"
-requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ibad Rather", email = "ibad.rather.ir@gmail.com" }]
+requires-python = ">=3.12"
+keywords = ["monitoring", "cpu", "memory", "process", "cgroup", "procfs"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
 dependencies = [
     "matplotlib>=3.11.2",
     "rich>=15.0.0",
     "typer>=0.27.2",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ibadrather/treehawk"
+Repository = "https://github.com/ibadrather/treehawk"
+Issues = "https://github.com/ibadrather/treehawk/issues"
+Releases = "https://github.com/ibadrather/treehawk/releases"
+
 [project.scripts]
-prowatch = "prowatch.cli:main"
+treehawk = "treehawk.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/prowatch"]
+packages = ["src/treehawk"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/treehawk", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.mypy]
 strict = true
-files = ["src/prowatch"]
+files = ["src/treehawk"]
+python_version = "3.12"
 warn_unreachable = true
 warn_unused_ignores = true
 enable_error_code = [

@@ -5,20 +5,20 @@ from __future__ import annotations
 import pytest
 from conftest import write_proc
 
-from prowatch.core.aggregate import Aggregator
-from prowatch.core.config import (
+from treehawk.core.aggregate import Aggregator
+from treehawk.core.config import (
     MemoryDetail,
     MissingWorkload,
     WatchConfig,
     WhenEmpty,
 )
-from prowatch.core.matchers import build_matcher
-from prowatch.core.errors import WorkloadNotFound
-from prowatch.core.monitor import Monitor
-from prowatch.core.strategies import build_strategies
-from prowatch.core.tracker import Tracker
-from prowatch.platforms.linux.source import LinuxProcessSource
-from prowatch.sinks.base import BaseSink
+from treehawk.core.matchers import build_matcher
+from treehawk.core.errors import WorkloadNotFound
+from treehawk.core.monitor import Monitor
+from treehawk.core.strategies import build_strategies
+from treehawk.core.tracker import Tracker
+from treehawk.platforms.linux.source import LinuxProcessSource
+from treehawk.sinks.base import BaseSink
 
 
 class FakeClock:
@@ -74,7 +74,7 @@ class ScriptedSource:
 
 
 def build_monitor(source, config, sink=None, matcher=None, collectors=()):
-    from prowatch.core.models import HostInfo
+    from treehawk.core.models import HostInfo
 
     host = HostInfo(
         platform="linux", hostname="test", ncpu=4, clk_tck=100,

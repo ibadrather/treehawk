@@ -21,13 +21,13 @@ venv/
 htmlcov/
 .tox/
 
-# prowatch output: logs and reports written by a run
-prowatch-*.jsonl
-prowatch-*.csv
-prowatch-*.procs.csv
-prowatch-*.header.json
-prowatch-*.summary.json
-prowatch-*.pdf
+# treehawk output: logs and reports written by a run
+treehawk-*.jsonl
+treehawk-*.csv
+treehawk-*.procs.csv
+treehawk-*.header.json
+treehawk-*.summary.json
+treehawk-*.pdf
 
 # Editors / OS
 .vscode/

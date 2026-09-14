@@ -1,0 +1,30 @@
+name: Version bump
+
+# A change to the package (src/ or pyproject.toml) must raise the version in
+# pyproject.toml. Pushes to main compare against the previous tip of main;
+# pull requests compare against their base branch. Changes to tests, docs or CI
+# alone need no bump.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Version was bumped
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Compare with the base commit
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: uv run --no-project --with packaging python .github/scripts/check_version_bump.py "$BASE_SHA"

@@ -11,7 +11,7 @@ import os
 import pytest
 
 # Field layout of /proc/<pid>/stat after the comm field; only the fields
-# prowatch reads carry meaningful values here.
+# treehawk reads carry meaningful values here.
 _STAT_TEMPLATE = (
     "{pid} ({comm}) {state} {ppid} {pgid} {sid} 0 -1 4194304 100 0 0 0 "
     "{utime} {stime} 0 0 20 0 {threads} 0 {starttime} 16637952 {rss_pages} "
@@ -103,12 +103,12 @@ def write_log(path, *, samples: int = 6, per_process: bool = True, interval=0.5)
     import json
 
     records = [{
-        "type": "header", "schema": 1, "prowatch_version": "0.1.0",
+        "type": "header", "schema": 1, "treehawk_version": "0.1.0",
         "started_at": "2026-01-01T00:00:00Z", "mode": "run",
         "matcher": {"kind": "pid", "value": 100},
         "argv": ["python", "train.py"], "interval": interval,
         "expand": ["tree", "cgroup", "session", "orphan"], "per_process": per_process,
-        "group_path": "/user.slice/prowatch-1.scope",
+        "group_path": "/user.slice/treehawk-1.scope",
         "host": {"platform": "linux", "hostname": "test", "ncpu": 4,
                  "clk_tck": 100, "page_size": 4096, "mem_total_bytes": 8 * 1024**3},
         "notes": [],

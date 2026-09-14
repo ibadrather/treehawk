@@ -18,9 +18,9 @@ WORKLOAD = os.path.join(os.path.dirname(__file__), "workload.py")
 pytestmark = pytest.mark.integration
 
 
-def prowatch(*args, timeout=90):
+def treehawk(*args, timeout=90):
     return subprocess.run(
-        [sys.executable, "-m", "prowatch", *args],
+        [sys.executable, "-m", "treehawk", *args],
         capture_output=True, text=True, timeout=timeout,
     )
 
@@ -41,7 +41,7 @@ def tracked_processes(samples):
 def test_run_mode_captures_a_detached_grandchild(tmp_path):
     log = tmp_path / "run.jsonl"
 
-    result = prowatch(
+    result = treehawk(
         "run", "-i", "0.25", "-q", "-o", str(log), "--",
         sys.executable, WORKLOAD, "--seconds", "2", "--mb", "48",
         "--detach", "--parent-seconds", "0.3",
@@ -62,7 +62,7 @@ def test_run_mode_captures_a_detached_grandchild(tmp_path):
 
 def test_run_mode_uses_a_cgroup_boundary_when_systemd_is_available(tmp_path):
     log = tmp_path / "run.jsonl"
-    prowatch(
+    treehawk(
         "run", "-i", "0.25", "-q", "-o", str(log), "--",
         sys.executable, WORKLOAD, "--seconds", "1", "--mb", "32", "--detach",
     )
@@ -71,7 +71,7 @@ def test_run_mode_uses_a_cgroup_boundary_when_systemd_is_available(tmp_path):
     if header["group_path"] is None:
         pytest.skip("no usable cgroup boundary on this machine")
 
-    assert "prowatch-" in header["group_path"]
+    assert "treehawk-" in header["group_path"]
     # Kernel-side accounting, not our summation.
     assert any(s["group_memory_bytes"] for s in samples)
     assert tracked_processes(samples)  # and the children were found through it
@@ -86,7 +86,7 @@ def test_watch_mode_adopts_a_child_that_detaches_after_we_attach(tmp_path):
         stderr=subprocess.DEVNULL,
     )
     try:
-        result = prowatch(
+        result = treehawk(
             "watch", "--pid", str(workload.pid), "-i", "0.3", "-q",
             "-o", str(log), "-d", "8",
         )
@@ -111,7 +111,7 @@ def test_watch_mode_does_not_adopt_unrelated_processes(tmp_path):
          "subprocess.run([sys.executable,'-c','import time;time.sleep(1)'])"]
     )
     try:
-        prowatch("watch", "--pid", str(target.pid), "-i", "0.3", "-q",
+        treehawk("watch", "--pid", str(target.pid), "-i", "0.3", "-q",
                  "-o", str(log), "-d", "3")
         _, samples, _ = read_log(str(log))
 
@@ -130,7 +130,7 @@ def test_watch_by_keyword_matches_the_command_line(tmp_path):
         stderr=subprocess.DEVNULL,
     )
     try:
-        result = prowatch("watch", "workload.py", "-i", "0.3", "-q",
+        result = treehawk("watch", "workload.py", "-i", "0.3", "-q",
                           "-o", str(log), "-d", "3")
         assert result.returncode == 0, result.stderr
         _, samples, _ = read_log(str(log))
@@ -141,7 +141,7 @@ def test_watch_by_keyword_matches_the_command_line(tmp_path):
 
 
 def test_a_missing_process_exits_with_a_clear_message(tmp_path):
-    result = prowatch("watch", "definitely-not-running-xyzzy", "-q",
+    result = treehawk("watch", "definitely-not-running-xyzzy", "-q",
                       "-o", str(tmp_path / "x.jsonl"))
 
     assert result.returncode == 2
@@ -150,11 +150,11 @@ def test_a_missing_process_exits_with_a_clear_message(tmp_path):
 
 def test_report_round_trips_a_real_run(tmp_path):
     log = tmp_path / "run.jsonl"
-    prowatch("run", "-i", "0.25", "-q", "-o", str(log), "--",
+    treehawk("run", "-i", "0.25", "-q", "-o", str(log), "--",
              sys.executable, WORKLOAD, "--seconds", "1", "--mb", "32",
              "--children", "1")
 
-    result = prowatch("report", str(log))
+    result = treehawk("report", str(log))
 
     assert result.returncode == 0
     assert "top by cpu time" in result.stdout
@@ -163,7 +163,7 @@ def test_report_round_trips_a_real_run(tmp_path):
 
 def test_csv_output_is_written_and_joinable(tmp_path):
     base = tmp_path / "run.csv"
-    prowatch("run", "-i", "0.25", "-q", "--csv", "-o", str(base), "--",
+    treehawk("run", "-i", "0.25", "-q", "--csv", "-o", str(base), "--",
              sys.executable, WORKLOAD, "--seconds", "1", "--mb", "16",
              "--children", "1")
 

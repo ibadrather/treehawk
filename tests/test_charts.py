@@ -11,9 +11,9 @@ import pytest
 from conftest import write_log
 from pypdf import PdfReader
 
-from prowatch.charts.report import PAGES, write_pdf_report
-from prowatch.charts.series import Metric, load_series, stack_for
-from prowatch.core.errors import ReportError
+from treehawk.charts.report import PAGES, write_pdf_report
+from treehawk.charts.series import Metric, load_series, stack_for
+from treehawk.core.errors import ReportError
 
 
 # -- reshaping ------------------------------------------------------------
@@ -110,7 +110,7 @@ def test_the_pdf_is_readable_and_describes_itself(log, tmp_path):
     reader = PdfReader(str(destination))
 
     assert len(reader.pages) == len(PAGES)
-    assert "prowatch" in (reader.metadata or {}).get("/Title", "")
+    assert "treehawk" in (reader.metadata or {}).get("/Title", "")
     first = reader.pages[0].extract_text()
     assert "Overview" in first
     assert "peak cpu" in first

@@ -1,4 +1,4 @@
-# prowatch
+# treehawk
 
 Log the CPU and RAM a process uses — **and every process it spawns**, including
 children that daemonize and detach themselves.
@@ -6,16 +6,16 @@ children that daemonize and detach themselves.
 Point it at something already running, by keyword or by the exact command line:
 
 ```bash
-prowatch watch train.py                       # substring of the command line
-prowatch watch --exact "python train.py"      # the whole command line
-prowatch watch --regex 'worker-\d+'
-prowatch watch --pid 4213
+treehawk watch train.py                       # substring of the command line
+treehawk watch --exact "python train.py"      # the whole command line
+treehawk watch --regex 'worker-\d+'
+treehawk watch --pid 4213
 ```
 
-…or let prowatch start the command, which is more accurate (see below):
+…or let treehawk start the command, which is more accurate (see below):
 
 ```bash
-prowatch run -- python train.py --epochs 10
+treehawk run -- python train.py --epochs 10
 ```
 
 Either way it keeps sampling until the workload ends — no duration to set, and
@@ -23,8 +23,8 @@ Either way it keeps sampling until the workload ends — no duration to set, and
 you get a live dashboard; afterwards, read the log back:
 
 ```bash
-prowatch report prowatch-20260913-100000.jsonl   # summary in the terminal
-prowatch pdf    prowatch-20260913-100000.jsonl   # an 8-page PDF report
+treehawk report treehawk-20260913-100000.jsonl   # summary in the terminal
+treehawk pdf    treehawk-20260913-100000.jsonl   # an 8-page PDF report
 ```
 
 Linux only for now. Metrics come from `/proc` and cgroup v2 directly — not from
@@ -34,8 +34,26 @@ used for the interface, matplotlib only when you ask for a PDF.
 ## Install
 
 ```bash
+curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
+```
+
+The script installs the `treehawk` command from the latest GitHub release with
+`uv tool install` (or `pipx`, if that is what you have). If neither is present
+it installs uv first, and uv fetches a suitable Python by itself. Pin a version
+with `| sh -s -- --version 0.2.0`; `--help` lists the rest.
+
+Or install a release yourself (Linux, Python 3.12+):
+
+```bash
+uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.2.0/treehawk-0.2.0-py3-none-any.whl
+uv tool install git+https://github.com/ibadrather/treehawk   # latest main
+```
+
+From a checkout:
+
+```bash
 uv sync            # or: pip install -e .
-uv run prowatch --help
+uv run treehawk --help
 ```
 
 ## The problem it solves
@@ -47,7 +65,7 @@ parent exits. The survivor is re-parented to PID 1 (or to a subreaper such as
 link left to follow, and a naive monitor reports that the workload finished
 while it is still burning a core.
 
-prowatch keeps membership by four independent rules and *never evicts* a
+treehawk keeps membership by four independent rules and *never evicts* a
 process once admitted — it stays tracked until that exact process exits, no
 matter what its parent becomes:
 
@@ -67,14 +85,14 @@ unrelated process started in the same terminal.
 
 ### `run` is exact; `watch` is very good
 
-`prowatch run` starts the command inside its own transient cgroup
+`treehawk run` starts the command inside its own transient cgroup
 (`systemd-run --user --scope`). Membership is then a kernel fact rather than an
 inference, CPU and memory totals come from `cpu.stat` and `memory.current`, and
 nothing is missed before the first sample — including processes that are born
-and die between two samples. If systemd is unavailable prowatch falls back to
+and die between two samples. If systemd is unavailable treehawk falls back to
 `/proc` tracking and says so in the log header.
 
-`prowatch watch` has to infer membership. It is reliable in practice, but a
+`treehawk watch` has to infer membership. It is reliable in practice, but a
 process that detaches *and* moves itself to an unrelated cgroup in the gap
 between two samples can be missed. Use `run` when exactness matters.
 
@@ -89,7 +107,7 @@ still leaves a readable log.
  "cpu_percent":287.4,          // sum across processes; 100% = one core
  "cpu_percent_norm":9.0,       // of the whole machine
  "cpu_seconds_total":18.4,     // lifetime cpu time, incl. exited children
- "cpu_seconds_used":17.9,      // ...since prowatch attached
+ "cpu_seconds_used":17.9,      // ...since treehawk attached
  "rss_bytes":1379926016,       // sum of RSS: double-counts shared pages
  "pss_bytes":1104150528,       // shared pages divided fairly - the honest number
  "swap_bytes":0,
@@ -120,7 +138,7 @@ Three are recorded because each is wrong in a different way:
 
 ## The PDF report
 
-`prowatch pdf run.jsonl` renders the run as pages, each answering one question:
+`treehawk pdf run.jsonl` renders the run as pages, each answering one question:
 
 | Page | Question |
 |---|---|
@@ -171,8 +189,8 @@ marked on the CPU chart.
 * **`watch` can miss a process that detaches and changes cgroup** in the gap
   between samples.
 * **Another user's processes** expose `stat` but not `smaps_rollup`, so `pss`
-  will be `null`. prowatch never fakes a value it could not read.
-* prowatch never adopts its own ancestors (your shell, `uv`, `timeout`), since
+  will be `null`. treehawk never fakes a value it could not read.
+* treehawk never adopts its own ancestors (your shell, `uv`, `timeout`), since
   they carry the keyword you typed.
 * **A watch is meant to be left running.** Nothing accumulates without bound —
   the sparkline history, the "seen this process before" set and the summary
@@ -230,3 +248,19 @@ The unit tests run against fake `/proc` and cgroup trees (every reader takes its
 root as an argument), so they need no privileges and no real workload. The
 integration tests spawn `tests/workload.py`, which deliberately double-forks a
 detached child, and assert it is still in the log after its parent is gone.
+
+## Releasing
+
+The version is written in one place, `pyproject.toml`. Any change to the package
+(`src/` or `pyproject.toml`) must raise it; the **Version bump** workflow fails a
+push to `main` or a pull request that does not:
+
+```bash
+uv version --bump patch      # or minor / major
+```
+
+When `main` carries a version that has no release yet, the **Release** workflow
+runs CI across Python 3.12, 3.13 and 3.14, builds the sdist and the universal
+wheel, and publishes GitHub release `v<version>` with both plus `install.sh`
+attached. Pre-release versions such as `0.2.0rc1` are marked as pre-releases and
+never become "latest".

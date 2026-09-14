@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 
 from conftest import write_proc
-from prowatch.core.config import MemoryDetail
-from prowatch.platforms.linux.source import LinuxProcessSource
+from treehawk.core.config import MemoryDetail
+from treehawk.platforms.linux.source import LinuxProcessSource
 
 
 def test_scan_returns_every_process_and_ignores_non_pid_entries(proc_root):

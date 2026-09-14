@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from prowatch.core.errors import ReportError
-from prowatch.report import build_report
+from treehawk.core.errors import ReportError
+from treehawk.report import build_report
 
 
 def write_log(path, records):

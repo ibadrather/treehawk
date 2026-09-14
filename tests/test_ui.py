@@ -10,11 +10,11 @@ import json
 
 from rich.console import Console
 
-from prowatch.sinks.live import LiveSink
-from prowatch.ui.dashboard import Dashboard
-from prowatch.ui.theme import PALETTE, discovery_color, discovery_group
-from prowatch.ui.views import render_header_facts, render_summary
-from prowatch.ui.widgets import elapsed_clock, sparkline
+from treehawk.sinks.live import LiveSink
+from treehawk.ui.dashboard import Dashboard
+from treehawk.ui.theme import PALETTE, discovery_color, discovery_group
+from treehawk.ui.views import render_header_facts, render_summary
+from treehawk.ui.widgets import elapsed_clock, sparkline
 
 
 def draw(renderable) -> str:
@@ -25,9 +25,9 @@ def draw(renderable) -> str:
 
 def header(**overrides):
     record = {
-        "mode": "run", "interval": 0.5, "prowatch_version": "0.1.0",
+        "mode": "run", "interval": 0.5, "treehawk_version": "0.1.0",
         "argv": ["python", "train.py"], "started_at": "2026-01-01T00:00:00Z",
-        "group_path": "/user.slice/prowatch-1.scope", "notes": [],
+        "group_path": "/user.slice/treehawk-1.scope", "notes": [],
         "host": {"hostname": "test", "ncpu": 4, "mem_total_bytes": 8 * 1024**3},
     }
     record.update(overrides)
@@ -113,7 +113,7 @@ def test_dashboard_shows_the_workload_and_its_processes():
     assert "180.0%" in text
     assert "100" in text and "200" in text  # both pids
     assert "orphan" in text
-    assert "prowatch-1.scope" in text
+    assert "treehawk-1.scope" in text
 
 
 def test_dashboard_remembers_the_peak_after_it_has_passed():
@@ -189,7 +189,7 @@ def test_header_facts_include_the_boundary_and_notes():
     text = draw(render_header_facts(
         header=header(notes=["cgroup v2 is not mounted"]), palette=PALETTE
     ))
-    assert "prowatch-1.scope" in text
+    assert "treehawk-1.scope" in text
     assert "cgroup v2 is not mounted" in text
 
 

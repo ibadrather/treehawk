@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from prowatch.platforms.linux.procfs import (
+from treehawk.platforms.linux.procfs import (
     ProcStatParseError,
     parse_cgroup,
     parse_cmdline,
@@ -20,7 +20,7 @@ REAL_STAT = (
 )
 
 
-def test_parse_stat_reads_the_fields_prowatch_depends_on():
+def test_parse_stat_reads_the_fields_treehawk_depends_on():
     parsed = parse_stat(REAL_STAT, page_size=4096)
     assert parsed["pid"] == 18973
     assert parsed["comm"] == "cat"

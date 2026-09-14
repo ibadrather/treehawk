@@ -1,4 +1,4 @@
-"""A synthetic workload for exercising prowatch.
+"""A synthetic workload for exercising treehawk.
 
 It does the thing that breaks naive process monitors: spawns a child that
 double-forks and calls ``setsid``, so the child is re-parented to PID 1 and

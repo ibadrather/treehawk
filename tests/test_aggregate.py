@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from prowatch.core.aggregate import Aggregator, SummaryAccumulator
-from prowatch.core.config import CpuSource
-from prowatch.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample
-from prowatch.core.tracker import RefreshResult
+from treehawk.core.aggregate import Aggregator, SummaryAccumulator
+from treehawk.core.config import CpuSource
+from treehawk.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample
+from treehawk.core.tracker import RefreshResult
 
 HOST = HostInfo(
     platform="linux", hostname="test", ncpu=4, clk_tck=100,
