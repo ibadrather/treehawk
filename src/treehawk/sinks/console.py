@@ -52,13 +52,16 @@ class ConsoleSink(BaseSink):
     @override
     def sample(self, record: Record) -> None:
         reading = memory_reading(record=record, header=self._header)
+        # RSS is always shown; the better figure only when there is one, so a
+        # run without it prints one column rather than the same number twice.
+        better = f"{reading.label}={format_bytes(reading.value):>9} " if reading.label != "rss" else ""
         elapsed = as_float(record.get("t")) or 0.0
         self._write_line(
             f"[{elapsed:>8.2f}s] procs={record.get('n_procs'):<4} "
             f"cpu={format_percent(as_float(record.get('cpu_percent'))):>8} "
             f"rss={format_bytes(as_float(record.get('rss_bytes'))):>9} "
-            f"{reading.label}={format_bytes(reading.value):>9} "
-            f"cpu_time={format_seconds(as_float(record.get('cpu_seconds_used')))}"
+            + better
+            + f"cpu_time={format_seconds(as_float(record.get('cpu_seconds_used')))}"
             + (" OVERRUN" if record.get("overrun") else "")
         )
         for proc in as_records(record.get("procs"))[: self._show_procs]:

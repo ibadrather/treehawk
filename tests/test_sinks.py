@@ -148,3 +148,27 @@ def test_the_screen_sink_picks_itself_from_the_console(tmp_path: pathlib.Path) -
 
     piped = build_screen_sink(console=Console(file=(tmp_path / "out").open("w")))
     assert isinstance(piped, ConsoleSink)
+
+
+def test_the_console_names_the_measure_the_header_declared(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "out.txt"
+    with path.open("w") as stream:
+        sink = ConsoleSink(stream)
+        sink.open({**HEADER, "memory_kind": "phys_footprint"})
+        sink.sample({**SAMPLE, "rss_bytes": 100, "pss_bytes": 90, "group_memory_bytes": None})
+
+    assert "foot=" in path.read_text()
+
+
+def test_the_console_falls_back_to_rss_rather_than_mislabelling_it(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "out.txt"
+    with path.open("w") as stream:
+        sink = ConsoleSink(stream)
+        sink.open(HEADER)
+        # --no-pss, or a platform with no fair measure at all.
+        sink.sample({**SAMPLE, "rss_bytes": 100, "pss_bytes": None, "group_memory_bytes": None})
+
+    text = path.read_text()
+    assert "rss=" in text
+    assert "pss=" not in text  # the figure printed is RSS, so do not call it pss
+    assert text.count("rss=") == 1  # and do not print the same number twice
