@@ -22,6 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-lint
 
       - name: Install
         run: uv sync --locked
@@ -46,6 +47,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          # Without a per-job suffix, typecheck and test on the same Python
+          # compute the same cache key and race to save it. The workflow name
+          # keeps a Release-triggered run apart from the push-triggered one.
+          cache-suffix: ${{ github.workflow }}-typecheck
 
       - name: Install
         run: uv sync --locked
@@ -67,6 +72,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-test
 
       - name: Install
         run: uv sync --locked
