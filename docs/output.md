@@ -7,7 +7,9 @@ JSON Lines by default: a `header` record, one `sample` per interval, and a
 leaves a readable log.
 
 ```jsonc
-{"type":"header","mode":"run","argv":["python3","train.py"],"interval":0.5,"host":{"ncpu":32},"notes":[]}
+{"type":"header","mode":"run","argv":["python3","train.py"],"interval":0.5,
+ "memory_kind":"pss",        // which measure pss_bytes carries on this machine
+ "host":{"ncpu":32},"notes":[]}
 {"type":"sample","seq":12,"t":6.0,"n_procs":4,
  "cpu_percent":315.5,          // 100 = one core
  "cpu_percent_norm":9.9,       // of the whole machine
@@ -18,6 +20,11 @@ leaves a readable log.
 {"type":"summary","samples":42,"duration_s":20.5,"peak_cpu_percent":319.64,"exit_code":0,
  "top_by_cpu":[...],"top_by_memory":[...]}
 ```
+
+`memory_kind` names the fair-memory measure `pss_bytes` carries: `pss` on Linux,
+`phys_footprint` on macOS. A log written before the field existed is `pss`.
+`group_memory_bytes` is `null` wherever the kernel keeps no total for the
+boundary, which is always the case on macOS.
 
 `--aggregate-only` drops `procs`. `--csv` writes `run.csv` (one row per sample),
 `run.procs.csv` (one row per process per sample, joined on `seq`), and the header

@@ -104,7 +104,10 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ "$(uname -s)" = Linux ] || err "treehawk supports Linux only for now (this is $(uname -s))"
+case "$(uname -s)" in
+    Linux | Darwin) ;;
+    *) err "treehawk supports Linux and macOS (this is $(uname -s))" ;;
+esac
 has curl || has wget || err "need curl or wget to download treehawk"
 
 if [ -z "$WHEEL" ]; then

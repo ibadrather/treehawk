@@ -34,12 +34,21 @@ jobs:
         run: uv run ruff check --output-format=github
 
   typecheck:
-    name: Type check (mypy, Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Type check (mypy, Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # platforms/darwin binds no library at import, so mypy checks it on
+          # Linux too - these two are here to catch a typeshed difference, not
+          # to be the only place the macOS code is seen.
+          - os: macos-latest
+            python-version: "3.10"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v5
 
@@ -49,8 +58,9 @@ jobs:
           enable-cache: true
           # Without a per-job suffix, typecheck and test on the same Python
           # compute the same cache key and race to save it. The workflow name
-          # keeps a Release-triggered run apart from the push-triggered one.
-          cache-suffix: ${{ github.workflow }}-typecheck
+          # keeps a Release-triggered run apart from the push-triggered one,
+          # and the runner keeps Linux and macOS apart.
+          cache-suffix: ${{ github.workflow }}-typecheck-${{ matrix.os }}
 
       - name: Install
         run: uv sync --locked
@@ -59,12 +69,21 @@ jobs:
         run: uv run mypy
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # GitHub's macOS runners are Apple Silicon. The oldest and newest
+          # Python cover the compatibility range; running all five on both
+          # would double the matrix to catch nothing extra.
+          - os: macos-latest
+            python-version: "3.10"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v5
 
@@ -72,7 +91,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-suffix: ${{ github.workflow }}-test
+          cache-suffix: ${{ github.workflow }}-test-${{ matrix.os }}
 
       - name: Install
         run: uv sync --locked

@@ -15,7 +15,8 @@ uv run mypy
 uv run pytest            # -m "not integration" for the fast ones
 ```
 
-CI runs all four on Python 3.10 to 3.14. mypy runs at its strictest settings and
+CI runs all four on Python 3.10 to 3.14 on Linux, and on the oldest and newest
+of those on macOS (Apple Silicon). mypy runs at its strictest settings and
 they are never loosened; see [`AGENTS.md`](https://github.com/ibadrather/treehawk/blob/main/AGENTS.md).
 Any change to `src/` or `pyproject.toml` must raise the version with
 `uv version --bump patch`; a new version on `main` is released automatically.
@@ -25,9 +26,10 @@ Any change to `src/` or `pyproject.toml` must raise the version with
 ![Layers: cli wires platforms and sinks into the core monitor](assets/diagrams/architecture.light.svg#only-light)
 ![Layers: cli wires platforms and sinks into the core monitor](assets/diagrams/architecture.dark.svg#only-dark)
 
-`core` holds the policy and knows nothing about Linux; `platforms`, `sinks` and
-`gpu` implement its protocols; `cli` is the only place that wires them together.
-Extending treehawk means adding a class and a registry entry:
+`core` holds the policy and knows nothing about any operating system;
+`platforms`, `sinks` and `gpu` implement its protocols; `cli` is the only place
+that wires them together. Extending treehawk means adding a class and a
+registry entry:
 
 | To add | Implement | Register in |
 |---|---|---|
@@ -37,6 +39,14 @@ Extending treehawk means adding a class and a registry entry:
 | an output format | `Sink` | `sinks/factory.py` |
 | a PDF page | `Page` | `charts/report.py` |
 | an operating system | `ProcessSource`, `HostInfoSource` | `platforms/registry.py` |
+
+macOS was added exactly that way, without touching `core/`. Two things are
+worth copying from it. Make the syscall boundary an injectable protocol — as
+`platforms/darwin/libproc.py` does with `ProcessTable` — so the backend can be
+tested on a machine that does not run that OS. And bind any platform library
+inside the builder rather than at import time, so the module still imports and
+type-checks everywhere; a `sys.platform` guard would hide it from mypy on the
+other runner.
 
 ## Docs
 

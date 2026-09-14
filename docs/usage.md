@@ -29,13 +29,16 @@ workload is left running.
 treehawk run -- python train.py --epochs 10
 ```
 
-The command goes after `--`. treehawk starts it in a transient systemd scope, a
-cgroup of its own, so every descendant is counted by the kernel, including
-processes that live and die between two samples.
+The command goes after `--`. On Linux treehawk starts it in a transient systemd
+scope, a cgroup of its own, so every descendant is counted by the kernel,
+including processes that live and die between two samples.
 
 - Without systemd or cgroup v2 (common in containers and CI), treehawk falls back
   to tracking through `/proc` and records why in the log header's `notes`.
   `--no-isolate` chooses that mode on purpose.
+- On macOS there is no boundary to create — see [Platforms](platforms.md) — so
+  `run` starts the command in its own session and infers membership, which the
+  header's `notes` also say.
 - `Ctrl-C` and `SIGTERM` are forwarded to the command.
 - If the command fails, `treehawk run` exits with its status.
 
