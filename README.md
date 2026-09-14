@@ -346,7 +346,7 @@ uv version --bump patch      # or minor / major
 ```
 
 When `main` carries a version that has no release yet, the **Release** workflow
-runs CI across Python 3.10, 3.11, 3.12, 3.13 and 3.14, builds the sdist and the universal
-wheel, and publishes GitHub release `v<version>` with both plus `install.sh`
+runs the full CI matrix (Python 3.10 to 3.14 on Linux, plus macOS), builds the sdist
+and the universal wheel, and publishes GitHub release `v<version>` with both plus `install.sh`
 attached. Pre-release versions such as `0.3.0rc1` are marked as pre-releases and
 never become "latest".
