@@ -1,120 +1,60 @@
-# treehawk { .th-home-title }
+---
+title: Introduction
+---
 
-<div class="th-hero" markdown>
+<div class="hero" markdown>
 
-<img class="th-hero__logo" src="assets/brand/logo.svg" alt="">
-
-<p class="th-kicker">Process monitoring for Linux</p>
+<img src="assets/brand/logo.svg" alt="">
 
 <h1>tree<span>hawk</span></h1>
 
-<p class="th-hero__tagline">
 Log the CPU and RAM a process uses, and every process it spawns,
-<strong>including children that daemonize and detach themselves</strong>.
-</p>
+**including children that daemonize and detach themselves**.
 
-[Get started](getting-started/installation.md){ .md-button .md-button--primary }
-[How it works](concepts/membership.md){ .md-button }
-
-</div>
-
-Point treehawk at something already running, or let it start the command. Either
-way it samples until the workload ends, then leaves you a log you can summarise
-in the terminal, turn into a PDF report, or load into pandas.
-
-```console
-$ treehawk run -- python train.py --epochs 10
-```
-
-<figure class="terminal" markdown="span">
-  ![The treehawk live dashboard: CPU and memory sparklines, and a table of four processes found by match, tree and cgroup](assets/output/dashboard.svg)
-  <figcaption>The live dashboard, part-way through a run. The <code>found</code> column says how each process was discovered.</figcaption>
-</figure>
-
-## Highlights
-
-<div class="th-cards" markdown>
-
-<div class="th-card" markdown>
-**Follows detached children**
-
-A child that forks, calls `setsid` and forks again stays tracked after its parent is gone. [Membership →](concepts/membership.md)
-</div>
-
-<div class="th-card" markdown>
-**Exact under `run`**
-
-The command gets a cgroup of its own, so every descendant is counted by the kernel. [run and watch →](concepts/run-vs-watch.md)
-</div>
-
-<div class="th-card" markdown>
-**Honest memory numbers**
-
-RSS, PSS and the cgroup's own charge, side by side, each wrong in a different way. [Memory numbers →](concepts/memory.md)
-</div>
-
-<div class="th-card" markdown>
-**Runs until the work is done**
-
-No duration to guess. `Ctrl-C` or a shutdown `SIGTERM` still writes a complete summary. [Sampling →](concepts/sampling.md)
-</div>
-
-<div class="th-card" markdown>
-**Logs that survive a crash**
-
-JSON Lines, flushed per sample; a killed run still reads back. [Log format →](reference/log-format.md)
-</div>
-
-<div class="th-card" markdown>
-**A report worth sending**
-
-Eight PDF pages, each answering one question about the run. [The PDF report →](guides/pdf-report.md)
-</div>
+[Get started](#install){ .md-button .md-button--primary }
+[How it works](how-it-works.md){ .md-button }
 
 </div>
 
-## The problem it solves
+Point treehawk at something already running, or let it start the command. It
+samples until the workload ends, then leaves a log you can summarise in the
+terminal or turn into a PDF report.
 
-Monitoring "a process and its children" by walking parent-child links works right
-up until a child daemonizes. The survivor is re-parented to PID 1 or to a
-subreaper such as `systemd --user`, it has left its parent's session, and there is
-no link left to follow. A naive monitor reports that the workload finished while
-the daemon is still burning a core.
+![The treehawk live dashboard](assets/output/dashboard.svg)
 
-<figure class="diagram" markdown="span">
-  ![How a daemonized child escapes a parent-child walk, and how treehawk keeps it](assets/diagrams/daemonize.light.svg#only-light)
-  ![How a daemonized child escapes a parent-child walk, and how treehawk keeps it](assets/diagrams/daemonize.dark.svg#only-dark)
-</figure>
+## Why
 
-treehawk admits a process once, by any of four rules, and never evicts it until
-that exact process exits. Colours follow the process everywhere: in the dashboard,
-in `treehawk report`, and on every page of the PDF.
+Following parent-child links works until a child daemonizes: `fork`, `setsid`,
+`fork` again, and the parent exits. The survivor is re-parented to PID 1 or
+`systemd --user`, and a naive monitor reports the workload finished while it is
+still burning a core. treehawk keeps it.
 
-## A quick tour
+![How a daemonized child escapes a parent-child walk](assets/diagrams/daemonize.light.svg#only-light)
+![How a daemonized child escapes a parent-child walk](assets/diagrams/daemonize.dark.svg#only-dark)
+
+## Install
+
+treehawk runs on Linux with Python 3.10 or newer.
 
 ```bash
-# Attach to something already running
-treehawk watch train.py                       # substring of the command line
-treehawk watch --exact "python train.py"      # the whole command line
-treehawk watch --regex 'worker-\d+'
-treehawk watch --pid 4213
-
-# Or start it, which is exact
-treehawk run -- python train.py --epochs 10
-
-# Afterwards, read the log back
-treehawk report treehawk-20260913-100000.jsonl
-treehawk pdf    treehawk-20260913-100000.jsonl
+curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
 ```
 
-Metrics come straight from `/proc` and cgroup v2, not from `ps`, `top` or a
-third-party library. treehawk runs on Linux with Python 3.10 or newer.
+The script installs the latest release with `uv tool install` (or `pipx`), and
+installs uv first if neither is present. Pin a version with
+`| sh -s -- --version 0.3.1`. Or install it yourself:
 
-## Next steps
+```bash
+uv tool install git+https://github.com/ibadrather/treehawk
+```
 
-- [Install treehawk](getting-started/installation.md), then take the
-  [first steps](getting-started/first-steps.md).
-- Attach to a running process: [Watching a running process](guides/watch.md).
-- Measure a command from start to finish: [Starting a command](guides/run.md).
-- Understand what the numbers mean: [Memory numbers](concepts/memory.md).
-- Add a metric, a rule or an output format: [Extending treehawk](development/extending.md).
+## Quick tour
+
+```bash
+treehawk watch train.py                 # attach to a running process
+treehawk run -- python train.py         # start a command; exact
+treehawk report treehawk-*.jsonl        # summary in the terminal
+treehawk pdf treehawk-*.jsonl           # an 8-page PDF report
+```
+
+Next: [Usage](usage.md) covers every command and option.

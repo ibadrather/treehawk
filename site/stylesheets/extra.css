@@ -1,584 +1,122 @@
-/* treehawk docs theme.
+/* Material for MkDocs with the edreate brand: Poppins and Fira Code, primary
+   purple, teal and cream. Screenshots keep treehawk's own colours. */
 
-   Layout after the Astral (uv, Ruff) documentation: compact left navigation,
-   custom light and dark schemes, full-width tables. Typography and colour from
-   the edreate brand: Poppins, Otomanopee One and Fira Code; primary purple,
-   teal and cream.
-
-   Colours inside screenshots, the PDF pages and the process chips are
-   treehawk's own palette (src/treehawk/ui/theme.py), because they show what
-   the program really draws. */
-
-@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Otomanopee+One&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Otomanopee+One&family=Poppins:wght@400;500;600;700&display=swap");
 
 :root {
   --brand-primary: #4531cc;
-  --brand-primary-rgb: 69, 49, 204;
-  --brand-purple: #4b3fbf;
-  --brand-purple-soft: #7f6df9;
+  --brand-primary-soft: #7f6df9;
   --brand-green: #448882;
-  --brand-green-rgb: 68, 136, 130;
-  --brand-green-soft: #c9f0e9;
   --brand-cream: #fcf3d1;
   --brand-ink: #0c0c0c;
-  --brand-white: #ffffff;
-  --brand-accent-light: #eef0ff;
-  --brand-light-bg: #f5f5f5;
-  --brand-light-line: #e7e7e7;
-  --brand-gray-500: #6b7280;
-  --brand-gray-400: #9ca3af;
-  --brand-danger: #dc2626;
-
-  --brand-code-bg: #282c34;
-  --brand-code-fg: #d4d4d4;
-
   --md-text-font: "Poppins";
   --md-code-font: "Fira Code";
 }
 
-/* ---------------------------------------------------------------- light */
-
 [data-md-color-scheme="treehawk-light"] {
-  --md-primary-fg-color: var(--brand-white);
-  --md-primary-fg-color--light: var(--brand-accent-light);
-  --md-primary-fg-color--dark: var(--brand-primary);
+  --md-primary-fg-color: #ffffff;
   --md-primary-bg-color: var(--brand-ink);
-  --md-primary-bg-color--light: rgba(12, 12, 12, 0.6);
-
-  --md-default-bg-color: var(--brand-white);
   --md-default-fg-color: var(--brand-ink);
-  --md-default-fg-color--light: rgba(12, 12, 12, 0.7);
-  --md-default-fg-color--lighter: rgba(12, 12, 12, 0.45);
-  --md-default-fg-color--lightest: rgba(12, 12, 12, 0.12);
-
-  --md-typeset-color: var(--brand-ink);
   --md-typeset-a-color: var(--brand-primary);
-  --md-accent-fg-color: var(--brand-purple);
-  --md-accent-fg-color--transparent: rgba(var(--brand-primary-rgb), 0.08);
-  --md-typeset-mark-color: rgba(252, 243, 209, 0.9);
-
-  --md-code-bg-color: var(--brand-light-bg);
-  --md-code-fg-color: #24292e;
-
-  --md-footer-bg-color: var(--brand-ink);
-  --md-footer-bg-color--dark: #000000;
+  --md-accent-fg-color: var(--brand-green);
+  --md-code-bg-color: #f5f5f5;
 }
-
-/* ----------------------------------------------------------------- dark */
 
 [data-md-color-scheme="treehawk-dark"] {
   color-scheme: dark;
-
   --md-primary-fg-color: #121016;
-  --md-primary-fg-color--light: #1c1924;
-  --md-primary-fg-color--dark: var(--brand-purple-soft);
-  --md-primary-bg-color: var(--brand-white);
-  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
-
+  --md-primary-bg-color: #ffffff;
   --md-default-bg-color: var(--brand-ink);
-  --md-default-bg-color--light: rgba(12, 12, 12, 0.7);
-  --md-default-fg-color: var(--brand-white);
-  --md-default-fg-color--light: rgba(255, 255, 255, 0.78);
-  --md-default-fg-color--lighter: rgba(255, 255, 255, 0.5);
-  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.14);
-
-  --md-typeset-color: rgba(255, 255, 255, 0.92);
-  --md-typeset-a-color: var(--brand-purple-soft);
-  --md-accent-fg-color: #a99cff;
-  --md-accent-fg-color--transparent: rgba(127, 109, 249, 0.12);
-  --md-typeset-mark-color: rgba(var(--brand-green-rgb), 0.45);
-
-  --md-code-bg-color: #16141c;
-  --md-code-fg-color: var(--brand-code-fg);
-
+  --md-default-fg-color: #ffffff;
+  --md-default-fg-color--light: rgba(255, 255, 255, 0.75);
+  --md-default-fg-color--lighter: rgba(255, 255, 255, 0.45);
+  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.12);
+  --md-typeset-color: rgba(255, 255, 255, 0.9);
+  --md-typeset-a-color: var(--brand-primary-soft);
+  --md-accent-fg-color: #6fc2ba;
+  --md-code-bg-color: #1a1820;
+  --md-code-fg-color: #d4d4d4;
   --md-footer-bg-color: #121016;
-  --md-footer-bg-color--dark: #08070a;
-
-  --md-typeset-table-color: rgba(255, 255, 255, 0.12);
-  --md-typeset-table-color--light: rgba(255, 255, 255, 0.035);
-  --md-shadow-z1: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.3);
-  --md-shadow-z2: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.4);
-  --md-shadow-z3: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.5);
 }
-
-/* ---------------------------------------------------- header, like the site navbar */
 
 .md-header {
   box-shadow: none;
   border-bottom: 1px solid var(--md-default-fg-color--lightest);
 }
-.md-header__topic:first-child {
-  font-weight: 600;
-}
-[data-md-color-scheme="treehawk-light"] .md-search__form {
-  background-color: var(--brand-light-bg);
-}
-[data-md-color-scheme="treehawk-light"] .md-search__form:hover {
-  background-color: var(--brand-light-line);
-}
-[data-md-color-scheme="treehawk-light"] .md-search__input::placeholder,
-[data-md-color-scheme="treehawk-light"] .md-search__icon {
-  color: var(--brand-gray-500);
-}
 
-/* ---------------------------------------------------------- typography */
-
-.md-typeset {
-  font-weight: 400;
-  line-height: 1.75;
-}
 .md-typeset h1,
 .md-typeset h2,
 .md-typeset h3 {
   font-weight: 700;
-  line-height: 1.3;
   color: var(--brand-primary);
-}
-.md-typeset h1 {
-  letter-spacing: -0.01em;
-}
-.md-typeset h4,
-.md-typeset h5,
-.md-typeset h6 {
-  font-weight: 700;
-  color: var(--md-default-fg-color);
 }
 [data-md-color-scheme="treehawk-dark"] .md-typeset h1,
 [data-md-color-scheme="treehawk-dark"] .md-typeset h2,
 [data-md-color-scheme="treehawk-dark"] .md-typeset h3 {
-  color: var(--brand-purple-soft);
+  color: var(--brand-primary-soft);
 }
 
-.md-typeset a {
-  font-weight: 600;
-}
-.md-typeset a:hover {
-  text-decoration: underline;
-}
-.md-typeset .md-button:hover,
-.md-typeset .toclink:hover,
-.md-typeset .headerlink:hover {
-  text-decoration: none;
-}
-
-/* ----------------------------------------------------- code, One Dark */
-
-.md-typeset pre > code,
-.md-typeset .highlight code {
-  --md-code-fg-color: var(--brand-code-fg);
-  --md-code-hl-comment-color: #5c6370;
-  --md-code-hl-punctuation-color: #56b6c2;
-  --md-code-hl-generic-color: #e06c75;
-  --md-code-hl-variable-color: #e06c75;
-  --md-code-hl-string-color: #98c379;
-  --md-code-hl-keyword-color: #c678dd;
-  --md-code-hl-operator-color: #56b6c2;
-  --md-code-hl-number-color: #d19a66;
-  --md-code-hl-special-color: #d19a66;
-  --md-code-hl-function-color: #61afef;
-  --md-code-hl-constant-color: #d19a66;
-  --md-code-hl-name-color: var(--brand-code-fg);
-}
+/* Code blocks in One Dark, as on the brand site. */
 .md-typeset pre > code {
-  background-color: var(--brand-code-bg);
-  color: var(--brand-code-fg);
-  border-radius: 0.6rem;
-}
-.md-typeset .highlight .c,
-.md-typeset .highlight .c1,
-.md-typeset .highlight .cm {
-  font-style: italic;
-}
-.md-typeset .highlight .k,
-.md-typeset .highlight .kd,
-.md-typeset .highlight .kn {
-  font-weight: 600;
-}
-.md-typeset .highlight .md-clipboard {
-  color: var(--brand-gray-400);
-}
-.md-typeset .highlight .md-clipboard:hover {
-  color: var(--brand-white);
-}
-.md-typeset .highlight span.filename {
-  border-radius: 0.6rem 0.6rem 0 0;
-  background-color: #21252b;
-  color: var(--brand-code-fg);
-  font-weight: 500;
-}
-.md-typeset .highlight span.filename + pre > code {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-}
-.md-typeset :not(pre) > code {
-  border-radius: 0.3rem;
-  padding: 0.1em 0.35em;
-}
-[data-md-color-scheme="treehawk-light"] .md-typeset :not(pre) > code {
-  background-color: rgba(200, 200, 200, 0.3);
-}
-.md-typeset .highlight .gp,
-.md-typeset .highlight .go {
-  user-select: none;
+  --md-code-fg-color: #d4d4d4;
+  --md-code-hl-comment-color: #5c6370;
+  --md-code-hl-keyword-color: #c678dd;
+  --md-code-hl-string-color: #98c379;
+  --md-code-hl-function-color: #61afef;
+  --md-code-hl-number-color: #d19a66;
+  --md-code-hl-constant-color: #d19a66;
+  --md-code-hl-operator-color: #56b6c2;
+  --md-code-hl-punctuation-color: #56b6c2;
+  --md-code-hl-variable-color: #e06c75;
+  --md-code-hl-name-color: #d4d4d4;
+  background-color: #282c34;
+  border-radius: 0.5rem;
 }
 
-/* --------------------------------------------------------- admonitions */
-
-.md-typeset .admonition,
-.md-typeset details {
-  border-radius: 0.75rem;
-  border-width: 0 0 0 0.25rem;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-  font-size: 0.72rem;
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .admonition,
-[data-md-color-scheme="treehawk-dark"] .md-typeset details {
-  background-color: #16141c;
-}
-.md-typeset .admonition.tip,
-.md-typeset .admonition.example {
-  border-color: var(--brand-green);
-}
-.md-typeset .tip > .admonition-title,
-.md-typeset .example > .admonition-title {
-  background-color: rgba(var(--brand-green-rgb), 0.12);
-}
-.md-typeset .tip > .admonition-title::before,
-.md-typeset .example > .admonition-title::before {
-  background-color: var(--brand-green);
-}
-.md-typeset .admonition.note,
-.md-typeset .admonition.info {
-  border-color: var(--brand-primary);
-}
-.md-typeset .note > .admonition-title,
-.md-typeset .info > .admonition-title {
-  background-color: rgba(var(--brand-primary-rgb), 0.08);
-}
-.md-typeset .note > .admonition-title::before,
-.md-typeset .info > .admonition-title::before {
-  background-color: var(--brand-primary);
-}
-
-/* ------------------------------------------------------------- buttons */
-
+/* Pill buttons. */
 .md-typeset .md-button {
-  margin: 0.25rem 0.5rem 0.25rem 0;
-  padding: 0.5em 1.4em;
   border: 2px solid var(--brand-primary);
   border-radius: 40px;
   color: var(--brand-primary);
   font-weight: 600;
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
-.md-typeset .md-button:hover,
-.md-typeset .md-button:focus {
+.md-typeset .md-button--primary,
+.md-typeset .md-button:hover {
   background-color: var(--brand-primary);
   border-color: var(--brand-primary);
-  color: var(--brand-white);
-}
-.md-typeset .md-button--primary {
-  background-color: var(--brand-primary);
-  color: var(--brand-white);
-}
-.md-typeset .md-button--primary:hover,
-.md-typeset .md-button--primary:focus {
-  background-color: var(--brand-white);
-  color: var(--brand-primary);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .md-button {
-  border-color: var(--brand-purple-soft);
-  color: var(--brand-purple-soft);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .md-button--primary,
-[data-md-color-scheme="treehawk-dark"] .md-typeset .md-button:hover {
-  background-color: var(--brand-purple-soft);
-  color: var(--brand-ink);
+  color: #ffffff;
 }
 
-/* --------------------------------------------- theme-matched diagram images */
-
+/* Each diagram ships a light and a dark export. */
 [data-md-color-scheme="treehawk-light"] img[src$="#only-dark"],
 [data-md-color-scheme="treehawk-dark"] img[src$="#only-light"] {
   display: none;
 }
 
-/* ------------------------------------------- tables and navigation (uv style) */
-
-.md-typeset__table {
-  min-width: 100%;
-}
-.md-typeset table:not([class]) {
-  display: table;
-  border-radius: 0.75rem;
-  overflow: hidden;
-}
-.md-typeset table:not([class]) th {
-  background-color: var(--md-accent-fg-color--transparent);
-  font-weight: 600;
-}
-
-.md-nav--primary .md-nav__title {
-  box-shadow: none;
-}
-
-@media screen and (min-width: 76.25em) {
-  .md-nav__title {
-    display: none;
-  }
-  .md-main {
-    min-height: 100vh;
-  }
-  .md-nav--primary .md-nav {
-    font-size: 0.75rem;
-  }
-  .md-nav__item--section > .md-nav__link {
-    font-weight: 600;
-    font-size: 0.8rem;
-    color: var(--md-default-fg-color);
-  }
-  .md-nav--primary .md-nav__link {
-    margin: 0;
-  }
-  .md-nav--primary .md-nav__item {
-    margin-top: 0.35em;
-  }
-  .md-nav--primary .md-nav__item--section {
-    margin-bottom: 0.75em;
-    margin-top: 1em;
-  }
-  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
-    font-size: 0.85rem;
-    margin-bottom: 0.75em;
-  }
-}
-
-/* The active page gets the brand's dot, as in the site navbar. */
-.md-nav__link--active {
-  position: relative;
-  font-weight: 600;
-  color: var(--brand-primary);
-}
-[data-md-color-scheme="treehawk-dark"] .md-nav__link--active {
-  color: var(--brand-purple-soft);
-}
-.md-sidebar--primary .md-nav__link--active::before {
-  content: "";
-  position: absolute;
-  left: -0.7em;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: currentColor;
-  transform: translateY(-50%);
-}
-
-.toclink {
-  color: unset !important;
-}
-.toclink:hover {
-  color: var(--md-accent-fg-color) !important;
-}
-
-/* ------------------------------------------------ diagrams and screenshots */
-
-.md-typeset figure {
-  margin: 1.8em auto;
-  max-width: 100%;
-}
 .md-typeset figure img {
-  display: block;
-  margin: 0 auto;
-}
-.md-typeset figure figcaption {
-  max-width: 44rem;
-  margin-top: 0.8em;
-  color: var(--md-default-fg-color--light);
-  font-style: normal;
-  font-size: 0.68rem;
-}
-.md-typeset figure.diagram {
-  padding: 1.2rem;
-  border-radius: 20px;
-  background-color: var(--md-default-bg-color);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset figure.diagram {
-  background-color: #121016;
-  box-shadow: 0 0 0 1px var(--md-default-fg-color--lightest);
-}
-.md-typeset figure.diagram img {
-  width: 100%;
-  height: auto;
-}
-.md-typeset figure.terminal img,
-.md-typeset figure.page img {
-  border-radius: 15px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-}
-.md-typeset figure.page img {
-  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
 }
 
-/* PDF page gallery. */
-.th-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 1.4rem;
-}
-.th-gallery figure {
-  margin: 0;
-}
-
-/* ---------------------------------------------- home hero, like the page hero */
-
-.th-hero {
-  position: relative;
-  overflow: hidden;
-  margin: 0 0 2rem;
-  padding: 2.2rem 2rem 2rem;
+/* Home page hero, after the brand's page hero. */
+.hero {
+  padding: 1.5rem 1.8rem;
+  margin-bottom: 1.5rem;
   border-radius: 20px;
   background:
-    radial-gradient(circle at 10% 20%, rgba(var(--brand-primary-rgb), 0.09), transparent 42%),
-    radial-gradient(circle at 85% 35%, rgba(var(--brand-green-rgb), 0.11), transparent 40%),
+    radial-gradient(circle at 10% 20%, rgba(69, 49, 204, 0.09), transparent 42%),
+    radial-gradient(circle at 85% 35%, rgba(68, 136, 130, 0.11), transparent 40%),
     var(--brand-cream);
-}
-.th-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(var(--brand-primary-rgb), 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.045) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 60% 80% at 80% 50%, black 30%, transparent 80%);
-}
-.th-hero > * {
-  position: relative;
-}
-[data-md-color-scheme="treehawk-dark"] .th-hero {
-  background:
-    radial-gradient(circle at 10% 20%, rgba(var(--brand-primary-rgb), 0.35), transparent 45%),
-    radial-gradient(circle at 85% 35%, rgba(var(--brand-green-rgb), 0.25), transparent 40%),
-    #16141c;
-}
-.md-typeset .th-hero h1 {
-  margin: 0.2rem 0 0.4rem;
-  font-family: "Otomanopee One", var(--md-text-font-family);
-  font-weight: 400;
-  font-size: clamp(2.2rem, 6vw, 3.4rem);
-  letter-spacing: 0;
   color: var(--brand-ink);
 }
-.md-typeset .th-hero h1 span {
+.md-typeset .hero h1 {
+  margin: 0.3rem 0;
+  font-family: "Otomanopee One", sans-serif;
+  font-weight: 400;
+  color: var(--brand-ink);
+}
+.md-typeset .hero h1 span {
   color: var(--brand-primary);
 }
-[data-md-color-scheme="treehawk-dark"] .md-typeset .th-hero h1 {
-  color: var(--brand-white);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .th-hero h1 span {
-  color: var(--brand-purple-soft);
-}
-.th-hero__logo {
-  width: 3.6rem;
-  height: auto;
-}
-.md-typeset .th-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.6rem;
-  padding: 0.25rem 0.8rem;
-  border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
-  color: var(--brand-primary);
-  font-size: 0.64rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-.md-typeset .th-kicker::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--brand-primary);
-  opacity: 0.7;
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .th-kicker {
-  background: rgba(12, 12, 12, 0.5);
-  color: var(--brand-purple-soft);
-}
-.md-typeset .th-hero__tagline {
-  max-width: 36rem;
-  margin: 0 0 1.2rem;
-  font-size: 0.95rem;
-  line-height: 1.7;
-  color: rgba(12, 12, 12, 0.8);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .th-hero__tagline {
-  color: rgba(255, 255, 255, 0.82);
-}
-
-/* The page's own h1 is replaced by the hero on the home page. */
-.md-typeset .th-home-title {
-  display: none;
-}
-
-/* -------------------------------------------------------------- cards */
-
-.th-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 1rem;
-  margin: 1.4em 0;
-}
-.th-card {
-  padding: 1rem 1.1rem 0.8rem;
-  border-radius: 20px;
-  background-color: var(--md-default-bg-color);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-.th-card:hover {
-  transform: translateY(-5px);
-}
-[data-md-color-scheme="treehawk-dark"] .th-card {
-  background-color: #16141c;
-  box-shadow: 0 0 0 1px var(--md-default-fg-color--lightest);
-}
-.th-card p {
-  margin: 0.3em 0 0;
-  font-size: 0.72rem;
-}
-.md-typeset .th-card strong:first-child {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--brand-primary);
-}
-[data-md-color-scheme="treehawk-dark"] .md-typeset .th-card strong:first-child {
-  color: var(--brand-purple-soft);
-}
-
-/* --------------------------------- process chips: treehawk's own palette */
-
-.th-chip {
-  display: inline-block;
-  width: 0.7em;
-  height: 0.7em;
-  margin-right: 0.3em;
-  border-radius: 0.15em;
-  vertical-align: baseline;
-}
-.th-chip--matched {
-  background: #2a78d6;
-}
-.th-chip--child {
-  background: #eb6834;
-}
-.th-chip--detached {
-  background: #1baf7a;
+.hero img {
+  width: 3rem;
 }

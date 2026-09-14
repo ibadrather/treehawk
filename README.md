@@ -9,9 +9,12 @@
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 [![Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-ibadrather.github.io%2Ftreehawk-4531cc)](https://ibadrather.github.io/treehawk/)
 
 Log the CPU and RAM a process uses — **and every process it spawns**, including
 children that daemonize and detach themselves.
+
+**Documentation: <https://ibadrather.github.io/treehawk/>**
 
 Point it at something already running, by keyword or by the exact command line:
 
@@ -75,6 +78,11 @@ parent exits. The survivor is re-parented to PID 1 (or to a subreaper such as
 link left to follow, and a naive monitor reports that the workload finished
 while it is still burning a core.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/daemonize.dark.svg">
+  <img alt="How a daemonized child escapes a parent-child walk, and how treehawk keeps it" src="docs/assets/diagrams/daemonize.light.svg">
+</picture>
+
 treehawk keeps membership by four independent rules and *never evicts* a
 process once admitted — it stays tracked until that exact process exits, no
 matter what its parent becomes:
@@ -86,7 +94,8 @@ matter what its parent becomes:
 | `session` | children re-parented away that kept the session |
 | `orphan` | a process that appeared during the watch, lost its parent, and sits in a tracked process' cgroup |
 
-Choose them with `--expand tree,cgroup,orphan` (all four are on by default).
+Choose them with `--expand tree --expand cgroup --expand orphan` (all four are on
+by default).
 
 The `orphan` rule is the one that closes the daemonization gap in attach mode.
 It recognises re-parenting by noticing that the adopting reaper lives in a
@@ -209,6 +218,11 @@ marked on the CPU chart.
   or a longer interval for a run measured in days.
 
 ## Design
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/architecture.dark.svg">
+  <img alt="Layers: cli wires platforms and sinks into the core monitor" src="docs/assets/diagrams/architecture.light.svg">
+</picture>
 
 ```
 core/         platform-agnostic policy - models, interfaces, membership, sampling

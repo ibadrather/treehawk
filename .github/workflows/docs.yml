@@ -1,46 +1,34 @@
 name: Docs
 
-# Build the documentation on every push and pull request, so a broken link or a
-# page missing from the navigation fails before merge. Pushes to main also
-# publish the site to GitHub Pages.
+# Build the docs on pull requests; build and publish to GitHub Pages from main.
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    name: Build (mkdocs --strict)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - uses: astral-sh/setup-uv@v10.1.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: docs/requirements.txt
-          cache-suffix: ${{ github.workflow }}-docs
 
-      - name: Build the site
-        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict
+      - name: Build
+        run: uvx --with mkdocs-material==9.7.7 mkdocs build --strict
 
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site/
 
   deploy:
-    name: Publish to GitHub Pages
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -48,9 +36,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5

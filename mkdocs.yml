@@ -1,39 +1,22 @@
 site_name: treehawk
 site_description: Log the CPU and RAM of a process and every process it spawns, including ones that detach.
-site_author: Ibad Rather
 site_url: https://ibadrather.github.io/treehawk/
 repo_url: https://github.com/ibadrather/treehawk
-repo_name: treehawk
+repo_name: ibadrather/treehawk
 edit_uri: edit/main/docs/
-copyright: MIT licensed
 
 theme:
   name: material
   logo: assets/brand/logo.svg
   favicon: assets/brand/logo.svg
-  # Fonts are the brand's (Poppins, Fira Code, Otomanopee One), loaded by
-  # stylesheets/extra.css, so Material must not load its own.
-  font: false
-  icon:
-    repo: fontawesome/brands/github
+  font: false # brand fonts are loaded by stylesheets/extra.css
   features:
     - navigation.instant
-    - navigation.instant.prefetch
     - navigation.tracking
-    - navigation.path
     - navigation.top
-    - navigation.footer
-    - content.code.annotate
     - content.code.copy
-    - content.tabs.link
-    - search.suggest
-    - search.highlight
     - toc.follow
   palette:
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: treehawk-light
       toggle:
@@ -43,96 +26,28 @@ theme:
       scheme: treehawk-dark
       toggle:
         icon: material/brightness-4
-        name: Switch to system preference
+        name: Switch to light mode
 
 extra_css:
   - stylesheets/extra.css
 
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/ibadrather/treehawk
-
 markdown_extensions:
   - admonition
   - attr_list
-  - def_list
-  - footnotes
   - md_in_html
   - tables
   - toc:
-      anchorlink: true
-      anchorlink_class: toclink
-  - pymdownx.details
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - pymdownx.highlight:
-      anchor_linenums: true
+      permalink: true
+  - pymdownx.highlight
   - pymdownx.inlinehilite
-  - pymdownx.keys
-  - pymdownx.snippets
   - pymdownx.superfences
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.tasklist:
-      custom_checkbox: true
-
-plugins:
-  - search
-  - mkdocstrings:
-      handlers:
-        python:
-          paths: [src]
-          options:
-            docstring_style: sphinx
-            heading_level: 3
-            members_order: source
-            merge_init_into_class: true
-            separate_signature: true
-            show_root_heading: true
-            show_root_full_path: false
-            show_signature_annotations: true
-            show_source: false
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
-            signature_crossrefs: true
-
-validation:
-  omitted_files: warn
-  absolute_links: warn
-  unrecognized_links: warn
-  anchors: warn
-
-not_in_nav: |
-  /scripts/
 
 exclude_docs: |
   /scripts/
-  requirements.*
 
 nav:
   - Introduction: index.md
-  - Getting started:
-      - Installation: getting-started/installation.md
-      - First steps: getting-started/first-steps.md
-  - Guides:
-      - Watching a running process: guides/watch.md
-      - Starting a command: guides/run.md
-      - Reading a log: guides/reading-logs.md
-      - The PDF report: guides/pdf-report.md
-      - Scripts, CI and long watches: guides/automation.md
-  - Concepts:
-      - Membership: concepts/membership.md
-      - run and watch: concepts/run-vs-watch.md
-      - Memory numbers: concepts/memory.md
-      - The sampling loop: concepts/sampling.md
-  - Reference:
-      - Commands: reference/cli.md
-      - Log format: reference/log-format.md
-      - Python API: reference/api.md
-      - Limitations: reference/limitations.md
-  - Development:
-      - Architecture: development/architecture.md
-      - Extending treehawk: development/extending.md
-      - Contributing: development/contributing.md
+  - Usage: usage.md
+  - How it works: how-it-works.md
+  - Output: output.md
+  - Development: development.md
