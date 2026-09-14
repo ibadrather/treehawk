@@ -6,6 +6,8 @@ mean, what a mistake says - not the monitoring behaviour underneath.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from conftest import write_log
 from typer.testing import CliRunner
@@ -13,6 +15,14 @@ from typer.testing import CliRunner
 from treehawk.cli import app
 
 runner = CliRunner()
+
+# Typer forces a terminal under CI (GITHUB_ACTIONS, FORCE_COLOR), and Rich then
+# styles "--interval" as two spans, so help text is compared with styling gone.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(text: str) -> str:
+    return ANSI_ESCAPE.sub("", text)
 
 
 def test_version_is_reported():
@@ -31,10 +41,11 @@ def test_the_everyday_options_are_the_short_list(command):
     """Anything rarely needed lives under Advanced, so --help stays readable."""
     result = runner.invoke(app, [command, "--help"])
     assert result.exit_code == 0
-    head = result.stdout.split("Advanced")[0]
+    text = plain(result.stdout)
+    head = text.split("Advanced")[0]
     for flag in ("--interval", "--output", "--csv", "--quiet"):
         assert flag in head
-    assert "Advanced" in result.stdout
+    assert "Advanced" in text
 
 
 def test_watch_without_a_target_says_what_to_give():
