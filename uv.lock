@@ -1494,6 +1494,7 @@ dev = [
     { name = "pypdf" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.metadata]
@@ -1510,6 +1511,7 @@ dev = [
     { name = "pypdf", specifier = ">=6.18.1" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.16.7" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2" },
 ]
 
 [[package]]

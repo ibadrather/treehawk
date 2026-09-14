@@ -8,11 +8,21 @@ no chartjunk.
 
 from __future__ import annotations
 
-from typing import Final
+import sys
+from typing import TYPE_CHECKING, Final
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.typing import RcKeyType
+
+if TYPE_CHECKING:
+    # matplotlib 3.11 (Python 3.11+) types rc keys as a Literal; 3.10, the last
+    # release for Python 3.10, types them as plain str and has no RcKeyType.
+    if sys.version_info >= (3, 11):
+        from matplotlib.typing import RcKeyType
+    else:
+        from typing import TypeAlias
+
+        RcKeyType: TypeAlias = str
 
 from treehawk.core.humanize import format_bytes
 from treehawk.ui.theme import PRINT, Palette

@@ -16,8 +16,12 @@ import pathlib
 import subprocess
 import sys
 
-import tomllib
 from packaging.version import InvalidVersion, Version
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 PACKAGE_PATHS = ("src/", "pyproject.toml")
 NULL_SHA = "0" * 40

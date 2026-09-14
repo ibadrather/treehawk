@@ -84,6 +84,7 @@ dev = [
     "pypdf>=6.18.1",
     "pytest>=8",
     "ruff>=0.16.7",
+    "tomli>=2 ; python_full_version < '3.11'",
 ]
 
 [tool.pytest.ini_options]

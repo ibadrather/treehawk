@@ -26,9 +26,11 @@ else:
         the real one - records and CLI messages rely on that.
         """
 
+        @override
         def __str__(self) -> str:
             return str(self.value)
 
+        @override
         def __format__(self, format_spec: str) -> str:
             return str(self.value).__format__(format_spec)
 
