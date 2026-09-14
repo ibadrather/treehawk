@@ -1,4 +1,4 @@
-"""Starting a workload under treehawk.
+"""Starting a workload under treehawk, on Linux.
 
 Launching, rather than attaching, removes the two weaknesses of polling:
 
@@ -7,77 +7,32 @@ Launching, rather than attaching, removes the two weaknesses of polling:
   double-forks and is re-parented to PID 1 - is accounted for by the kernel
   rather than inferred by us.
 
-Two interchangeable implementations of ``ProcessLauncher`` are provided, plus a
-composite that prefers the isolating one and degrades cleanly when systemd is
-not usable (no user bus, a container, a non-systemd distribution).
+Only the isolating launcher is Linux-specific and lives here; the plain
+session-based one is shared from :mod:`treehawk.platforms.posix`. The composite
+prefers isolation and degrades cleanly when systemd is not usable (no user bus,
+a container, a non-systemd distribution).
 """
 
 from __future__ import annotations
 
-import contextlib
 import os
 import pathlib
 import shutil
-import signal
 import subprocess
 import time
 from typing import Final
 
-from treehawk.core.compat import override
 from treehawk.core.errors import LaunchFailed
-from treehawk.core.interfaces import ProcessLauncher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 from treehawk.platforms.linux.procfs import parse_cgroup
+from treehawk.platforms.posix import DirectLauncher, FallbackLauncher, SubprocessWorkload
 
 _RESOLVE_TIMEOUT: Final = 3.0
 
 
-class SubprocessWorkload(LaunchedWorkload):
-    """A workload started with :mod:`subprocess`, signalled by process group.
-
-    ``start_new_session=True`` puts it in its own group, so one ``killpg``
-    reaches the whole workload rather than just the process we happen to hold.
-    """
-
-    def __init__(
-        self,
-        *,
-        process: subprocess.Popen[bytes],
-        argv: list[str],
-        group_path: str | None = None,
-    ) -> None:
-        super().__init__(pid=process.pid, argv=list(argv), group_path=group_path)
-        self._process = process
-
-    @override
-    def poll(self) -> int | None:
-        return self._process.poll()
-
-    @override
-    def signal(self, signum: int = signal.SIGTERM) -> None:
-        with contextlib.suppress(ProcessLookupError, PermissionError):  # already gone, or no longer ours to signal
-            os.killpg(os.getpgid(self._process.pid), signum)
-
-
-class DirectLauncher:
-    """Start the command in its own session, tracked by /proc alone.
-
-    ``start_new_session=True`` gives the workload its own session and process
-    group, which both keeps terminal signals from reaching it behind our back
-    and gives the session expansion strategy something stable to follow.
-    """
-
-    @property
-    def name(self) -> str:
-        return "direct"
-
-    def available(self) -> bool:
-        return True
-
-    def launch(self, argv: list[str]) -> LaunchedWorkload:
-        process = subprocess.Popen(argv, start_new_session=True)
-        return SubprocessWorkload(process=process, argv=argv)
+class ScopeUnavailable(LaunchFailed):
+    """systemd-run is present but could not give us an accounting boundary."""
 
 
 class ScopeLauncher:
@@ -131,50 +86,6 @@ class ScopeLauncher:
                 return None  # systemd-run itself failed; nothing to salvage
             time.sleep(0.02)
         return None
-
-
-class ScopeUnavailable(LaunchFailed):
-    """systemd-run is present but could not give us an accounting boundary."""
-
-
-class FallbackLauncher:
-    """Try each launcher in order; the first that works wins.
-
-    Composite over ``ProcessLauncher``, so callers still see a single launcher.
-    """
-
-    @property
-    def name(self) -> str:
-        return "fallback"
-
-    def available(self) -> bool:
-        return any(launcher.available() for launcher in self._launchers)
-
-    def __init__(self, launchers: list[ProcessLauncher]) -> None:
-        self._launchers = launchers
-        self.notes: list[str] = []
-        self.used: str | None = None
-
-    def launch(self, argv: list[str]) -> LaunchedWorkload:
-        errors: list[str] = []
-        for launcher in self._launchers:
-            if not launcher.available():
-                errors.append(f"{launcher.name}: unavailable")
-                continue
-            try:
-                workload = launcher.launch(argv)
-            except (OSError, ScopeUnavailable) as exc:
-                errors.append(f"{launcher.name}: {exc}")
-                continue
-            self.used = launcher.name
-            if not workload.isolated:
-                self.notes.append(
-                    "no cgroup boundary: membership is inferred from /proc, so a "
-                    "process that both detaches and changes cgroup could be missed"
-                )
-            self.notes.extend(errors)
-            return workload
-        raise LaunchFailed("could not start the workload: " + "; ".join(errors))
 
 
 def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:

@@ -327,7 +327,7 @@ def _select_launcher(platform: Platform, *, isolation: Isolation) -> ProcessLaun
         raise ConfigError("this platform cannot start processes")
     if isolation is Isolation.CGROUP:
         return platform.launcher
-    from treehawk.platforms.linux.launcher import DirectLauncher, FallbackLauncher
+    from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
 
     return FallbackLauncher([DirectLauncher()])
 
