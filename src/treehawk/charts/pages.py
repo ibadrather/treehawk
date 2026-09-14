@@ -29,6 +29,7 @@ from treehawk.core.humanize import (
     format_seconds,
     truncate,
 )
+from treehawk.core.records import memory_measure, peak_memory_reading
 from treehawk.core.values import as_float, as_mapping, as_sequence
 from treehawk.ui.theme import DISCOVERY_ORDER, PRINT, Palette
 
@@ -83,7 +84,7 @@ class OverviewPage(Page):
         headline = [
             ("peak cpu", format_percent(as_float(summary.get("peak_cpu_percent")))),
             ("cpu time", format_seconds(as_float(summary.get("cpu_seconds_used")))),
-            ("peak memory", format_bytes(_peak_memory(summary))),
+            ("peak memory", format_bytes(peak_memory_reading(summary=summary, header=series.header).value)),
             ("duration", format_seconds(series.duration)),
             ("processes", str(summary.get("total_procs_seen") or len(series.tracks))),
         ]
@@ -99,6 +100,7 @@ class OverviewPage(Page):
 
     def _run_facts(self, fig: Figure, *, series: RunSeries, palette: Palette) -> None:
         header, summary = series.header, series.summary
+        measure = memory_measure(header)
         host = as_mapping(header.get("host"))
         boundary = header.get("group_path")
         rows = [
@@ -117,11 +119,11 @@ class OverviewPage(Page):
                     f"{format_bytes(as_float(host.get('mem_total_bytes')))} ram"
                 ),
             ),
-            ("boundary", str(boundary).rsplit("/", 1)[-1] if boundary else "none - membership inferred from /proc"),
+            ("boundary", str(boundary).rsplit("/", 1)[-1] if boundary else "none - membership inferred"),
             ("peak concurrent", str(summary.get("peak_n_procs", "?"))),
             ("mean cpu", format_percent(as_float(summary.get("mean_cpu_percent")))),
             (
-                "peak rss / pss",
+                f"peak rss / {measure.short}",
                 (
                     f"{format_bytes(as_float(summary.get('peak_rss_bytes')))} / "
                     f"{format_bytes(as_float(summary.get('peak_pss_bytes')))}"
@@ -266,19 +268,23 @@ class MemoryPage(Page):
     """How much memory, and which measure of it."""
 
     title = "Memory over time"
-    subtitle = (
-        "rss double-counts pages shared between children; pss divides them fairly; cgroup is the kernel's own figure"
-    )
+    subtitle = "rss double-counts pages shared between children; the group figure is the kernel's own"
 
     @override
     def draw(self, fig: Figure, *, series: RunSeries, palette: Palette = PRINT) -> bool:
-        style.draw_heading(fig, title=self.title, subtitle=self.subtitle, palette=palette)
+        # The middle measure differs by platform, so the subtitle is built from
+        # the log rather than fixed on the class.
+        measure = memory_measure(series.header)
+        subtitle = (
+            f"rss double-counts pages shared between children; {measure.blurb}; cgroup is the kernel's own figure"
+        )
+        style.draw_heading(fig, title=self.title, subtitle=subtitle, palette=palette)
         ax = fig.subplots()
         fig.subplots_adjust(left=0.10, right=0.95, top=0.84, bottom=0.12)
 
         drawn = 0
         for index, (label, values) in enumerate(
-            (("rss (summed)", series.rss), ("pss (shared-adjusted)", series.pss), ("cgroup", series.group_memory)),
+            (("rss (summed)", series.rss), (measure.long, series.pss), ("cgroup", series.group_memory)),
         ):
             if not any(value is not None for value in values):
                 continue
@@ -615,14 +621,3 @@ def _with_gaps(values: Sequence[float | int | None]) -> list[float]:
     would draw a line the data does not support.
     """
     return [float("nan") if value is None else float(value) for value in values]
-
-
-def _peak_memory(summary: RunSeries | dict[str, object]) -> float | None:
-    """The best whole-run memory figure, in the order we trust the measures."""
-    if not isinstance(summary, dict):
-        return None
-    for key in ("peak_group_memory_bytes", "peak_pss_bytes", "peak_rss_bytes"):
-        value = as_float(summary.get(key))
-        if value is not None:
-            return value
-    return None

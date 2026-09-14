@@ -206,14 +206,15 @@ def run(
         typer.Option(
             "--no-isolate",
             rich_help_panel=ADVANCED,
-            help="Do not create a cgroup for the workload; track it through /proc only.",
+            help="Do not ask for an accounting boundary; track the workload through the process table only.",
         ),
     ] = False,
 ) -> None:
     """Start a command and watch it, until it ends.
 
-    The command goes after [bold]--[/bold], and runs inside its own cgroup, so
-    every descendant is accounted for exactly - detached or not.
+    The command goes after [bold]--[/bold]. On Linux it runs inside its own
+    cgroup, so every descendant is accounted for exactly - detached or not;
+    elsewhere it gets its own session and membership is inferred.
 
     [dim]treehawk run -- python train.py --epochs 10[/dim]
     """

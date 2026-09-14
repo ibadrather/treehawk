@@ -18,6 +18,7 @@ from treehawk.core.interfaces import (
     ProcessSource,
 )
 from treehawk.core.models import HostInfo
+from treehawk.core.records import PSS
 
 __all__ = ["Platform", "UnsupportedPlatform", "build_linux", "get_platform"]
 
@@ -31,6 +32,12 @@ class Platform:
     host_source: HostInfoSource
     group_source: GroupMetricSource | None = None
     launcher: ProcessLauncher | None = None
+    memory_kind: str = PSS.key
+    """Which fair-memory measure this platform's ``ProcessSource`` reports.
+
+    Every platform fills ``ProcSample.pss_bytes``, but not with the same
+    measure, so the name travels with the value into the log header.
+    """
     notes: list[str] = field(default_factory=list)
 
     def host_info(self) -> HostInfo:

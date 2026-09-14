@@ -44,11 +44,19 @@ class ProcessSource(Protocol):
         ...
 
     def read_group_path(self, pid: int) -> str | None:
-        """Return the process' group boundary path (cgroup), if any."""
+        """Return the process' group boundary path, if the OS has one.
+
+        A cgroup on Linux, a coalition on macOS: whatever a forked child
+        cannot leave by accident.
+        """
         ...
 
     def enrich(self, *, info: ProcInfo, memory: MemoryDetail) -> ProcSample:
-        """Add the costlier fields (command line, PSS, swap, group) to ``info``."""
+        """Add the costlier fields (command line, fair memory, swap, group).
+
+        Which measure ``ProcSample.pss_bytes`` carries is the platform's
+        choice; it is named in the log header (see ``MemoryMeasure``).
+        """
         ...
 
     def forget(self, identity: Identity) -> None:
@@ -58,7 +66,12 @@ class ProcessSource(Protocol):
 
 @runtime_checkable
 class GroupMetricSource(Protocol):
-    """Reads kernel-side aggregates for a process group boundary (cgroup)."""
+    """Reads a process group boundary: its membership, and any kernel totals.
+
+    ``metrics`` may return None on a platform that has a boundary but exposes
+    no aggregate for it - macOS coalitions are one. Membership is still worth
+    having on its own: it is what the orphan rule follows.
+    """
 
     def pids_in(self, path: str) -> set[int] | None:
         """PIDs in ``path`` and all of its descendants, or None if unreadable."""

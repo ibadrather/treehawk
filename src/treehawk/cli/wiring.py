@@ -82,6 +82,7 @@ def build_session(
         mode=mode,
         matcher=matcher.describe(),
         argv=argv,
+        memory_kind=platform.memory_kind,
         notes=notes,
     )
     return Session(monitor=monitor, tracker=tracker, platform=platform)

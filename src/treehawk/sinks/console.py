@@ -17,7 +17,7 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import target_of
+from treehawk.core.records import PSS, MemoryMeasure, memory_measure, memory_reading, target_of
 from treehawk.core.values import as_float, as_records, as_sequence
 from treehawk.sinks.base import BaseSink
 
@@ -28,9 +28,15 @@ class ConsoleSink(BaseSink):
     def __init__(self, stream: IO[str] | None = None, *, show_procs: int = 0) -> None:
         self._stream: IO[str] = stream or sys.stderr
         self._show_procs = show_procs
+        # sample() and close() never see the header, so the measure it names is
+        # remembered here when the run opens.
+        self._header: Record = {}
+        self._measure: MemoryMeasure = PSS
 
     @override
     def open(self, header: Record) -> None:
+        self._header = header
+        self._measure = memory_measure(header)
         self._write_line(
             f"treehawk {header.get('treehawk_version')} "
             f"| mode={header.get('mode')} "
@@ -45,15 +51,13 @@ class ConsoleSink(BaseSink):
 
     @override
     def sample(self, record: Record) -> None:
-        group_memory = record.get("group_memory_bytes")
-        memory = group_memory if group_memory is not None else record.get("pss_bytes")
-        label = "cg" if group_memory is not None else "pss"
+        reading = memory_reading(record=record, header=self._header)
         elapsed = as_float(record.get("t")) or 0.0
         self._write_line(
             f"[{elapsed:>8.2f}s] procs={record.get('n_procs'):<4} "
             f"cpu={format_percent(as_float(record.get('cpu_percent'))):>8} "
             f"rss={format_bytes(as_float(record.get('rss_bytes'))):>9} "
-            f"{label}={format_bytes(as_float(memory)):>9} "
+            f"{reading.label}={format_bytes(reading.value):>9} "
             f"cpu_time={format_seconds(as_float(record.get('cpu_seconds_used')))}"
             + (" OVERRUN" if record.get("overrun") else "")
         )
@@ -83,14 +87,15 @@ class ConsoleSink(BaseSink):
         self._write_line(
             f"memory: "
             f"peak_rss={format_bytes(as_float(summary.get('peak_rss_bytes')))} "
-            f"peak_pss={format_bytes(as_float(summary.get('peak_pss_bytes')))} "
+            f"peak_{self._measure.short}={format_bytes(as_float(summary.get('peak_pss_bytes')))} "
             f"peak_cgroup="
             f"{format_bytes(as_float(summary.get('peak_group_memory_bytes')))}"
         )
         if summary.get("overruns"):
             self._write_line(
                 f"warning: {summary['overruns']} sample(s) took longer than the "
-                "interval - consider a larger --interval or --no-pss"
+                "interval - consider a larger --interval, or --no-pss to skip "
+                f"the {self._measure.long} read"
             )
 
     def _write_line(self, text: str) -> None:

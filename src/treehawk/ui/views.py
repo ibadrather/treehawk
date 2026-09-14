@@ -21,7 +21,7 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import target_of
+from treehawk.core.records import memory_measure, target_of
 from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
 from treehawk.ui.theme import Palette, discovery_color
 
@@ -125,7 +125,7 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
                 f"bold {palette.slot(2)}",
             ),
             (
-                f"  {format_bytes(as_float(summary.get('peak_pss_bytes')))} peak pss",
+                f"  {format_bytes(as_float(summary.get('peak_pss_bytes')))} peak {memory_measure(header).short}",
                 palette.text_secondary,
             ),
             (

@@ -23,7 +23,7 @@ from treehawk.core.interfaces import (
     Sink,
 )
 from treehawk.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
-from treehawk.core.records import header_record, sample_record, summary_record
+from treehawk.core.records import PSS, header_record, sample_record, summary_record
 from treehawk.core.tracker import RefreshResult, Tracker
 
 __all__ = ["Monitor", "WorkloadNotFound"]
@@ -47,6 +47,7 @@ class Monitor:
         mode: str = "watch",
         matcher: Record | None = None,
         argv: list[str] | None = None,
+        memory_kind: str = PSS.key,
         notes: Iterable[str] = (),
     ) -> None:
         self._source = source
@@ -61,6 +62,7 @@ class Monitor:
         self._mode = mode
         self._matcher = matcher
         self._argv = argv
+        self._memory_kind = memory_kind
         self._notes = list(notes)
         self._stop = False
         self._summaries = SummaryAccumulator(clk_tck=host.clk_tck, top_n=config.top_n)
@@ -84,6 +86,7 @@ class Monitor:
                 started_at=self._clock.now_iso(),
                 group_path=self._tracker.pinned_group,
                 argv=self._argv,
+                memory_kind=self._memory_kind,
                 notes=self._notes,
             )
         )
