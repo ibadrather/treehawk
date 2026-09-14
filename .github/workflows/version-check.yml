@@ -3,12 +3,22 @@ name: Version bump
 # A change to the package (src/ or pyproject.toml) must raise the version in
 # pyproject.toml. Pushes to main compare against the previous tip of main;
 # pull requests compare against their base branch. Changes to tests, docs or CI
-# alone need no bump.
+# alone need no bump, so the check only runs when the package could have changed.
 
 on:
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/scripts/check_version_bump.py"
+      - ".github/workflows/version-check.yml"
   pull_request:
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/scripts/check_version_bump.py"
+      - ".github/workflows/version-check.yml"
 
 permissions:
   contents: read

@@ -8,8 +8,7 @@ import pytest
 
 from treehawk.core.aggregate import Aggregator, SummaryAccumulator
 from treehawk.core.config import CpuSource
-from treehawk.core.models import GroupMetrics, HostInfo, Identity, ProcInfo, ProcSample, Snapshot
-from treehawk.core.tracker import RefreshResult
+from treehawk.core.models import GroupMetrics, HostInfo, Identity, ProcInfo, ProcSample, RefreshResult, Snapshot
 
 HOST = HostInfo(
     platform="linux",

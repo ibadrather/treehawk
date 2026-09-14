@@ -17,19 +17,17 @@ not read.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Final
 
 from treehawk.core.config import MemoryDetail
 from treehawk.core.models import Identity, ProcInfo, ProcSample
+from treehawk.platforms.darwin.constants import DARWIN
 from treehawk.platforms.darwin.libproc import (
     LibProc,
     ProcessTable,
-    Timebase,
     coalition_path,
     nanoseconds_from_mach,
 )
-
-_CMDLINE_CACHE_LIMIT: Final = 4096
+from treehawk.platforms.darwin.models import Timebase
 
 
 class DarwinProcessSource:
@@ -97,7 +95,7 @@ class DarwinProcessSource:
         if cached is not None:
             return cached
         cmdline = self._table.argv(info.pid) or info.comm
-        if len(self._cmdline_cache) >= _CMDLINE_CACHE_LIMIT:
+        if len(self._cmdline_cache) >= DARWIN.cmdline_cache_limit:
             self._cmdline_cache.clear()
         self._cmdline_cache[identity] = cmdline
         return cmdline

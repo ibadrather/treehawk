@@ -6,35 +6,8 @@ metric path can be unit-tested against captured fixtures.
 
 from __future__ import annotations
 
-from typing import TypedDict
-
-# Field numbers per proc(5), counted from 1. Everything after the comm field is
-# positional, and comm itself may contain spaces and parentheses - hence the
-# rsplit on ')' rather than a naive split.
-_STATE = 0  # field 3
-_PPID = 1  # field 4
-_PGRP = 2  # field 5
-_SESSION = 3  # field 6
-_UTIME = 11  # field 14
-_STIME = 12  # field 15
-_NUM_THREADS = 17  # field 20
-_STARTTIME = 19  # field 22
-_RSS_PAGES = 21  # field 24
-
-
-class StatFields(TypedDict):
-    """Exactly the fields :func:`parse_stat` extracts, mirroring ``ProcInfo``."""
-
-    pid: int
-    comm: str
-    state: str
-    ppid: int
-    pgid: int
-    sid: int
-    cpu_ticks: int
-    threads: int
-    starttime: int
-    rss_bytes: int
+from treehawk.platforms.linux.constants import STAT_LAYOUT
+from treehawk.platforms.linux.models import StatFields
 
 
 class ProcStatParseError(ValueError):
@@ -50,14 +23,14 @@ def parse_stat(text: str, *, page_size: int = 4096) -> StatFields:
         return {
             "pid": int(head),
             "comm": comm,
-            "state": fields[_STATE],
-            "ppid": int(fields[_PPID]),
-            "pgid": int(fields[_PGRP]),
-            "sid": int(fields[_SESSION]),
-            "cpu_ticks": int(fields[_UTIME]) + int(fields[_STIME]),
-            "threads": int(fields[_NUM_THREADS]),
-            "starttime": int(fields[_STARTTIME]),
-            "rss_bytes": int(fields[_RSS_PAGES]) * page_size,
+            "state": fields[STAT_LAYOUT.state],
+            "ppid": int(fields[STAT_LAYOUT.ppid]),
+            "pgid": int(fields[STAT_LAYOUT.pgrp]),
+            "sid": int(fields[STAT_LAYOUT.session]),
+            "cpu_ticks": int(fields[STAT_LAYOUT.utime]) + int(fields[STAT_LAYOUT.stime]),
+            "threads": int(fields[STAT_LAYOUT.num_threads]),
+            "starttime": int(fields[STAT_LAYOUT.starttime]),
+            "rss_bytes": int(fields[STAT_LAYOUT.rss_pages]) * page_size,
         }
     except (IndexError, ValueError) as exc:
         raise ProcStatParseError(f"malformed stat line: {text[:80]!r}") from exc

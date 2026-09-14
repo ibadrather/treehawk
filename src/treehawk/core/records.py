@@ -13,35 +13,14 @@ format, not of whichever view is asking.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from typing import Final
 
 from treehawk import SCHEMA_VERSION, __version__
-from treehawk.core.aggregate import RunSummary
 from treehawk.core.config import LogDetail, WatchConfig
 from treehawk.core.interfaces import Record
-from treehawk.core.models import HostInfo, Snapshot
+from treehawk.core.models import HostInfo, MemoryMeasure, MemoryReading, RunSummary, Snapshot
 from treehawk.core.values import as_int, as_sequence
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryMeasure:
-    """How one platform's fair-memory figure is named and explained.
-
-    Every platform can report resident memory, and summing it over a fork tree
-    over-counts every shared page. What each offers *instead* differs - Linux
-    has PSS, macOS has the kernel's phys_footprint - so the log records which
-    one it carries and the views read the names from here.
-    """
-
-    key: str
-    short: str
-    """Fits a narrow column and a one-line sample."""
-    long: str
-    """Names the measure in a chart legend or a summary line."""
-    blurb: str
-    """One clause saying what the measure means, for a chart subtitle."""
-
 
 PSS: Final = MemoryMeasure(
     key="pss",
@@ -58,14 +37,6 @@ PHYS_FOOTPRINT: Final = MemoryMeasure(
 )
 
 MEMORY_MEASURES: Final[Mapping[str, MemoryMeasure]] = {measure.key: measure for measure in (PSS, PHYS_FOOTPRINT)}
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryReading:
-    """The best memory figure in a record, and the name of the measure it is."""
-
-    value: int | None
-    label: str
 
 
 def memory_measure(header: Record) -> MemoryMeasure:

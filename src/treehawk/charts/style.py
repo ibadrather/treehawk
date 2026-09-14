@@ -9,7 +9,7 @@ no chartjunk.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -24,16 +24,10 @@ if TYPE_CHECKING:
 
         RcKeyType: TypeAlias = str
 
+from treehawk.charts.constants import CHARTS
 from treehawk.core.humanize import format_bytes
-from treehawk.ui.theme import PRINT, Palette
-
-PAGE_SIZE: Final = (11.69, 8.27)
-"""A4 landscape - charts are wider than they are tall."""
-
-LINE_WIDTH: Final = 2.0
-SURFACE_GAP: Final = 1.5
-"""Gap drawn between stacked bands, in the surface colour, so adjacent fills
-read as separate shapes rather than one blob."""
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import PRINT
 
 
 def rc_params(palette: Palette = PRINT) -> dict[RcKeyType, object]:
@@ -63,7 +57,7 @@ def rc_params(palette: Palette = PRINT) -> dict[RcKeyType, object]:
         "legend.frameon": False,
         "legend.fontsize": 8,
         "legend.labelcolor": palette.text_secondary,
-        "lines.linewidth": LINE_WIDTH,
+        "lines.linewidth": CHARTS.line_width,
         "lines.solid_capstyle": "round",
         "text.color": palette.text_primary,
         "font.size": 9,

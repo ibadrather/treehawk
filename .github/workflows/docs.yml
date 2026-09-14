@@ -1,11 +1,21 @@
 name: Docs
 
 # Build the docs on pull requests; build and publish to GitHub Pages from main.
+# Only when the docs themselves changed - a code-only change leaves the site as
+# it is. Run it by hand to republish anyway.
 
 on:
   push:
     branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
   pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:

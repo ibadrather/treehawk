@@ -45,6 +45,14 @@ change that fails any of them is not finished.
 Python 3.10 is the oldest supported version. Anything newer from the standard
 library needs a fallback in `src/treehawk/core/compat.py`.
 
+## Where things go inside a package
+
+- Dataclasses and TypedDicts live in the package's `models.py` (run settings
+  stay in `core/config.py`).
+- Named numbers and strings live in the package's `constants.py`, as fields of
+  a frozen dataclass exposed through one instance (`CORE`, `CHARTS`, `LINUX`,
+  ...), so a call site reads `CORE.prune_keep` rather than a bare number.
+
 ## Versioning
 
 Any change to `src/` or `pyproject.toml` must raise the version in

@@ -5,6 +5,7 @@ imported by ``core``; the CLI composes these views onto the data that ``core``
 produces, so the monitoring logic stays renderer-agnostic.
 """
 
-from treehawk.ui.theme import PALETTE, Palette
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import PALETTE
 
 __all__ = ["PALETTE", "Palette"]

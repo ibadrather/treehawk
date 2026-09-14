@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final
 
-BLOCKS: Final = "▁▂▃▄▅▆▇█"
+from treehawk.ui.constants import UI
 
 
 def sparkline(values: Sequence[float | None], *, width: int = 24) -> str:
@@ -22,9 +21,11 @@ def sparkline(values: Sequence[float | None], *, width: int = 24) -> str:
         return " " * len(recent)
     top = max(present)
     if top <= 0:
-        return BLOCKS[0] * len(recent)
-    scale = len(BLOCKS) - 1
-    return "".join(" " if value is None else BLOCKS[min(scale, int(value / top * scale))] for value in recent)
+        return UI.sparkline_blocks[0] * len(recent)
+    scale = len(UI.sparkline_blocks) - 1
+    return "".join(
+        " " if value is None else UI.sparkline_blocks[min(scale, int(value / top * scale))] for value in recent
+    )
 
 
 def elapsed_clock(seconds: float) -> str:

@@ -9,17 +9,15 @@ from __future__ import annotations
 
 import os
 import pathlib
-from typing import Final
 
 from treehawk.core.models import GroupMetrics
-
-DEFAULT_CGROUP_ROOT: Final = "/sys/fs/cgroup"
+from treehawk.platforms.linux.constants import LINUX
 
 
 class CgroupV2Source:
     """Implements ``GroupMetricSource`` against a cgroup2 filesystem."""
 
-    def __init__(self, root: str = DEFAULT_CGROUP_ROOT) -> None:
+    def __init__(self, root: str = LINUX.cgroup_root) -> None:
         self._root = root
 
     def available(self) -> bool:

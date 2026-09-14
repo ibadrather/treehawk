@@ -8,8 +8,8 @@ It is laid out like :mod:`treehawk.platforms.linux.procfs` and for the same
 reason. Every kernel call returns a fixed-layout byte buffer, and the functions
 that turn those bytes into values are pure: they take ``bytes`` and return
 plain data, touch nothing, and are unit-tested against captured buffers. The
-structure layouts below are the contract, checked by
-``assert_layouts_match_the_kernel`` in the tests.
+structure layouts in :mod:`treehawk.platforms.darwin.constants` are the
+contract, checked by ``test_the_documented_layouts_match_the_kernel_structs``.
 
 The library is bound inside :meth:`LibProc.__init__`, never at import time, for
 two reasons: the module then imports cleanly on any platform, and mypy
@@ -33,99 +33,14 @@ import ctypes
 import ctypes.util
 import os
 import struct
-from dataclasses import dataclass
-from typing import Final, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-PROC_ALL_PIDS: Final = 1
-PROC_PIDTASKALLINFO: Final = 2
-PROC_PIDCOALITIONINFO: Final = 20
-RUSAGE_INFO_V4: Final = 4
-
-CTL_KERN: Final = 1
-KERN_ARGMAX: Final = 8
-KERN_PROCARGS2: Final = 49
-
-COALITION_PREFIX: Final = "coalition:"
-"""Marks a group path as a coalition id, so nothing reads it as a cgroup."""
-
-# ``struct proc_taskallinfo`` = proc_bsdinfo (136 bytes) then proc_taskinfo
-# (96), little-endian with no interior padding on both arm64 and x86_64.
-#   12 uint32  flags status xstatus pid ppid uid gid ruid rgid svuid svgid rfu
-#   16s / 32s  comm, name
-#    5 uint32  nfiles pgid pjobc tdev tpgid
-#      int32   nice
-#    2 uint64  start_tvsec start_tvusec
-#    6 uint64  virtual resident total_user total_system threads_user threads_system
-#   12 int32   policy faults pageins cow messages_sent/received syscalls_mach/unix
-#              csw threadnum numrunning priority
-TASK_ALL_INFO: Final = "<12I16s32s5IiQQ6Q12i"
-TASK_ALL_INFO_SIZE: Final = struct.calcsize(TASK_ALL_INFO)
-
-_STATUS = 1
-_PID = 3
-_PPID = 4
-_COMM = 12
-_PGID = 15
-_START_TVSEC = 20
-_START_TVUSEC = 21
-_RESIDENT = 23
-_TOTAL_USER = 24
-_TOTAL_SYSTEM = 25
-_THREADNUM = 37
-
-COALITION_INFO: Final = "<5Q"
-COALITION_INFO_SIZE: Final = struct.calcsize(COALITION_INFO)
-_COALITION_RESOURCE = 0
-"""``coalition_id[COALITION_TYPE_RESOURCE]`` - the one a fork cannot leave."""
-
-RUSAGE_INFO_V4_SIZE: Final = 296
-_PHYS_FOOTPRINT_OFFSET: Final = 72
-"""``ri_phys_footprint`` sits after a 16-byte uuid and seven uint64s."""
-
-TIMEBASE_INFO: Final = "<2I"
-TIMEBASE_INFO_SIZE: Final = struct.calcsize(TIMEBASE_INFO)
-
-_STATES: Final = {1: "I", 2: "R", 3: "S", 4: "T", 5: "Z"}
-"""``SIDL``/``SRUN``/``SSLEEP``/``SSTOP``/``SZOMB`` as the single letters the
-core models expect - ``Z`` above all, which ``ProcInfo.is_zombie`` compares
-against."""
+from treehawk.platforms.darwin.constants import DARWIN, LIBPROC, TASK_ALL_INFO
+from treehawk.platforms.darwin.models import TaskInfo, Timebase
 
 
 class TaskInfoParseError(ValueError):
     """The buffer was short: the process died mid-read, or is not ours."""
-
-
-@dataclass(frozen=True, slots=True)
-class Timebase:
-    """How many nanoseconds one mach time unit is worth, as a fraction.
-
-    1/1 on Intel, 125/3 on Apple Silicon. The default is the identity, so a
-    reader that never asked the kernel cannot silently rescale anything.
-    """
-
-    numer: int = 1
-    denom: int = 1
-
-
-@dataclass(frozen=True, slots=True)
-class TaskInfo:
-    """One process, as a single ``PROC_PIDTASKALLINFO`` call reports it."""
-
-    pid: int
-    ppid: int
-    pgid: int
-    status: int
-    starttime_usec: int
-    """Start time in microseconds since the epoch. treehawk uses it only to
-    tell a recycled PID from the original, which this is unique enough for."""
-    comm: str
-    cpu_mach_units: int
-    rss_bytes: int
-    threads: int
-
-    @property
-    def state(self) -> str:
-        return state_from_status(self.status)
 
 
 @runtime_checkable
@@ -172,27 +87,27 @@ class ProcessTable(Protocol):
 
 def parse_task_all_info(raw: bytes) -> TaskInfo:
     """Parse a ``PROC_PIDTASKALLINFO`` buffer into the fields treehawk uses."""
-    if len(raw) < TASK_ALL_INFO_SIZE:
-        raise TaskInfoParseError(f"short task_all_info buffer: {len(raw)} of {TASK_ALL_INFO_SIZE} bytes")
-    fields = struct.unpack_from(TASK_ALL_INFO, raw)
+    if len(raw) < TASK_ALL_INFO.size:
+        raise TaskInfoParseError(f"short task_all_info buffer: {len(raw)} of {TASK_ALL_INFO.size} bytes")
+    fields = struct.unpack_from(TASK_ALL_INFO.struct_format, raw)
     return TaskInfo(
-        pid=int(fields[_PID]),
-        ppid=int(fields[_PPID]),
-        pgid=int(fields[_PGID]),
-        status=int(fields[_STATUS]),
-        starttime_usec=int(fields[_START_TVSEC]) * 1_000_000 + int(fields[_START_TVUSEC]),
-        comm=_c_string(fields[_COMM]),
-        cpu_mach_units=int(fields[_TOTAL_USER]) + int(fields[_TOTAL_SYSTEM]),
-        rss_bytes=int(fields[_RESIDENT]),
-        threads=int(fields[_THREADNUM]),
+        pid=int(fields[TASK_ALL_INFO.pid]),
+        ppid=int(fields[TASK_ALL_INFO.ppid]),
+        pgid=int(fields[TASK_ALL_INFO.pgid]),
+        status=int(fields[TASK_ALL_INFO.status]),
+        starttime_usec=int(fields[TASK_ALL_INFO.start_tvsec]) * 1_000_000 + int(fields[TASK_ALL_INFO.start_tvusec]),
+        comm=_c_string(fields[TASK_ALL_INFO.comm]),
+        cpu_mach_units=int(fields[TASK_ALL_INFO.total_user]) + int(fields[TASK_ALL_INFO.total_system]),
+        rss_bytes=int(fields[TASK_ALL_INFO.resident]),
+        threads=int(fields[TASK_ALL_INFO.threadnum]),
     )
 
 
 def parse_coalition_id(raw: bytes) -> int | None:
     """The resource coalition id in a ``PROC_PIDCOALITIONINFO`` buffer."""
-    if len(raw) < COALITION_INFO_SIZE:
+    if len(raw) < LIBPROC.coalition_info_size:
         return None
-    identifier = int(struct.unpack_from(COALITION_INFO, raw)[_COALITION_RESOURCE])
+    identifier = int(struct.unpack_from(LIBPROC.coalition_info_format, raw)[LIBPROC.coalition_resource_index])
     return identifier or None
 
 
@@ -203,16 +118,16 @@ def parse_phys_footprint(raw: bytes) -> int | None:
     the machine - what Activity Monitor shows - and it is what treehawk records
     as the fair-memory measure there, named as such in the log header.
     """
-    if len(raw) < _PHYS_FOOTPRINT_OFFSET + 8:
+    if len(raw) < LIBPROC.phys_footprint_offset + 8:
         return None
-    return int(struct.unpack_from("<Q", raw, _PHYS_FOOTPRINT_OFFSET)[0])
+    return int(struct.unpack_from("<Q", raw, LIBPROC.phys_footprint_offset)[0])
 
 
 def parse_timebase(raw: bytes) -> Timebase:
     """A ``mach_timebase_info`` buffer, defaulting to the identity fraction."""
-    if len(raw) < TIMEBASE_INFO_SIZE:
+    if len(raw) < LIBPROC.timebase_info_size:
         return Timebase()
-    numer, denom = struct.unpack_from(TIMEBASE_INFO, raw)
+    numer, denom = struct.unpack_from(LIBPROC.timebase_info_format, raw)
     return Timebase(numer=int(numer) or 1, denom=int(denom) or 1)
 
 
@@ -237,11 +152,6 @@ def parse_procargs2(raw: bytes) -> str:
     return b" ".join(arguments).decode("utf-8", "replace")
 
 
-def state_from_status(status: int) -> str:
-    """Map ``pbi_status`` to the single-letter state the core models use."""
-    return _STATES.get(status, "?")
-
-
 def nanoseconds_from_mach(units: int, timebase: Timebase) -> int:
     """Convert mach absolute time units to nanoseconds.
 
@@ -255,15 +165,15 @@ def nanoseconds_from_mach(units: int, timebase: Timebase) -> int:
 
 def coalition_path(identifier: int) -> str:
     """The group path treehawk records for a coalition."""
-    return f"{COALITION_PREFIX}{identifier}"
+    return f"{DARWIN.coalition_prefix}{identifier}"
 
 
 def coalition_id_of(path: str) -> int | None:
     """The coalition id in a group path, or None if it is not one."""
-    if not path.startswith(COALITION_PREFIX):
+    if not path.startswith(DARWIN.coalition_prefix):
         return None
     try:
-        return int(path[len(COALITION_PREFIX) :])
+        return int(path[len(DARWIN.coalition_prefix) :])
     except ValueError:
         return None
 
@@ -296,21 +206,21 @@ class LibProc:
         return self._timebase
 
     def list_pids(self) -> list[int]:
-        needed = int(self._libc.proc_listpids(PROC_ALL_PIDS, 0, None, 0))
+        needed = int(self._libc.proc_listpids(LIBPROC.proc_all_pids, 0, None, 0))
         if needed <= 0:
             return []
         # Processes can appear between sizing the buffer and filling it, so ask
         # for headroom rather than racing the kernel for an exact fit.
         width = struct.calcsize("<i")
         buffer = ctypes.create_string_buffer(needed + 64 * width)
-        written = int(self._libc.proc_listpids(PROC_ALL_PIDS, 0, buffer, len(buffer)))
+        written = int(self._libc.proc_listpids(LIBPROC.proc_all_pids, 0, buffer, len(buffer)))
         if written <= 0:
             return []
         count = written // width
         return [pid for pid in struct.unpack_from(f"<{count}i", buffer.raw) if pid > 0]
 
     def task_info(self, pid: int) -> TaskInfo | None:
-        raw = self._pidinfo(pid=pid, flavor=PROC_PIDTASKALLINFO, size=TASK_ALL_INFO_SIZE)
+        raw = self._pidinfo(pid=pid, flavor=LIBPROC.proc_pidtaskallinfo, size=TASK_ALL_INFO.size)
         if raw is None:
             return None
         try:
@@ -319,13 +229,13 @@ class LibProc:
             return None
 
     def coalition_id(self, pid: int) -> int | None:
-        raw = self._pidinfo(pid=pid, flavor=PROC_PIDCOALITIONINFO, size=COALITION_INFO_SIZE)
+        raw = self._pidinfo(pid=pid, flavor=LIBPROC.proc_pidcoalitioninfo, size=LIBPROC.coalition_info_size)
         return None if raw is None else parse_coalition_id(raw)
 
     def argv(self, pid: int) -> str:
         if self._argmax <= 0:
             return ""
-        mib = (ctypes.c_int * 3)(CTL_KERN, KERN_PROCARGS2, pid)
+        mib = (ctypes.c_int * 3)(LIBPROC.ctl_kern, LIBPROC.kern_procargs2, pid)
         buffer = ctypes.create_string_buffer(self._argmax)
         size = ctypes.c_size_t(self._argmax)
         if int(self._libc.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0)) != 0:
@@ -333,8 +243,8 @@ class LibProc:
         return parse_procargs2(buffer.raw[: size.value])
 
     def footprint(self, pid: int) -> int | None:
-        buffer = ctypes.create_string_buffer(RUSAGE_INFO_V4_SIZE)
-        if int(self._libc.proc_pid_rusage(pid, RUSAGE_INFO_V4, buffer)) != 0:
+        buffer = ctypes.create_string_buffer(LIBPROC.rusage_info_v4_size)
+        if int(self._libc.proc_pid_rusage(pid, LIBPROC.rusage_info_v4, buffer)) != 0:
             return None  # EPERM: not our process
         return parse_phys_footprint(buffer.raw)
 
@@ -354,7 +264,7 @@ class LibProc:
         return buffer.raw if written >= size else None
 
     def _read_argmax(self) -> int:
-        mib = (ctypes.c_int * 2)(CTL_KERN, KERN_ARGMAX)
+        mib = (ctypes.c_int * 2)(LIBPROC.ctl_kern, LIBPROC.kern_argmax)
         value = ctypes.c_int(0)
         size = ctypes.c_size_t(ctypes.sizeof(value))
         if int(self._libc.sysctl(mib, 2, ctypes.byref(value), ctypes.byref(size), None, 0)) != 0:
@@ -362,7 +272,7 @@ class LibProc:
         return int(value.value)
 
     def _read_timebase(self) -> Timebase:
-        buffer = ctypes.create_string_buffer(TIMEBASE_INFO_SIZE)
+        buffer = ctypes.create_string_buffer(LIBPROC.timebase_info_size)
         if int(self._libc.mach_timebase_info(buffer)) != 0:
             return Timebase()
         return parse_timebase(buffer.raw)

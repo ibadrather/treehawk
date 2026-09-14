@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable, Iterable
 
-from treehawk.core.aggregate import Aggregator, RunSummary, SummaryAccumulator
+from treehawk.core.aggregate import Aggregator, SummaryAccumulator
 from treehawk.core.config import MissingWorkload, WatchConfig, WhenEmpty
 from treehawk.core.errors import WorkloadNotFound
 from treehawk.core.interfaces import (
@@ -22,9 +22,9 @@ from treehawk.core.interfaces import (
     Record,
     Sink,
 )
-from treehawk.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample, Snapshot
+from treehawk.core.models import GroupMetrics, HostInfo, ProcInfo, ProcSample, RefreshResult, RunSummary, Snapshot
 from treehawk.core.records import PSS, header_record, sample_record, summary_record
-from treehawk.core.tracker import RefreshResult, Tracker
+from treehawk.core.tracker import Tracker
 
 __all__ = ["Monitor", "WorkloadNotFound"]
 

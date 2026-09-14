@@ -20,15 +20,13 @@ import pathlib
 import shutil
 import subprocess
 import time
-from typing import Final
 
 from treehawk.core.errors import LaunchFailed
 from treehawk.core.models import LaunchedWorkload
 from treehawk.platforms.linux.cgroup2 import CgroupV2Source
+from treehawk.platforms.linux.constants import LINUX
 from treehawk.platforms.linux.procfs import parse_cgroup
 from treehawk.platforms.posix import DirectLauncher, FallbackLauncher, SubprocessWorkload
-
-_RESOLVE_TIMEOUT: Final = 3.0
 
 
 class ScopeUnavailable(LaunchFailed):
@@ -46,8 +44,8 @@ class ScopeLauncher:
         self,
         cgroups: CgroupV2Source | None = None,
         *,
-        proc_root: str = "/proc",
-        timeout: float = _RESOLVE_TIMEOUT,
+        proc_root: str = LINUX.proc_root,
+        timeout: float = LINUX.scope_resolve_timeout,
     ) -> None:
         self._cgroups = cgroups or CgroupV2Source()
         self._proc_root = proc_root

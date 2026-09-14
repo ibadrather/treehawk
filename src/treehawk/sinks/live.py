@@ -15,7 +15,8 @@ from treehawk.core.compat import override
 from treehawk.core.interfaces import Record
 from treehawk.sinks.base import BaseSink
 from treehawk.ui.dashboard import Dashboard
-from treehawk.ui.theme import PALETTE, Palette
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import PALETTE
 from treehawk.ui.views import render_summary
 
 

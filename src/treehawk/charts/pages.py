@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from operator import itemgetter
-from typing import Final
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -21,7 +20,9 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
 from treehawk.charts import style
-from treehawk.charts.series import Metric, ProcessTrack, RunSeries, stack_for
+from treehawk.charts.constants import CHARTS
+from treehawk.charts.models import Metric, ProcessTrack, RunSeries
+from treehawk.charts.series import stack_for
 from treehawk.core.compat import override
 from treehawk.core.humanize import (
     format_bytes,
@@ -31,7 +32,8 @@ from treehawk.core.humanize import (
 )
 from treehawk.core.records import memory_measure, peak_memory_reading
 from treehawk.core.values import as_float, as_mapping, as_sequence
-from treehawk.ui.theme import DISCOVERY_ORDER, PRINT, Palette
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import DISCOVERY_ORDER, PRINT
 
 Ranking = Callable[[ProcessTrack], float]
 """How a page orders processes when it can only show a few of them."""
@@ -43,13 +45,6 @@ def by_cpu_seconds(track: ProcessTrack) -> float:
 
 def by_peak_rss(track: ProcessTrack) -> float:
     return float(track.peak_rss)
-
-
-MAX_GANTT_ROWS: Final = 34
-"""Lifetime bars that fit legibly on one page before the rest is summarised."""
-
-RANKING_ROWS: Final = 10
-"""Processes in each league table on the "biggest consumers" page."""
 
 
 class Page:
@@ -156,7 +151,7 @@ class OverviewPage(Page):
         values = [counts[label] for label in labels]
         colors = [palette.slot(index) for index in range(len(labels))]
         bars = ax.barh(
-            labels, values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=style.SURFACE_GAP
+            labels, values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
         )
         widest = max(values)
         for bar, value in zip(bars, values, strict=True):
@@ -328,7 +323,7 @@ class LifetimePage(Page):
             return False
         style.draw_heading(fig, title=self.title, subtitle=self.subtitle, palette=palette)
         tracks = sorted(series.tracks, key=lambda track: (track.first_t, track.pid))
-        shown = tracks[:MAX_GANTT_ROWS]
+        shown = tracks[: CHARTS.max_gantt_rows]
         gantt, count = _timeline_axes(fig, rows=len(shown))
         minimum = max(series.interval * 0.35, series.duration * 0.002)
         for row, track in enumerate(shown):
@@ -339,7 +334,7 @@ class LifetimePage(Page):
                 height=0.62,
                 color=palette.slot(DISCOVERY_ORDER.index(track.group)),
                 edgecolor=palette.surface,
-                linewidth=style.SURFACE_GAP,
+                linewidth=CHARTS.surface_gap,
             )
         gantt.set_ylim(len(shown) - 0.5, -0.5)
         gantt.set_yticks(range(len(shown)))
@@ -398,7 +393,7 @@ class _StackedPage(Page):
             colors.append(palette.other)
 
         ax.stackplot(
-            series.t, *rows, colors=colors, labels=labels, edgecolor=palette.surface, linewidth=style.SURFACE_GAP
+            series.t, *rows, colors=colors, labels=labels, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
         )
         _label_bands(ax, t=series.t, rows=rows, labels=labels, palette=palette)
         ax.set_ylabel(self.ylabel)
@@ -444,7 +439,7 @@ class RankingPage(Page):
         if not series.has_per_process:
             return False
         style.draw_heading(fig, title=self.title, subtitle=self.subtitle, palette=palette)
-        rows = min(RANKING_ROWS, len(series.tracks))
+        rows = min(CHARTS.ranking_rows, len(series.tracks))
         height = min(0.66, 0.055 * rows + 0.05)
         bottom = 0.82 - height
         left = fig.add_axes((0.15, bottom, 0.31, height))
@@ -452,7 +447,7 @@ class RankingPage(Page):
 
         self._bars(
             left,
-            tracks=series.top_tracks(rank=by_cpu_seconds, limit=RANKING_ROWS),
+            tracks=series.top_tracks(rank=by_cpu_seconds, limit=CHARTS.ranking_rows),
             measure=by_cpu_seconds,
             title="cpu time (s)",
             formatter=format_seconds,
@@ -460,7 +455,7 @@ class RankingPage(Page):
         )
         self._bars(
             right,
-            tracks=series.top_tracks(rank=by_peak_rss, limit=RANKING_ROWS),
+            tracks=series.top_tracks(rank=by_peak_rss, limit=CHARTS.ranking_rows),
             measure=by_peak_rss,
             title="peak rss",
             formatter=format_bytes,
@@ -485,7 +480,7 @@ class RankingPage(Page):
         colors = [palette.slot(DISCOVERY_ORDER.index(track.group)) for track in tracks]
         positions = range(len(tracks))
         ax.barh(
-            list(positions), values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=style.SURFACE_GAP
+            list(positions), values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
         )
         ax.set_ylim(len(tracks) - 0.5, -0.5)
         ax.set_yticks(list(positions))

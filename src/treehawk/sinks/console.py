@@ -17,7 +17,8 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import PSS, MemoryMeasure, memory_measure, memory_reading, target_of
+from treehawk.core.models import MemoryMeasure
+from treehawk.core.records import PSS, memory_measure, memory_reading, target_of
 from treehawk.core.values import as_float, as_records, as_sequence
 from treehawk.sinks.base import BaseSink
 

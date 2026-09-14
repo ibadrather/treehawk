@@ -10,19 +10,9 @@ from __future__ import annotations
 
 import os
 import socket
-from typing import Final
 
 from treehawk.core.models import HostInfo
-
-NANOSECONDS_PER_SECOND: Final = 1_000_000_000
-"""The CPU tick treehawk reports on macOS.
-
-``HostInfo.clk_tck`` is only ever the divisor that turns ``cpu_ticks`` into
-seconds, and libproc reports task time to nanosecond precision (once converted
-from mach units). Reporting nanoseconds keeps ``cpu_ticks / clk_tck`` exactly
-equal to seconds, as it is on Linux, and keeps the resolution: the POSIX
-``SC_CLK_TCK`` here is 100, which would round every CPU figure to 10 ms.
-"""
+from treehawk.platforms.darwin.constants import DARWIN
 
 
 class DarwinHostInfoSource:
@@ -33,7 +23,7 @@ class DarwinHostInfoSource:
             platform="darwin",
             hostname=socket.gethostname(),
             ncpu=os.cpu_count() or 1,
-            clk_tck=NANOSECONDS_PER_SECOND,
+            clk_tck=DARWIN.nanoseconds_per_second,
             page_size=os.sysconf("SC_PAGE_SIZE"),
             mem_total_bytes=self._mem_total(),
         )

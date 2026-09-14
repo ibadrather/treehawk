@@ -19,42 +19,7 @@ from treehawk.core.config import LogDetail
 from treehawk.core.interfaces import Record
 from treehawk.core.values import as_records
 from treehawk.sinks.base import BaseSink
-
-SAMPLE_COLUMNS = (
-    "seq",
-    "t",
-    "ts",
-    "n_procs",
-    "cpu_percent",
-    "cpu_percent_norm",
-    "cpu_seconds_total",
-    "cpu_seconds_used",
-    "rss_bytes",
-    "pss_bytes",
-    "swap_bytes",
-    "group_memory_bytes",
-    "group_memory_peak_bytes",
-    "overrun",
-)
-
-PROC_COLUMNS = (
-    "seq",
-    "t",
-    "ts",
-    "pid",
-    "ppid",
-    "starttime",
-    "name",
-    "state",
-    "threads",
-    "cpu_percent",
-    "cpu_seconds",
-    "rss_bytes",
-    "pss_bytes",
-    "swap_bytes",
-    "via",
-    "cmdline",
-)
+from treehawk.sinks.constants import SINKS
 
 
 class CsvSink(BaseSink):
@@ -77,20 +42,20 @@ class CsvSink(BaseSink):
     def open(self, header: Record) -> None:
         # CSV has nowhere to put a header record, so run metadata goes beside it.
         _write_json(self._header_path, header)
-        _start_table(self._path, columns=SAMPLE_COLUMNS)
+        _start_table(self._path, columns=SINKS.csv_sample_columns)
         if self._procs_path:
-            _start_table(self._procs_path, columns=PROC_COLUMNS)
+            _start_table(self._procs_path, columns=SINKS.csv_proc_columns)
         self._writing = True
 
     @override
     def sample(self, record: Record) -> None:
         if not self._writing:
             return
-        _append_rows(self._path, columns=SAMPLE_COLUMNS, rows=[record])
+        _append_rows(self._path, columns=SINKS.csv_sample_columns, rows=[record])
         if self._procs_path:
             stamp = {"seq": record.get("seq"), "t": record.get("t"), "ts": record.get("ts")}
             rows = [{**proc, **stamp} for proc in as_records(record.get("procs"))]
-            _append_rows(self._procs_path, columns=PROC_COLUMNS, rows=rows)
+            _append_rows(self._procs_path, columns=SINKS.csv_proc_columns, rows=rows)
 
     @override
     def close(self, summary: Record) -> None:
