@@ -75,8 +75,9 @@ NoPss = Annotated[
     typer.Option(
         "--no-pss",
         rich_help_panel=ADVANCED,
-        help="Skip the shared-memory correction. Cheaper per sample, but "
-        "summed RSS over-counts pages shared between children.",
+        help="Skip the fair-memory read (PSS on Linux, phys footprint on "
+        "macOS). Cheaper per sample, but summed RSS over-counts pages "
+        "shared between children.",
     ),
 ]
 

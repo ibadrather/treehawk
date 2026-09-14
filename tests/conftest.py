@@ -1,15 +1,28 @@
-"""Fake /proc and cgroup trees, so the Linux code can be tested deterministically.
+"""Fake kernels, so the platform code can be tested deterministically.
 
-Everything that reads the filesystem takes its root as a constructor argument,
-which is what makes these fixtures possible without mocking or root privileges.
+On Linux everything that reads the filesystem takes its root as a constructor
+argument, which is what makes the fake /proc and cgroup trees below possible
+without mocking or root privileges.
+
+macOS has no filesystem to fake, so the seam is the syscall boundary instead:
+:class:`FakeProcessTable` implements the same ``ProcessTable`` protocol the
+real ``LibProc`` does. Because nothing in ``platforms/darwin`` imports the C
+library until it is constructed, these tests run on Linux too.
 """
 
 from __future__ import annotations
 
 import pathlib
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 import pytest
+
+from treehawk.platforms.darwin.libproc import TaskInfo, Timebase
+
+APPLE_SILICON_TIMEBASE = Timebase(numer=125, denom=3)
+"""The real fraction on an M-series Mac; Intel reports 1/1. Tests use it so a
+mach-to-nanoseconds mistake cannot pass unnoticed."""
 
 # Field layout of /proc/<pid>/stat after the comm field; only the fields
 # treehawk reads carry meaningful values here.
@@ -87,6 +100,98 @@ def write_cgroup(
     if peak is not None:
         _write(directory, "memory.peak", f"{peak}\n")
     return directory
+
+
+@dataclass(frozen=True, slots=True)
+class FakeProcess:
+    """One process in a fake macOS process table."""
+
+    pid: int
+    ppid: int = 1
+    pgid: int | None = None
+    sid: int | None = None
+    status: int = 3  # SSLEEP
+    starttime_usec: int = 1_700_000_000_000_000
+    comm: str = "worker"
+    cpu_mach_units: int = 0
+    rss_bytes: int = 4 * 1024 * 1024
+    threads: int = 1
+    coalition: int | None = 1779
+    argv: str = "python worker.py"
+    footprint: int | None = None
+    """None stands for the EPERM another user's process returns."""
+
+
+@dataclass
+class FakeProcessTable:
+    """A ``ProcessTable`` with no kernel behind it.
+
+    Counts its own reads, so a test can assert that the command line really is
+    cached rather than fetched once per sample.
+    """
+
+    processes: list[FakeProcess] = field(default_factory=list)
+    timebase_fraction: Timebase = APPLE_SILICON_TIMEBASE
+    argv_reads: int = 0
+
+    def add(self, process: FakeProcess) -> None:
+        self.processes.append(process)
+
+    def remove(self, pid: int) -> None:
+        """Let a process exit between two scans."""
+        self.processes = [process for process in self.processes if process.pid != pid]
+
+    def _find(self, pid: int) -> FakeProcess | None:
+        return next((process for process in self.processes if process.pid == pid), None)
+
+    # -- the ProcessTable protocol ----------------------------------------
+
+    def timebase(self) -> Timebase:
+        return self.timebase_fraction
+
+    def list_pids(self) -> list[int]:
+        return [process.pid for process in self.processes]
+
+    def task_info(self, pid: int) -> TaskInfo | None:
+        process = self._find(pid)
+        if process is None:
+            return None
+        return TaskInfo(
+            pid=process.pid,
+            ppid=process.ppid,
+            pgid=process.pgid if process.pgid is not None else process.pid,
+            status=process.status,
+            starttime_usec=process.starttime_usec,
+            comm=process.comm,
+            cpu_mach_units=process.cpu_mach_units,
+            rss_bytes=process.rss_bytes,
+            threads=process.threads,
+        )
+
+    def coalition_id(self, pid: int) -> int | None:
+        process = self._find(pid)
+        return None if process is None else process.coalition
+
+    def argv(self, pid: int) -> str:
+        self.argv_reads += 1
+        process = self._find(pid)
+        return "" if process is None else process.argv
+
+    def footprint(self, pid: int) -> int | None:
+        process = self._find(pid)
+        return None if process is None else process.footprint
+
+    def session_id(self, pid: int) -> int:
+        process = self._find(pid)
+        if process is None:
+            return 0
+        return process.sid if process.sid is not None else process.pid
+
+
+@pytest.fixture
+def table() -> FakeProcessTable:
+    """An empty macOS process table, for the darwin backend tests."""
+    return FakeProcessTable()
 
 
 def _write(directory: pathlib.Path, name: str, text: str) -> None:

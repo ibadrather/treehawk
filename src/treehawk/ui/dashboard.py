@@ -24,7 +24,7 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import target_of
+from treehawk.core.records import memory_measure, memory_reading, target_of
 from treehawk.core.values import as_float, as_int, as_mapping, as_records
 from treehawk.ui.theme import Palette, discovery_color
 from treehawk.ui.widgets import elapsed_clock, sparkline
@@ -73,7 +73,7 @@ class Dashboard:
         self._cpu.append(cpu)
         if cpu is not None and (self._peak_cpu is None or cpu > self._peak_cpu):
             self._peak_cpu = cpu
-        memory = _memory_reading(record)
+        memory = memory_reading(record=record, header=self._header).value
         self._memory.append(None if memory is None else float(memory))
         if memory is not None and (self._peak_memory is None or memory > self._peak_memory):
             self._peak_memory = memory
@@ -134,12 +134,12 @@ class Dashboard:
             Text(sparkline(list(self._cpu)), style=self._accent(0)),
             f"peak {format_percent(self._peak_cpu)} · {format_percent(normalised)} of {ncpu} cpus",
         )
-        memory = _memory_reading(record)
+        reading = memory_reading(record=record, header=self._header)
         table.add_row(
             "mem",
-            Text(format_bytes(memory), style=f"bold {self._accent(2)}"),
+            Text(format_bytes(reading.value), style=f"bold {self._accent(2)}"),
             Text(sparkline(list(self._memory)), style=self._accent(2)),
-            f"peak {format_bytes(self._peak_memory)} · {_memory_source(record)}",
+            f"peak {format_bytes(self._peak_memory)} · {reading.label}",
         )
         elapsed = as_float(record.get("t")) or 0.0
         procs = as_int(record.get("n_procs")) or 0
@@ -170,7 +170,7 @@ class Dashboard:
         table.add_column("pid", justify="right", width=7)
         table.add_column("cpu", justify="right", width=7)
         table.add_column("rss", justify="right", width=9)
-        table.add_column("pss", justify="right", width=9)
+        table.add_column(memory_measure(self._header).short, justify="right", width=9)
         table.add_column("thr", justify="right", width=4)
         table.add_column("found", width=8)
         table.add_column("command", overflow="ellipsis", no_wrap=True)
@@ -217,21 +217,3 @@ def _cpu_percent_of(proc: Record) -> float:
     """Sort key: a process with no rate yet sorts below one that has any."""
     value = as_float(proc.get("cpu_percent"))
     return value if value is not None else -1.0
-
-
-def _memory_reading(record: Record) -> int | None:
-    """The best memory figure in this sample, in the order we trust them."""
-    for key in ("group_memory_bytes", "pss_bytes", "rss_bytes"):
-        value = as_int(record.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def _memory_source(record: Record) -> str:
-    """Which measure :func:`_memory_reading` actually found."""
-    if record.get("group_memory_bytes") is not None:
-        return "cgroup"
-    if record.get("pss_bytes") is not None:
-        return "pss"
-    return "rss"

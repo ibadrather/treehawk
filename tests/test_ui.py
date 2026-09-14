@@ -240,3 +240,50 @@ def test_live_sink_leaves_the_summary_behind(tmp_path: pathlib.Path) -> None:
         sink.close({"samples": 1, "peak_cpu_percent": 180.0, "duration_s": 1.5})
 
     assert "180.0% peak" in console.export_text()
+
+
+def test_the_dashboard_names_the_measure_the_log_actually_carries() -> None:
+    board = Dashboard(palette=PALETTE)
+    board.start(header(memory_kind="phys_footprint", group_path=None))
+    board.update(sample(group_memory_bytes=None, procs=[{"pid": 100, "pss_bytes": 1234, "via": "match"}]))
+
+    text = draw(board.render())
+
+    # macOS has no PSS, so calling the column "pss" there would be a lie.
+    assert "foot" in text
+    assert "pss" not in text
+
+
+def test_a_log_written_before_the_field_existed_still_reads_as_pss() -> None:
+    board = Dashboard(palette=PALETTE)
+    board.start(header(group_path=None))  # no memory_kind at all
+    board.update(sample(group_memory_bytes=None, procs=[{"pid": 100, "pss_bytes": 1234, "via": "match"}]))
+
+    # treehawk was Linux-only then, so there is nothing else it could be.
+    assert "pss" in draw(board.render())
+
+
+def test_the_summary_names_the_measure_too() -> None:
+    rendered = draw(
+        render_summary(
+            summary={"peak_rss_bytes": 100, "peak_pss_bytes": 90},
+            header=header(memory_kind="phys_footprint"),
+            palette=PALETTE,
+            title="run.jsonl",
+        )
+    )
+
+    assert "peak foot" in rendered
+
+
+def test_the_summary_omits_a_group_figure_no_platform_could_supply() -> None:
+    rendered = draw(
+        render_summary(
+            summary={"peak_rss_bytes": 100, "peak_pss_bytes": 90, "peak_group_memory_bytes": None},
+            header=header(memory_kind="phys_footprint"),
+            palette=PALETTE,
+            title="run.jsonl",
+        )
+    )
+
+    assert "cgroup" not in rendered

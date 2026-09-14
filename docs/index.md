@@ -25,16 +25,18 @@ terminal or turn into a PDF report.
 ## Why
 
 Following parent-child links works until a child daemonizes: `fork`, `setsid`,
-`fork` again, and the parent exits. The survivor is re-parented to PID 1 or
-`systemd --user`, and a naive monitor reports the workload finished while it is
-still burning a core. treehawk keeps it.
+`fork` again, and the parent exits. The survivor is re-parented to the machine's reaper
+(PID 1, `systemd --user`, or `launchd`), and a naive monitor reports the
+workload finished while it is still burning a core. treehawk keeps it.
 
 ![How a daemonized child escapes a parent-child walk](assets/diagrams/daemonize.light.svg#only-light)
 ![How a daemonized child escapes a parent-child walk](assets/diagrams/daemonize.dark.svg#only-dark)
 
 ## Install
 
-treehawk runs on Linux with Python 3.10 or newer.
+treehawk runs on Linux and macOS — including Apple Silicon — with Python 3.10
+or newer. The two differ in what the kernel will total up for you; see
+[Platforms](platforms.md).
 
 ```bash
 curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
@@ -42,7 +44,7 @@ curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/insta
 
 The script installs the latest release with `uv tool install` (or `pipx`), and
 installs uv first if neither is present. Pin a version with
-`| sh -s -- --version 0.3.1`. Or install it yourself:
+`| sh -s -- --version 0.4.0`. Or install it yourself:
 
 ```bash
 uv tool install git+https://github.com/ibadrather/treehawk

@@ -8,6 +8,7 @@
 [![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
 [![Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)](#)
+[![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-ibadrather.github.io%2Ftreehawk-4531cc)](https://ibadrather.github.io/treehawk/)
 
@@ -40,9 +41,12 @@ treehawk report treehawk-20260913-100000.jsonl   # summary in the terminal
 treehawk pdf    treehawk-20260913-100000.jsonl   # an 8-page PDF report
 ```
 
-Linux only for now. Metrics come from `/proc` and cgroup v2 directly — not from
-`ps`, `top` or `pidstat`, and not from a third-party library. Typer and Rich are
-used for the interface, matplotlib only when you ask for a PDF.
+Linux and macOS, including Apple Silicon. Metrics come from the kernel
+directly — `/proc` and cgroup v2 on Linux, `libproc` and `sysctl` on macOS —
+not from `ps`, `top` or `pidstat`, and not from a third-party library. Typer
+and Rich are used for the interface, matplotlib only when you ask for a PDF.
+The two platforms differ in what the kernel will tell you; [what works where
+is spelled out below](#platform-support).
 
 ## Install
 
@@ -53,12 +57,12 @@ curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/insta
 The script installs the `treehawk` command from the latest GitHub release with
 `uv tool install` (or `pipx`, if that is what you have). If neither is present
 it installs uv first, and uv fetches a suitable Python by itself. Pin a version
-with `| sh -s -- --version 0.3.0`; `--help` lists the rest.
+with `| sh -s -- --version 0.4.0`; `--help` lists the rest.
 
-Or install a release yourself (Linux, Python 3.10+):
+Or install a release yourself (Linux or macOS, Python 3.10+):
 
 ```bash
-uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.3.0/treehawk-0.3.0-py3-none-any.whl
+uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.4.0/treehawk-0.4.0-py3-none-any.whl
 uv tool install git+https://github.com/ibadrather/treehawk   # latest main
 ```
 
@@ -90,16 +94,22 @@ matter what its parent becomes:
 | rule | catches |
 |---|---|
 | `tree` | ordinary children and grandchildren |
-| `cgroup` | anything inside a control group the workload owns — the one boundary a fork cannot escape |
+| `cgroup` | anything inside a kernel boundary the workload owns — the one thing a fork cannot escape |
 | `session` | children re-parented away that kept the session |
-| `orphan` | a process that appeared during the watch, lost its parent, and sits in a tracked process' cgroup |
+| `orphan` | a process that appeared during the watch, lost its parent, and sits in a tracked process' boundary |
 
 Choose them with `--expand tree --expand cgroup --expand orphan` (all four are on
 by default).
 
+The boundary the `cgroup` rule follows is a **cgroup** on Linux and a
+**coalition** on macOS — the rule keeps its Linux name, and so does the `via`
+value in the log. They are the same idea: a process that forks, calls
+`setsid`, forks again and is re-parented to init keeps the one it started in,
+while unrelated programs sit in their own.
+
 The `orphan` rule is the one that closes the daemonization gap in attach mode.
 It recognises re-parenting by noticing that the adopting reaper lives in a
-*different* cgroup, which is what separates a detached grandchild from an
+*different* boundary, which is what separates a detached grandchild from an
 unrelated process started in the same terminal.
 
 ### `run` is exact; `watch` is very good
@@ -111,8 +121,13 @@ nothing is missed before the first sample — including processes that are born
 and die between two samples. If systemd is unavailable treehawk falls back to
 `/proc` tracking and says so in the log header.
 
+On macOS, `run` still starts the command and still misses nothing before the
+first sample, but it cannot create a boundary: placing a process in a new
+coalition needs entitlements treehawk does not have. Membership is inferred
+there in both modes, and the log header says so.
+
 `treehawk watch` has to infer membership. It is reliable in practice, but a
-process that detaches *and* moves itself to an unrelated cgroup in the gap
+process that detaches *and* moves itself to an unrelated boundary in the gap
 between two samples can be missed. Use `run` when exactness matters.
 
 ## Output
@@ -149,11 +164,16 @@ Three are recorded because each is wrong in a different way:
 
 * **`rss_bytes`** — always available, but summing RSS over a fork tree counts
   every shared page once per child. Overstates real use, sometimes by a lot.
-* **`pss_bytes`** — each shared page divided among the processes mapping it, so
-  the sum is what the workload actually costs the machine. Needs permission to
-  read `smaps_rollup` (same user). Disable with `--no-pss` if sampling fast.
-* **`group_memory_bytes`** — the kernel's own charge for the cgroup. Exact when
-  a boundary exists, `null` otherwise.
+* **`pss_bytes`** — the platform's fair measure: what the workload really costs
+  the machine. Disable with `--no-pss` if sampling fast. Which measure it is
+  differs by platform, so the header says which in `memory_kind`:
+  * `pss` on Linux — each shared page divided among the processes mapping it.
+    Needs permission to read `smaps_rollup` (same user).
+  * `phys_footprint` on macOS — the kernel's own charge for what a process
+    costs, the number Activity Monitor shows. macOS has no PSS, and treehawk
+    will not put a different measure behind that name without saying so.
+* **`group_memory_bytes`** — the kernel's own charge for the boundary. Exact
+  when one exists, `null` otherwise — which is always the case on macOS.
 
 ## The PDF report
 
@@ -193,22 +213,49 @@ Advanced:
     --expand RULE        limit which membership rules may adopt processes
     --no-pss             skip smaps_rollup (cheaper at short intervals)
     --aggregate-only     log only the workload total, not a row per process
-    --no-isolate         (run) do not create a cgroup
+    --no-isolate         (run) do not ask for an accounting boundary
 ```
 
 Sampling uses absolute deadlines, so intervals do not drift. A sample that
 takes longer than the interval is flagged `overrun`, counted in the summary, and
 marked on the CPU chart.
 
+## Platform support
+
+Both platforms read the kernel directly, and the membership rules work the same
+way on each. What differs is how much the kernel is willing to total up for
+you — so `run` is exact on Linux and merely very good on macOS.
+
+| | Linux | macOS (Intel and Apple Silicon) |
+|---|---|---|
+| source of metrics | `/proc`, cgroup v2 | `libproc`, `sysctl` |
+| the boundary a fork cannot escape | cgroup | coalition |
+| `tree` / `session` / `orphan` rules | yes | yes |
+| `cgroup` rule | yes | yes, over coalitions |
+| **kernel-side group totals** (`group_memory_bytes`, exact CPU) | yes | **no** — macOS exposes none without entitlements |
+| **`run` creates its own boundary** | yes, via `systemd-run --user --scope` | **no** — creating a coalition needs entitlements |
+| processes born and dying between samples | counted under `run` | not counted |
+| fair memory measure (`memory_kind`) | `pss` | `phys_footprint` |
+| per-process CPU resolution | `CLK_TCK`, usually 10 ms | nanoseconds |
+| other users' processes | visible, without `pss` | not visible |
+
+Anything treehawk cannot measure on your machine is stated in the log header's
+`notes` and shown on screen when the run starts, rather than silently omitted.
+
 ## Limitations
 
 * **Processes that live and die between two samples** are invisible to polling.
-  Their CPU still lands in the totals under `run` mode (the cgroup counter sees
-  them); under `watch` it is lost. Shorten `--interval` or use `run`.
-* **`watch` can miss a process that detaches and changes cgroup** in the gap
+  On Linux their CPU still lands in the totals under `run` mode (the cgroup
+  counter sees them); under `watch`, and anywhere on macOS, it is lost.
+  Shorten `--interval` or use `run`.
+* **`watch` can miss a process that detaches and changes boundary** in the gap
   between samples.
-* **Another user's processes** expose `stat` but not `smaps_rollup`, so `pss`
-  will be `null`. treehawk never fakes a value it could not read.
+* **Another user's processes** are partly opaque. On Linux they expose `stat`
+  but not `smaps_rollup`, so `pss` is `null`. On macOS they refuse both their
+  command line and their footprint, and a root-owned process is not visible to
+  `scan` at all — which is no obstacle to watching your own workload, but means
+  treehawk is not a whole-machine monitor there. It never fakes a value it
+  could not read.
 * treehawk never adopts its own ancestors (your shell, `uv`, `timeout`), since
   they carry the keyword you typed.
 * **A watch is meant to be left running.** Nothing accumulates without bound —
@@ -230,10 +277,12 @@ core/         platform-agnostic policy - models, interfaces, membership, samplin
   tracker.py      membership: sticky admission, exit accounting
   strategies.py   one class per membership rule
   matchers.py     one class per way of naming the workload
-  monitor.py      the sampling loop; knows nothing about Linux
+  monitor.py      the sampling loop; knows nothing about any OS
   aggregate.py    counters -> rates; samples -> summary
 platforms/    concrete OS implementations of those protocols
+  posix.py        launching: the session and signalling both OSes share
   linux/          procfs.py, cgroup2.py, source.py, launcher.py
+  darwin/         libproc.py, coalition.py, source.py, host.py
 gpu/          the seam for GPU metrics (protocol defined, nothing registered yet)
 sinks/        jsonl, csv, plain console, live dashboard, and a composite
 ui/           Rich rendering: one palette, the dashboard, the summary views
@@ -259,24 +308,32 @@ are untouched.
 
 **Adding another OS**: implement `ProcessSource`, `HostInfoSource` and
 optionally `GroupMetricSource`/`ProcessLauncher` in `platforms/<os>/`, then
-register a builder in `platforms/registry.py`.
+register a builder in `platforms/registry.py`. macOS was added exactly that
+way and changed nothing in `core/`. Two things are worth copying from it: make
+the syscall boundary an injectable protocol so the backend can be tested
+without that OS, and bind any platform library inside the builder rather than
+at import, so the module still type-checks everywhere.
 
 ## Tests
 
 ```bash
 uv run pytest                        # everything
-uv run pytest -m "not integration"   # fast: fixture /proc trees only
+uv run pytest -m "not integration"   # fast: fake kernels only
 uv run mypy                          # strictest settings: src, tests, scripts
 uv run ruff format --check           # formatting
 uv run ruff check                    # lint
 ```
 
-CI runs all of these on every push and pull request, on Python 3.10 to 3.14.
+CI runs all of these on every push and pull request, on Python 3.10 to 3.14 on
+Linux, and on the oldest and newest of those on macOS (Apple Silicon).
 
-The unit tests run against fake `/proc` and cgroup trees (every reader takes its
-root as an argument), so they need no privileges and no real workload. The
-integration tests spawn `tests/workload.py`, which deliberately double-forks a
-detached child, and assert it is still in the log after its parent is gone.
+The unit tests run against fake kernels, so they need no privileges and no real
+workload: fake `/proc` and cgroup trees for Linux, since every reader takes its
+root as an argument, and a fake `ProcessTable` for macOS, since there is no
+directory to point at. Neither binds a platform library, so the whole suite
+runs on either OS. The integration tests spawn `tests/workload.py`, which
+deliberately double-forks a detached child, and assert it is still in the log
+after its parent is gone.
 
 ## Releasing
 

@@ -21,7 +21,7 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import target_of
+from treehawk.core.records import memory_measure, target_of
 from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
 from treehawk.ui.theme import Palette, discovery_color
 
@@ -86,7 +86,7 @@ def render_header_facts(*, header: Record, palette: Palette) -> RenderableType:
     )
     boundary = header.get("group_path")
     table.add_row(
-        "cgroup",
+        "boundary",
         str(boundary) if boundary else Text("none", style=palette.text_muted),
     )
     for note in as_sequence(header.get("notes")):
@@ -117,6 +117,7 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
             (f"  on {ncpu} cpus" if ncpu else "", palette.text_muted),
         ),
     )
+    group_peak = as_float(summary.get("peak_group_memory_bytes"))
     table.add_row(
         "memory",
         Text.assemble(
@@ -125,13 +126,12 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
                 f"bold {palette.slot(2)}",
             ),
             (
-                f"  {format_bytes(as_float(summary.get('peak_pss_bytes')))} peak pss",
+                f"  {format_bytes(as_float(summary.get('peak_pss_bytes')))} peak {memory_measure(header).short}",
                 palette.text_secondary,
             ),
-            (
-                f"  {format_bytes(as_float(summary.get('peak_group_memory_bytes')))} peak cgroup",
-                palette.text_secondary,
-            ),
+            # Only when a boundary actually reported one - a platform without
+            # cgroups would otherwise print a dash and call it "peak cgroup".
+            (f"  {format_bytes(group_peak)} peak cgroup" if group_peak is not None else "", palette.text_secondary),
         ),
     )
     table.add_row(

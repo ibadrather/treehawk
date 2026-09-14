@@ -39,7 +39,8 @@ class MemoryDetail(StrEnum):
     """RSS only. Cheap, but summing it over-counts pages shared by children."""
 
     PROPORTIONAL = "proportional"
-    """Also read PSS, which divides a shared page between its users."""
+    """Also read the platform's fair measure - PSS on Linux, which divides a
+    shared page between its users; phys_footprint on macOS."""
 
 
 class MissingWorkload(StrEnum):
@@ -71,6 +72,9 @@ class Isolation(StrEnum):
     """Whether a launched workload gets an accounting boundary of its own."""
 
     CGROUP = "cgroup"
+    """Ask the platform for a boundary. Only Linux can create one; elsewhere
+    the launcher falls back and says so in the log header."""
+
     NONE = "none"
 
 
