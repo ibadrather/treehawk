@@ -9,6 +9,6 @@ from treehawk.platforms.linux.source import LinuxProcessSource
 __all__ = [
     "CgroupV2Source",
     "LinuxHostInfoSource",
-    "ScopeLauncher",
     "LinuxProcessSource",
+    "ScopeLauncher",
 ]

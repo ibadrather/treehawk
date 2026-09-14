@@ -22,7 +22,9 @@ ADVANCED: Final = "Advanced"
 Interval = Annotated[
     float,
     typer.Option(
-        "--interval", "-i", min=0.01,
+        "--interval",
+        "-i",
+        min=0.01,
         help="Seconds between samples.",
         show_default=True,
     ),
@@ -31,9 +33,10 @@ Interval = Annotated[
 Output = Annotated[
     str | None,
     typer.Option(
-        "--output", "-o", metavar="PATH",
-        help="Log file. '-' writes to stdout. "
-             "Default: treehawk-<timestamp>.jsonl in the current directory.",
+        "--output",
+        "-o",
+        metavar="PATH",
+        help="Log file. '-' writes to stdout. Default: treehawk-<timestamp>.jsonl in the current directory.",
     ),
 ]
 
@@ -50,35 +53,38 @@ Quiet = Annotated[
 Duration = Annotated[
     float | None,
     typer.Option(
-        "--duration", "-d", metavar="SECONDS", rich_help_panel=ADVANCED,
-        help="Stop after this long. By default treehawk runs until the "
-             "process ends.",
+        "--duration",
+        "-d",
+        metavar="SECONDS",
+        rich_help_panel=ADVANCED,
+        help="Stop after this long. By default treehawk runs until the process ends.",
     ),
 ]
 
 Expand = Annotated[
     list[ExpansionName] | None,
     typer.Option(
-        "--expand", rich_help_panel=ADVANCED,
-        help="Which rules may adopt processes into the workload. "
-             "Repeatable; all four are used by default.",
+        "--expand",
+        rich_help_panel=ADVANCED,
+        help="Which rules may adopt processes into the workload. Repeatable; all four are used by default.",
     ),
 ]
 
 NoPss = Annotated[
     bool,
     typer.Option(
-        "--no-pss", rich_help_panel=ADVANCED,
+        "--no-pss",
+        rich_help_panel=ADVANCED,
         help="Skip the shared-memory correction. Cheaper per sample, but "
-             "summed RSS over-counts pages shared between children.",
+        "summed RSS over-counts pages shared between children.",
     ),
 ]
 
 AggregateOnly = Annotated[
     bool,
     typer.Option(
-        "--aggregate-only", rich_help_panel=ADVANCED,
-        help="Log only the workload total, not a row per process. "
-             "Much smaller logs for a run that lasts days.",
+        "--aggregate-only",
+        rich_help_panel=ADVANCED,
+        help="Log only the workload total, not a row per process. Much smaller logs for a run that lasts days.",
     ),
 ]

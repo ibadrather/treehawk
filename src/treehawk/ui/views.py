@@ -6,7 +6,7 @@ of ``treehawk report`` are the same information, so they are the same code.
 
 from __future__ import annotations
 
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from rich.columns import Columns
 from rich.console import Group, RenderableType
@@ -22,7 +22,7 @@ from treehawk.core.humanize import (
 )
 from treehawk.core.interfaces import Record
 from treehawk.core.records import target_of
-from treehawk.core.values import as_float
+from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
 from treehawk.ui.theme import Palette, discovery_color
 
 Formatter = Callable[[float | None], str]
@@ -37,19 +37,17 @@ def render_summary(
     title: str = "summary",
 ) -> RenderableType:
     """The figures people ask for, plus who was responsible for them."""
-    parts: list[RenderableType] = [
-        _summary_facts(summary=summary, header=header, palette=palette)
-    ]
+    parts: list[RenderableType] = [_summary_facts(summary=summary, header=header, palette=palette)]
     tables = [
         _ranking(
-            rows=summary.get("top_by_cpu") or [],
+            rows=as_records(summary.get("top_by_cpu")),
             title="cpu time",
             field="cpu_seconds",
             formatter=format_seconds,
             palette=palette,
         ),
         _ranking(
-            rows=summary.get("top_by_memory") or [],
+            rows=as_records(summary.get("top_by_memory")),
             title="peak rss",
             field="peak_rss_bytes",
             formatter=format_bytes,
@@ -62,24 +60,24 @@ def render_summary(
         # is better than squeezing a value column until it has to truncate.
         parts.append(Columns(present, padding=(0, 4)))
     return Panel(
-        Group(*parts), title=title, title_align="left",
-        border_style=palette.grid, padding=(0, 1),
+        Group(*parts),
+        title=title,
+        title_align="left",
+        border_style=palette.grid,
+        padding=(0, 1),
     )
 
 
 def render_header_facts(*, header: Record, palette: Palette) -> RenderableType:
     """Run metadata, for the report command where there is no live panel."""
-    host = header.get("host") or {}
+    host = as_mapping(header.get("host"))
     table = Table.grid(padding=(0, 2))
     table.add_column(style=palette.text_muted, width=9)
     table.add_column()
-    table.add_row(
-        "target", Text(target_of(header), style=f"bold {palette.slot(0)}")
-    )
+    table.add_row("target", Text(target_of(header), style=f"bold {palette.slot(0)}"))
     table.add_row(
         "run",
-        f"{header.get('mode', '?')} · every {header.get('interval', '?')}s · "
-        f"started {header.get('started_at', '?')}",
+        f"{header.get('mode', '?')} · every {header.get('interval', '?')}s · started {header.get('started_at', '?')}",
     )
     table.add_row(
         "host",
@@ -91,15 +89,13 @@ def render_header_facts(*, header: Record, palette: Palette) -> RenderableType:
         "cgroup",
         str(boundary) if boundary else Text("none", style=palette.text_muted),
     )
-    for note in header.get("notes") or ():
+    for note in as_sequence(header.get("notes")):
         table.add_row("note", Text(str(note), style=palette.warning))
     return table
 
 
-def _summary_facts(
-    *, summary: Record, header: Record, palette: Palette
-) -> RenderableType:
-    ncpu = (header.get("host") or {}).get("ncpu")
+def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> RenderableType:
+    ncpu = as_mapping(header.get("host")).get("ncpu")
     table = Table.grid(padding=(0, 2))
     table.add_column(style=palette.text_muted, width=9)
     table.add_column()
@@ -115,8 +111,7 @@ def _summary_facts(
                 palette.text_secondary,
             ),
             (
-                f"  {format_seconds(as_float(summary.get('cpu_seconds_used')))}"
-                " of cpu time",
+                f"  {format_seconds(as_float(summary.get('cpu_seconds_used')))} of cpu time",
                 palette.text_secondary,
             ),
             (f"  on {ncpu} cpus" if ncpu else "", palette.text_muted),
@@ -134,9 +129,7 @@ def _summary_facts(
                 palette.text_secondary,
             ),
             (
-                "  "
-                f"{format_bytes(as_float(summary.get('peak_group_memory_bytes')))}"
-                " peak cgroup",
+                f"  {format_bytes(as_float(summary.get('peak_group_memory_bytes')))} peak cgroup",
                 palette.text_secondary,
             ),
         ),
@@ -152,8 +145,7 @@ def _summary_facts(
         table.add_row(
             "warning",
             Text(
-                f"{summary['overruns']} sample(s) took longer than the interval - "
-                "try a longer interval",
+                f"{summary['overruns']} sample(s) took longer than the interval - try a longer interval",
                 style=palette.warning,
             ),
         )
@@ -175,14 +167,17 @@ def _ranking(
     if not rows:
         return None
     table = Table(
-        box=None, pad_edge=False, padding=(0, 1), collapse_padding=True,
-        title=f"top by {title}", title_style=palette.text_muted, title_justify="left",
+        box=None,
+        pad_edge=False,
+        padding=(0, 1),
+        collapse_padding=True,
+        title=f"top by {title}",
+        title_style=palette.text_muted,
+        title_justify="left",
     )
     # 7 digits covers the kernel default pid_max; never let it truncate.
-    table.add_column("pid", justify="right", width=7, no_wrap=True,
-                     style=palette.text_muted)
-    table.add_column(title.replace(" ", "\n"), justify="right", width=9,
-                     no_wrap=True)
+    table.add_column("pid", justify="right", width=7, no_wrap=True, style=palette.text_muted)
+    table.add_column(title.replace(" ", "\n"), justify="right", width=9, no_wrap=True)
     table.add_column("command", overflow="ellipsis", no_wrap=True, max_width=64)
     for row in rows:
         via = str(row.get("via", "-"))

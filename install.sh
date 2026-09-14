@@ -122,12 +122,12 @@ fi
 
 if has uv; then
     say "installing $label with uv"
-    uv tool install --reinstall --python '>=3.12' "$WHEEL"
+    uv tool install --reinstall --python '>=3.10' "$WHEEL"
     hint="uv tool update-shell"
 else
     say "installing $label with pipx"
     pipx install --force "$WHEEL" \
-        || err "pipx could not install treehawk (it needs Python 3.12 or newer); installing uv and re-running is the simplest fix"
+        || err "pipx could not install treehawk (it needs Python 3.10 or newer); installing uv and re-running is the simplest fix"
     hint="pipx ensurepath"
 fi
 

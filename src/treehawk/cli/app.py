@@ -19,10 +19,11 @@ import functools
 import json
 import signal
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
-from typing import Annotated, Callable, Final
+from typing import Annotated, Final, ParamSpec
 
 import typer
 from rich.console import Console
@@ -68,8 +69,7 @@ STDOUT_PATH: Final = "-"
 
 app = typer.Typer(
     name="treehawk",
-    help="Log the CPU and RAM of a process and every process it spawns, "
-         "including ones that detach.",
+    help="Log the CPU and RAM of a process and every process it spawns, including ones that detach.",
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -78,8 +78,10 @@ app = typer.Typer(
 stderr_console = Console(stderr=True)
 stdout_console = Console()
 
+P = ParamSpec("P")
 
-def _guard[**P](command: Callable[P, None]) -> Callable[P, None]:
+
+def _guard(command: Callable[P, None]) -> Callable[P, None]:
     """Turn any deliberate failure into one line of text and an exit code.
 
     Applied to every command, so nothing below the CLI has to know how a
@@ -100,6 +102,7 @@ def _guard[**P](command: Callable[P, None]) -> Callable[P, None]:
 @app.callback(invoke_without_command=True)
 def main_callback(
     ctx: typer.Context,
+    *,
     version: Annotated[
         bool,
         typer.Option("--version", help="Show the version and exit.", is_eager=True),
@@ -116,6 +119,7 @@ def main_callback(
 @app.command()
 @_guard
 def watch(
+    *,
     target: Annotated[
         str | None,
         typer.Argument(
@@ -123,18 +127,14 @@ def watch(
             help="Text to look for in the command line of a running process.",
         ),
     ] = None,
-    pid: Annotated[
-        int | None, typer.Option("--pid", "-p", help="Watch this process id.")
-    ] = None,
+    pid: Annotated[int | None, typer.Option("--pid", "-p", help="Watch this process id.")] = None,
     exact: Annotated[
         str | None,
         typer.Option("--exact", "-e", help="The full command line, matched whole."),
     ] = None,
     regex: Annotated[
         str | None,
-        typer.Option(
-            "--regex", "-r", help="A regular expression over the command line."
-        ),
+        typer.Option("--regex", "-r", help="A regular expression over the command line."),
     ] = None,
     wait: Annotated[
         bool,
@@ -173,8 +173,12 @@ def watch(
         screen=None if quiet else stderr_console,
     )
     session = build_session(
-        platform=platform, config=config, sink=sinks, matcher=matcher,
-        mode="watch", notes=tuple(platform.notes),
+        platform=platform,
+        config=config,
+        sink=sinks,
+        matcher=matcher,
+        mode="watch",
+        notes=tuple(platform.notes),
     )
     _install_signal_handlers(monitor=session.monitor)
     if not quiet:
@@ -184,12 +188,11 @@ def watch(
     _report_sink_errors(sinks)
 
 
-@app.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
-)
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 @_guard
 def run(
     ctx: typer.Context,
+    *,
     interval: Interval = 1.0,
     output: Output = None,
     csv: Csv = False,
@@ -201,9 +204,9 @@ def run(
     no_isolate: Annotated[
         bool,
         typer.Option(
-            "--no-isolate", rich_help_panel=ADVANCED,
-            help="Do not create a cgroup for the workload; track it through "
-                 "/proc only.",
+            "--no-isolate",
+            rich_help_panel=ADVANCED,
+            help="Do not create a cgroup for the workload; track it through /proc only.",
         ),
     ] = False,
 ) -> None:
@@ -235,9 +238,7 @@ def run(
         detail=config.detail,
         screen=None if quiet else stderr_console,
     )
-    launcher = _select_launcher(
-        platform, isolation=Isolation.NONE if no_isolate else Isolation.CGROUP
-    )
+    launcher = _select_launcher(platform, isolation=Isolation.NONE if no_isolate else Isolation.CGROUP)
 
     if not quiet:
         _announce_log_path(path)
@@ -245,9 +246,14 @@ def run(
     notes = tuple(platform.notes) + tuple(getattr(launcher, "notes", ()))
 
     session = build_session(
-        platform=platform, config=config, sink=sinks,
+        platform=platform,
+        config=config,
+        sink=sinks,
         matcher=build_matcher(kind="pid", value=workload.pid),
-        mode="run", argv=argv, pinned_group=workload.group_path, notes=notes,
+        mode="run",
+        argv=argv,
+        pinned_group=workload.group_path,
+        notes=notes,
     )
     # The workload already exists, so seed now rather than searching for it.
     session.tracker.seed(platform.process_source.scan())
@@ -266,9 +272,8 @@ def run(
 @_guard
 def report(
     path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
-    as_json: Annotated[
-        bool, typer.Option("--json", help="Print the summary as JSON.")
-    ] = False,
+    *,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the summary as JSON.")] = False,
 ) -> None:
     """Summarise a finished run."""
     data: Report = build_report(str(path))
@@ -277,11 +282,7 @@ def report(
         return
     header, summary = data["header"], data["summary"]
     stdout_console.print(render_header_facts(header=header, palette=PALETTE))
-    stdout_console.print(
-        render_summary(
-            summary=summary, header=header, palette=PALETTE, title=path.name
-        )
-    )
+    stdout_console.print(render_summary(summary=summary, header=header, palette=PALETTE, title=path.name))
 
 
 @app.command()
@@ -290,8 +291,7 @@ def pdf(
     path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
     output: Annotated[
         Path | None,
-        typer.Option("--output", "-o", help="Where to write the PDF. "
-                                            "Default: alongside the log."),
+        typer.Option("--output", "-o", help="Where to write the PDF. Default: alongside the log."),
     ] = None,
 ) -> None:
     """Render a finished run as a multi-page PDF report."""
@@ -306,9 +306,8 @@ def pdf(
 # helpers
 # --------------------------------------------------------------------------
 
-def _select_matcher(
-    *, target: str | None, pid: int | None, exact: str | None, regex: str | None
-) -> ProcessMatcher:
+
+def _select_matcher(*, target: str | None, pid: int | None, exact: str | None, regex: str | None) -> ProcessMatcher:
     given = [value for value in (target, pid, exact, regex) if value is not None]
     if len(given) > 1:
         raise ConfigError("give just one of KEYWORD, --pid, --exact or --regex")
@@ -355,13 +354,11 @@ def _build_config(
 
 
 def _default_log_path(fmt: LogFormat) -> str:
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     return f"treehawk-{stamp}.{fmt}"
 
 
-def _build_sinks(
-    *, path: str, fmt: LogFormat, detail: LogDetail, screen: Console | None
-) -> CompositeSink:
+def _build_sinks(*, path: str, fmt: LogFormat, detail: LogDetail, screen: Console | None) -> CompositeSink:
     """The log, plus the on-screen view - or no view at all when ``screen`` is
     ``None``, which is what ``--quiet`` means."""
     sinks = CompositeSink()
@@ -387,14 +384,11 @@ def _report_sink_errors(sinks: CompositeSink) -> None:
         return
     first = sinks.errors[0]
     stderr_console.print(
-        f"[bold]treehawk:[/bold] {len(sinks.errors)} output error(s); "
-        f"first was {type(first).__name__}: {first}"
+        f"[bold]treehawk:[/bold] {len(sinks.errors)} output error(s); first was {type(first).__name__}: {first}"
     )
 
 
-def _install_signal_handlers(
-    *, monitor: Monitor, workload: LaunchedWorkload | None = None
-) -> None:
+def _install_signal_handlers(*, monitor: Monitor, workload: LaunchedWorkload | None = None) -> None:
     def handler(signum: int, _frame: FrameType | None) -> None:
         if workload is not None:
             workload.signal(signum)

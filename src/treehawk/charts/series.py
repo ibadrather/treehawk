@@ -7,14 +7,15 @@ functions stay short and the reshaping stay testable.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import Callable, Final, Mapping, Sequence
+from typing import Final
 
+from treehawk.core.compat import StrEnum
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
 from treehawk.core.records import target_of
-from treehawk.core.values import as_float, as_int
+from treehawk.core.values import as_float, as_int, as_mapping, as_records
 from treehawk.report import read_records
 from treehawk.ui.theme import discovery_group
 
@@ -24,6 +25,7 @@ class Metric(StrEnum):
 
     CPU = "cpu"
     RSS = "rss"
+
 
 TOP_SERIES: Final = 6
 """Processes charted individually before the rest folds into "other".
@@ -102,7 +104,7 @@ class RunSeries:
 
     @property
     def ncpu(self) -> int:
-        host = self.header.get("host") or {}
+        host = as_mapping(self.header.get("host"))
         return as_int(host.get("ncpu")) or 1
 
     @property
@@ -115,9 +117,7 @@ class RunSeries:
             return self.procs_cpu_total
         return self.procs_rss_total
 
-    def top_tracks(
-        self, *, rank: Callable[[ProcessTrack], float], limit: int = TOP_SERIES
-    ) -> list[ProcessTrack]:
+    def top_tracks(self, *, rank: Callable[[ProcessTrack], float], limit: int = TOP_SERIES) -> list[ProcessTrack]:
         """The ``limit`` processes that matter most by ``rank``, biggest first."""
         return sorted(self.tracks, key=rank, reverse=True)[:limit]
 
@@ -156,13 +156,9 @@ def load_series(path: str) -> RunSeries:
             series.gaps.append(t - previous_t)
         previous_t = t
 
-        rows = record.get("procs") or ()
-        series.procs_cpu_total.append(
-            sum(as_float(proc.get("cpu_percent")) or 0.0 for proc in rows)
-        )
-        series.procs_rss_total.append(
-            sum(float(as_int(proc.get("rss_bytes")) or 0) for proc in rows)
-        )
+        rows = as_records(record.get("procs"))
+        series.procs_cpu_total.append(sum(as_float(proc.get("cpu_percent")) or 0.0 for proc in rows))
+        series.procs_rss_total.append(sum(float(as_int(proc.get("rss_bytes")) or 0) for proc in rows))
         for proc in rows:
             _track_process(tracks=tracks, proc=proc, t=t)
 
@@ -173,9 +169,7 @@ def load_series(path: str) -> RunSeries:
     return series
 
 
-def _track_process(
-    *, tracks: dict[tuple[int, int], ProcessTrack], proc: Record, t: float
-) -> None:
+def _track_process(*, tracks: dict[tuple[int, int], ProcessTrack], proc: Record, t: float) -> None:
     """Fold one per-process row into the track it belongs to."""
     pid = as_int(proc.get("pid")) or 0
     starttime = as_int(proc.get("starttime")) or 0
@@ -194,9 +188,7 @@ def _track_process(
         tracks[key] = track
 
     track.last_t = t
-    track.cpu_seconds = max(
-        track.cpu_seconds, as_float(proc.get("cpu_seconds")) or 0.0
-    )
+    track.cpu_seconds = max(track.cpu_seconds, as_float(proc.get("cpu_seconds")) or 0.0)
     rss = as_int(proc.get("rss_bytes")) or 0
     pss = as_int(proc.get("pss_bytes")) or 0
     track.peak_rss = max(track.peak_rss, rss)
@@ -224,10 +216,5 @@ def stack_for(
     # Measured against the per-process rows, never against the workload total:
     # the total includes processes that exited mid-interval and rates we could
     # not compute yet, and charging those to "other" would invent a series.
-    charted = (
-        [sum(column) for column in zip(*bands)] if bands else [0.0] * len(series.t)
-    )
-    return bands, [
-        max(total - shown, 0.0)
-        for total, shown in zip(series.charted_total(metric), charted)
-    ]
+    charted = [sum(column) for column in zip(*bands, strict=True)] if bands else [0.0] * len(series.t)
+    return bands, [max(total - shown, 0.0) for total, shown in zip(series.charted_total(metric), charted, strict=True)]

@@ -8,7 +8,7 @@ seeding logic.
 from __future__ import annotations
 
 import re
-from typing import Callable
+from collections.abc import Callable
 
 from treehawk.core.errors import ConfigError
 from treehawk.core.interfaces import ProcessMatcher, Record
@@ -30,6 +30,7 @@ class PidMatcher:
         return True
 
     def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
+        del cmdline  # a pid names the process outright
         return info.pid == self._pid
 
     def describe(self) -> Record:
@@ -73,6 +74,7 @@ class ExactMatcher:
         return False
 
     def matches(self, *, info: ProcInfo, cmdline: str) -> bool:
+        del info  # only the command line counts
         return cmdline.strip() == self._command
 
     def describe(self) -> Record:
@@ -116,7 +118,5 @@ def build_matcher(*, kind: str, value: object) -> ProcessMatcher:
     try:
         factory = MATCHER_KINDS[kind]
     except KeyError:
-        raise ConfigError(
-            f"unknown matcher {kind!r}; known: {', '.join(sorted(MATCHER_KINDS))}"
-        ) from None
+        raise ConfigError(f"unknown matcher {kind!r}; known: {', '.join(sorted(MATCHER_KINDS))}") from None
     return factory(value)

@@ -6,20 +6,21 @@ means appending to :data:`PAGES`; nothing here changes.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Final, Sequence, cast
+from typing import Final
 
 import matplotlib
 
 matplotlib.use("Agg")  # no display needed, and none is available on a server
 
-import matplotlib.pyplot as plt  # noqa: E402 - must follow the backend choice
-from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.figure import Figure
 
-from treehawk import __version__  # noqa: E402
-from treehawk.charts import style  # noqa: E402
-from treehawk.charts.pages import (  # noqa: E402
+from treehawk import __version__
+from treehawk.charts import style
+from treehawk.charts.pages import (
     CpuByProcessPage,
     CpuPage,
     LifetimePage,
@@ -30,8 +31,8 @@ from treehawk.charts.pages import (  # noqa: E402
     RankingPage,
     SamplingPage,
 )
-from treehawk.charts.series import RunSeries, load_series  # noqa: E402
-from treehawk.ui.theme import PRINT, Palette  # noqa: E402
+from treehawk.charts.series import RunSeries, load_series
+from treehawk.ui.theme import PRINT, Palette
 
 PAGES: Final[tuple[Page, ...]] = (
     OverviewPage(),
@@ -61,10 +62,7 @@ def write_pdf_report(
     """Render ``log_path`` as a PDF. Returns the number of pages written."""
     series = load_series(log_path)
     written = 0
-    # rc_context is typed against a literal key list; our dict is built from
-    # the same names but mypy cannot see that through the palette indirection.
-    settings = cast(Any, style.rc_params(palette))
-    with plt.rc_context(settings), PdfPages(destination) as pdf:
+    with plt.rc_context(style.rc_params(palette)), PdfPages(destination) as pdf:
         for number, page in enumerate(pages, start=1):
             figure = plt.figure(figsize=style.PAGE_SIZE)
             try:
@@ -82,9 +80,7 @@ def write_pdf_report(
 def _add_footer(figure: Figure, *, number: int, palette: Palette) -> None:
     if any(text.get_position()[1] < FOOTER_BAND for text in figure.texts):
         return  # the page drew its own footer and it says something better
-    style.draw_footer(
-        figure, left=f"treehawk {__version__}", right=str(number), palette=palette
-    )
+    style.draw_footer(figure, left=f"treehawk {__version__}", right=str(number), palette=palette)
 
 
 def _describe_pdf(pdf: PdfPages, *, series: RunSeries, pages: int) -> None:
@@ -92,8 +88,5 @@ def _describe_pdf(pdf: PdfPages, *, series: RunSeries, pages: int) -> None:
     info = pdf.infodict()  # type: ignore[no-untyped-call]
     info["Title"] = f"treehawk report - {series.target}"
     info["Author"] = f"treehawk {__version__}"
-    info["Subject"] = (
-        f"CPU and memory of {len(series.tracks)} process(es) over "
-        f"{series.duration:.1f}s, {pages} pages"
-    )
-    info["CreationDate"] = datetime.now()
+    info["Subject"] = f"CPU and memory of {len(series.tracks)} process(es) over {series.duration:.1f}s, {pages} pages"
+    info["CreationDate"] = datetime.now().astimezone()

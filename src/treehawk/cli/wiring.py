@@ -63,9 +63,7 @@ def build_session(
         self_group=source.read_group_path(self_pid),
         self_sid=session_id_of(source=source, pid=self_pid),
         pinned_group=pinned_group,
-        exclude_from_seed=(
-            frozenset() if matcher.names_one_process else unrelated
-        ),
+        exclude_from_seed=(frozenset() if matcher.names_one_process else unrelated),
         exclude_from_expansion=unrelated,
     )
     monitor = Monitor(
@@ -73,9 +71,7 @@ def build_session(
         tracker=tracker,
         aggregator=Aggregator(
             host=host,
-            cpu_source=(
-                CpuSource.GROUP if pinned_group is not None else CpuSource.PROCESSES
-            ),
+            cpu_source=(CpuSource.GROUP if pinned_group is not None else CpuSource.PROCESSES),
         ),
         sink=sink,
         clock=SystemClock(),
@@ -91,9 +87,7 @@ def build_session(
     return Session(monitor=monitor, tracker=tracker, platform=platform)
 
 
-def ancestors_of(
-    *, source: ProcessSource, pid: int, limit: int = ANCESTOR_LIMIT
-) -> frozenset[int]:
+def ancestors_of(*, source: ProcessSource, pid: int, limit: int = ANCESTOR_LIMIT) -> frozenset[int]:
     """Every process between ``pid`` and PID 1."""
     found: set[int] = set()
     current = pid

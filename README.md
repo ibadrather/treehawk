@@ -1,5 +1,15 @@
 # treehawk
 
+[![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ibadrather/treehawk?sort=semver)](https://github.com/ibadrather/treehawk/releases/latest)
+[![Python 3.10](https://img.shields.io/badge/python-3.10-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
+[![Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)](#)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Log the CPU and RAM a process uses — **and every process it spawns**, including
 children that daemonize and detach themselves.
 
@@ -40,12 +50,12 @@ curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/insta
 The script installs the `treehawk` command from the latest GitHub release with
 `uv tool install` (or `pipx`, if that is what you have). If neither is present
 it installs uv first, and uv fetches a suitable Python by itself. Pin a version
-with `| sh -s -- --version 0.2.0`; `--help` lists the rest.
+with `| sh -s -- --version 0.3.0`; `--help` lists the rest.
 
-Or install a release yourself (Linux, Python 3.12+):
+Or install a release yourself (Linux, Python 3.10+):
 
 ```bash
-uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.2.0/treehawk-0.2.0-py3-none-any.whl
+uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.3.0/treehawk-0.3.0-py3-none-any.whl
 uv tool install git+https://github.com/ibadrather/treehawk   # latest main
 ```
 
@@ -222,13 +232,14 @@ implementations. Adding a membership rule, an output format, a matcher, a report
 page or a metric collector means adding a class and a registry entry — not
 editing the loop.
 
-Everything is fully annotated and checked under `mypy --strict`, including the
-protocols the layers meet at. `ui/theme.py` holds the one palette both the
+Everything, tests included, is fully annotated and checked by mypy at the
+strictest settings it offers (see `[tool.mypy]` in `pyproject.toml`), including
+the protocols the layers meet at. `ui/theme.py` holds the one palette both the
 dashboard and the PDF draw from, so a process keeps its colour whether you watch
 it live or read it back later.
 
 **Adding GPU metrics** later: implement `MetricCollector` (`namespace`,
-`collect(snapshot)`, `close()`), register it in `gpu/__init__.py`, and its keys
+`collect(snapshot)`, `close()`), register it in `gpu/registry.py`, and its keys
 appear in every sample under its namespace. The loop, the schema and the sinks
 are untouched.
 
@@ -241,8 +252,12 @@ register a builder in `platforms/registry.py`.
 ```bash
 uv run pytest                        # everything
 uv run pytest -m "not integration"   # fast: fixture /proc trees only
-uv run mypy                          # strict, whole package
+uv run mypy                          # strictest settings: src, tests, scripts
+uv run ruff format --check           # formatting
+uv run ruff check                    # lint
 ```
+
+CI runs all of these on every push and pull request, on Python 3.10 to 3.14.
 
 The unit tests run against fake `/proc` and cgroup trees (every reader takes its
 root as an argument), so they need no privileges and no real workload. The
@@ -260,7 +275,7 @@ uv version --bump patch      # or minor / major
 ```
 
 When `main` carries a version that has no release yet, the **Release** workflow
-runs CI across Python 3.12, 3.13 and 3.14, builds the sdist and the universal
+runs CI across Python 3.10, 3.11, 3.12, 3.13 and 3.14, builds the sdist and the universal
 wheel, and publishes GitHub release `v<version>` with both plus `install.sh`
-attached. Pre-release versions such as `0.2.0rc1` are marked as pre-releases and
+attached. Pre-release versions such as `0.3.0rc1` are marked as pre-releases and
 never become "latest".

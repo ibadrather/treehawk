@@ -7,6 +7,8 @@ did the right pages appear" - pixels are judged by eye, not by assertion.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 from conftest import write_log
 from pypdf import PdfReader
@@ -15,33 +17,33 @@ from treehawk.charts.report import PAGES, write_pdf_report
 from treehawk.charts.series import Metric, load_series, stack_for
 from treehawk.core.errors import ReportError
 
-
 # -- reshaping ------------------------------------------------------------
 
-def test_series_carries_the_time_axis_and_the_aggregates(log):
+
+def test_series_carries_the_time_axis_and_the_aggregates(log: str) -> None:
     series = load_series(log)
 
     assert series.t == [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
     assert series.cpu_percent[0] is None  # no rate in the first sample
-    assert series.interval == 0.5
+    assert series.interval == pytest.approx(0.5)
     assert series.ncpu == 4
     assert series.target == "python train.py"
-    assert series.duration == 2.5
+    assert series.duration == pytest.approx(2.5)
 
 
-def test_each_process_becomes_one_track_with_its_lifetime(log):
+def test_each_process_becomes_one_track_with_its_lifetime(log: str) -> None:
     series = load_series(log)
 
     tracks = {track.pid: track for track in series.tracks}
     assert set(tracks) == {100, 200}
-    assert tracks[100].first_t == 0.0
-    assert tracks[200].first_t == 1.0  # the worker appears at sample 2
+    assert tracks[100].first_t == pytest.approx(0.0)
+    assert tracks[200].first_t == pytest.approx(1.0)  # the worker appears at sample 2
     assert tracks[200].lifetime == pytest.approx(1.5)
     assert tracks[200].group == "detached"
     assert tracks[100].group == "matched"
 
 
-def test_peaks_are_kept_per_process(log):
+def test_peaks_are_kept_per_process(log: str) -> None:
     series = load_series(log)
     parent = next(track for track in series.tracks if track.pid == 100)
 
@@ -49,11 +51,11 @@ def test_peaks_are_kept_per_process(log):
     assert parent.cpu_seconds == pytest.approx(2.5)
 
 
-def test_overruns_are_located_on_the_time_axis(log):
+def test_overruns_are_located_on_the_time_axis(log: str) -> None:
     assert load_series(log).overrun_t == [1.5]
 
 
-def test_the_other_band_comes_from_untracked_processes_not_from_arithmetic(log):
+def test_the_other_band_comes_from_untracked_processes_not_from_arithmetic(log: str) -> None:
     """Charging the aggregate's remainder to "other" would invent a series.
 
     The workload total includes processes that exited mid-interval and rates
@@ -63,10 +65,10 @@ def test_the_other_band_comes_from_untracked_processes_not_from_arithmetic(log):
     bands, other = stack_for(series=series, tracks=series.tracks, metric=Metric.CPU)
 
     assert len(bands) == 2
-    assert all(value == 0.0 for value in other)
+    assert other == pytest.approx([0.0] * len(other))
 
 
-def test_the_other_band_holds_what_was_left_out(log):
+def test_the_other_band_holds_what_was_left_out(log: str) -> None:
     series = load_series(log)
     charted = [track for track in series.tracks if track.pid == 100]
 
@@ -76,14 +78,14 @@ def test_the_other_band_holds_what_was_left_out(log):
     assert other[2] == pytest.approx(70.0)  # the worker, not charted
 
 
-def test_a_log_with_no_samples_is_refused(tmp_path):
+def test_a_log_with_no_samples_is_refused(tmp_path: pathlib.Path) -> None:
     empty = tmp_path / "empty.jsonl"
     empty.write_text("")
     with pytest.raises(ReportError):
         load_series(str(empty))
 
 
-def test_a_truncated_log_still_loads(tmp_path):
+def test_a_truncated_log_still_loads(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "run.jsonl"
     write_log(path)
     with path.open("a") as handle:
@@ -94,7 +96,8 @@ def test_a_truncated_log_still_loads(tmp_path):
 
 # -- rendering ------------------------------------------------------------
 
-def test_every_page_is_written_for_a_full_log(log, tmp_path):
+
+def test_every_page_is_written_for_a_full_log(log: str, tmp_path: pathlib.Path) -> None:
     destination = tmp_path / "report.pdf"
 
     pages = write_pdf_report(log_path=log, destination=str(destination))
@@ -103,20 +106,21 @@ def test_every_page_is_written_for_a_full_log(log, tmp_path):
     assert destination.stat().st_size > 10_000
 
 
-def test_the_pdf_is_readable_and_describes_itself(log, tmp_path):
+def test_the_pdf_is_readable_and_describes_itself(log: str, tmp_path: pathlib.Path) -> None:
     destination = tmp_path / "report.pdf"
     write_pdf_report(log_path=log, destination=str(destination))
 
     reader = PdfReader(str(destination))
 
     assert len(reader.pages) == len(PAGES)
-    assert "treehawk" in (reader.metadata or {}).get("/Title", "")
+    assert reader.metadata is not None
+    assert "treehawk" in (reader.metadata.title or "")
     first = reader.pages[0].extract_text()
     assert "Overview" in first
     assert "peak cpu" in first
 
 
-def test_per_process_pages_are_skipped_when_the_log_has_no_detail(tmp_path):
+def test_per_process_pages_are_skipped_when_the_log_has_no_detail(tmp_path: pathlib.Path) -> None:
     """An --aggregate-only log gets fewer pages, not blank ones."""
     aggregate = write_log(tmp_path / "agg.jsonl", per_process=False)
 
@@ -129,7 +133,7 @@ def test_per_process_pages_are_skipped_when_the_log_has_no_detail(tmp_path):
     assert "CPU over time" in titles
 
 
-def test_a_two_sample_log_still_renders(tmp_path):
+def test_a_two_sample_log_still_renders(tmp_path: pathlib.Path) -> None:
     """Short runs happen; the sampling page needs three points and bows out."""
     short = write_log(tmp_path / "short.jsonl", samples=2)
 

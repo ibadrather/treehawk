@@ -8,13 +8,14 @@ Two small collaborators, each with one job:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Final, Iterable, Mapping, TypedDict
+from typing import Final, TypedDict
 
 from treehawk.core.config import CpuSource
 from treehawk.core.models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
 from treehawk.core.tracker import RefreshResult
-from treehawk.core.values import peak_of
+from treehawk.core.values import as_float, as_int, peak_of
 
 
 class Aggregator:
@@ -30,16 +31,14 @@ class Aggregator:
       come and go, and why it is not merely the sum of the per-process values.
     """
 
-    def __init__(
-        self, *, host: HostInfo, cpu_source: CpuSource = CpuSource.PROCESSES
-    ) -> None:
+    def __init__(self, *, host: HostInfo, cpu_source: CpuSource = CpuSource.PROCESSES) -> None:
         self._host = host
         self._cpu_source = cpu_source
         self._prev_proc_ticks: dict[tuple[int, int], int] = {}
         self._prev_total_cpu: float | None = None
         self._baseline_cpu: float | None = None
 
-    def build(  # noqa: PLR0913 - one call site, all of it meaningful
+    def build(
         self,
         *,
         seq: int,
@@ -53,8 +52,12 @@ class Aggregator:
     ) -> Snapshot:
         clk_tck = self._host.clk_tck or 100
         snap = Snapshot(
-            seq=seq, t=round(elapsed, 6), timestamp=timestamp, procs=samples,
-            group=group, overrun=overrun,
+            seq=seq,
+            t=round(elapsed, 6),
+            timestamp=timestamp,
+            procs=samples,
+            group=group,
+            overrun=overrun,
         )
 
         for sample in samples:
@@ -62,19 +65,13 @@ class Aggregator:
             previous = self._prev_proc_ticks.get(identity)
             ticks = sample.info.cpu_ticks
             if previous is not None and dt > 0:
-                sample.cpu_percent = round(
-                    (ticks - previous) / clk_tck / dt * 100.0, 2
-                )
+                sample.cpu_percent = round((ticks - previous) / clk_tck / dt * 100.0, 2)
             self._prev_proc_ticks[identity] = ticks
         for identity in refresh.exited:
             self._prev_proc_ticks.pop(identity, None)
 
         total_cpu = refresh.total_cpu_ticks / clk_tck
-        if (
-            self._cpu_source is CpuSource.GROUP
-            and group is not None
-            and group.cpu_usec is not None
-        ):
+        if self._cpu_source is CpuSource.GROUP and group is not None and group.cpu_usec is not None:
             total_cpu = group.cpu_usec / 1_000_000.0
         if self._baseline_cpu is None:
             self._baseline_cpu = total_cpu
@@ -156,24 +153,16 @@ class SummaryAccumulator:
         if snapshot.overrun:
             summary.overruns += 1
         if snapshot.cpu_percent is not None:
-            summary.peak_cpu_percent = peak_of(
-                current=summary.peak_cpu_percent, candidate=snapshot.cpu_percent
-            )
+            summary.peak_cpu_percent = peak_of(current=summary.peak_cpu_percent, candidate=snapshot.cpu_percent)
             self._cpu_sum += snapshot.cpu_percent
             self._cpu_n += 1
             summary.mean_cpu_percent = round(self._cpu_sum / self._cpu_n, 2)
-        summary.peak_rss_bytes = peak_of(
-            current=summary.peak_rss_bytes, candidate=snapshot.rss_bytes
-        )
-        summary.peak_pss_bytes = peak_of(
-            current=summary.peak_pss_bytes, candidate=snapshot.pss_bytes
-        )
+        summary.peak_rss_bytes = peak_of(current=summary.peak_rss_bytes, candidate=snapshot.rss_bytes)
+        summary.peak_pss_bytes = peak_of(current=summary.peak_pss_bytes, candidate=snapshot.pss_bytes)
         if snapshot.group is not None:
             summary.peak_group_memory_bytes = peak_of(
                 current=summary.peak_group_memory_bytes,
-                candidate=(
-                    snapshot.group.memory_peak_bytes or snapshot.group.memory_bytes
-                ),
+                candidate=(snapshot.group.memory_peak_bytes or snapshot.group.memory_bytes),
             )
         for sample in snapshot.procs:
             self._record_process(sample)
@@ -199,29 +188,17 @@ class SummaryAccumulator:
 
     def _prune(self) -> None:
         """Keep only processes that could still reach a top table."""
-        keep = set(
-            _rank(entries=self._seen.values(), key=cpu_seconds_of, limit=PRUNE_KEEP)
-        )
-        keep |= set(
-            _rank(entries=self._seen.values(), key=peak_rss_of, limit=PRUNE_KEEP)
-        )
-        self._seen = {
-            identity: totals
-            for identity, totals in self._seen.items()
-            if totals["pid"] in keep
-        }
+        keep = set(_rank(entries=self._seen.values(), key=cpu_seconds_of, limit=PRUNE_KEEP))
+        keep |= set(_rank(entries=self._seen.values(), key=peak_rss_of, limit=PRUNE_KEEP))
+        self._seen = {identity: totals for identity, totals in self._seen.items() if totals["pid"] in keep}
 
     def finish(self, *, exit_code: int | None = None) -> RunSummary:
         summary = self._summary
         summary.exit_code = exit_code
         summary.total_procs_seen = len(self._seen)
         entries = list(self._seen.values())
-        summary.top_by_cpu = sorted(entries, key=cpu_seconds_of, reverse=True)[
-            : self._top_n
-        ]
-        summary.top_by_memory = sorted(entries, key=peak_rss_of, reverse=True)[
-            : self._top_n
-        ]
+        summary.top_by_cpu = sorted(entries, key=cpu_seconds_of, reverse=True)[: self._top_n]
+        summary.top_by_memory = sorted(entries, key=peak_rss_of, reverse=True)[: self._top_n]
         return summary
 
 
@@ -242,14 +219,14 @@ def _rank(
     return [entry["pid"] for entry in ranked]
 
 
-def cpu_seconds_of(entry: Mapping[str, Any]) -> float:
+def cpu_seconds_of(entry: Mapping[str, object]) -> float:
     """Ranking key: CPU seconds accumulated over the run."""
-    return float(entry["cpu_seconds"])
+    return as_float(entry.get("cpu_seconds")) or 0.0
 
 
-def peak_rss_of(entry: Mapping[str, Any]) -> int:
+def peak_rss_of(entry: Mapping[str, object]) -> int:
     """Ranking key: the highest RSS this process ever reached."""
-    return int(entry["peak_rss_bytes"])
+    return as_int(entry.get("peak_rss_bytes")) or 0
 
 
 def _sum_or_none(values: Iterable[int | None]) -> int | None:

@@ -14,13 +14,12 @@ from treehawk.platforms.linux.procfs import (
     parse_status_memory,
 )
 
-REAL_STAT = (
-    "18973 (cat) R 18971 18973 18971 0 -1 4194304 469 0 0 0 12 34 0 0 20 0 7 0 "
-    "65717 16637952 1788 " + " ".join(["0"] * 30)
+REAL_STAT = "18973 (cat) R 18971 18973 18971 0 -1 4194304 469 0 0 0 12 34 0 0 20 0 7 0 65717 16637952 1788 " + " ".join(
+    ["0"] * 30
 )
 
 
-def test_parse_stat_reads_the_fields_treehawk_depends_on():
+def test_parse_stat_reads_the_fields_treehawk_depends_on() -> None:
     parsed = parse_stat(REAL_STAT, page_size=4096)
     assert parsed["pid"] == 18973
     assert parsed["comm"] == "cat"
@@ -33,7 +32,7 @@ def test_parse_stat_reads_the_fields_treehawk_depends_on():
     assert parsed["rss_bytes"] == 1788 * 4096
 
 
-def test_parse_stat_survives_a_command_name_containing_spaces_and_parens():
+def test_parse_stat_survives_a_command_name_containing_spaces_and_parens() -> None:
     # comm is attacker-controlled in effect: any program can rename itself.
     line = REAL_STAT.replace("(cat)", "(we ird) (name)")
     parsed = parse_stat(line)
@@ -42,23 +41,21 @@ def test_parse_stat_survives_a_command_name_containing_spaces_and_parens():
     assert parsed["starttime"] == 65717
 
 
-def test_parse_stat_rejects_a_truncated_line():
+def test_parse_stat_rejects_a_truncated_line() -> None:
     # Reading /proc races with process exit; a partial read must not be trusted.
     with pytest.raises(ProcStatParseError):
         parse_stat("18973 (cat) R 18971")
 
 
-def test_parse_cmdline_joins_nul_separated_arguments():
-    assert parse_cmdline(b"python\x00train.py\x00--epochs\x0010\x00") == (
-        "python train.py --epochs 10"
-    )
+def test_parse_cmdline_joins_nul_separated_arguments() -> None:
+    assert parse_cmdline(b"python\x00train.py\x00--epochs\x0010\x00") == ("python train.py --epochs 10")
 
 
-def test_parse_cmdline_of_a_kernel_thread_is_empty():
+def test_parse_cmdline_of_a_kernel_thread_is_empty() -> None:
     assert parse_cmdline(b"") == ""
 
 
-def test_parse_status_and_smaps_convert_kb_to_bytes():
+def test_parse_status_and_smaps_convert_kb_to_bytes() -> None:
     assert parse_status_memory("VmRSS:\t2048 kB\nVmSwap:\t16 kB\n") == {
         "rss_bytes": 2048 * 1024,
         "swap_bytes": 16 * 1024,
@@ -69,16 +66,14 @@ def test_parse_status_and_smaps_convert_kb_to_bytes():
     }
 
 
-def test_parse_cgroup_takes_the_v2_line():
+def test_parse_cgroup_takes_the_v2_line() -> None:
     text = "1:name=systemd:/legacy\n0::/user.slice/user-1000.slice/app.scope\n"
     assert parse_cgroup(text) == "/user.slice/user-1000.slice/app.scope"
 
 
-def test_parse_cgroup_returns_none_without_a_v2_hierarchy():
+def test_parse_cgroup_returns_none_without_a_v2_hierarchy() -> None:
     assert parse_cgroup("1:cpu:/legacy\n") is None
 
 
-def test_parse_meminfo_total():
-    assert parse_meminfo_total("MemTotal:       32471504 kB\nMemFree: 1 kB\n") == (
-        32471504 * 1024
-    )
+def test_parse_meminfo_total() -> None:
+    assert parse_meminfo_total("MemTotal:       32471504 kB\nMemFree: 1 kB\n") == (32471504 * 1024)

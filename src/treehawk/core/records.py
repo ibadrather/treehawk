@@ -11,14 +11,15 @@ this run" means is a property of the format, not of whichever view is asking.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import asdict
-from typing import Iterable
 
 from treehawk import SCHEMA_VERSION, __version__
 from treehawk.core.aggregate import RunSummary
 from treehawk.core.config import LogDetail, WatchConfig
 from treehawk.core.interfaces import Record
 from treehawk.core.models import HostInfo, Snapshot
+from treehawk.core.values import as_sequence
 
 
 def header_record(
@@ -109,7 +110,7 @@ def target_of(header: Record) -> str:
     carries whatever the user gave the matcher. Every view wants the same
     answer, so it is worked out once here.
     """
-    argv = header.get("argv") or ()
+    argv = as_sequence(header.get("argv"))
     joined = " ".join(str(argument) for argument in argv)
     if joined:
         return joined

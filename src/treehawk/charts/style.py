@@ -8,10 +8,21 @@ no chartjunk.
 
 from __future__ import annotations
 
-from typing import Any, Final
+import sys
+from typing import TYPE_CHECKING, Final
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+
+if TYPE_CHECKING:
+    # matplotlib 3.11 (Python 3.11+) types rc keys as a Literal; 3.10, the last
+    # release for Python 3.10, types them as plain str and has no RcKeyType.
+    if sys.version_info >= (3, 11):
+        from matplotlib.typing import RcKeyType
+    else:
+        from typing import TypeAlias
+
+        RcKeyType: TypeAlias = str
 
 from treehawk.core.humanize import format_bytes
 from treehawk.ui.theme import PRINT, Palette
@@ -25,7 +36,7 @@ SURFACE_GAP: Final = 1.5
 read as separate shapes rather than one blob."""
 
 
-def rc_params(palette: Palette = PRINT) -> dict[str, Any]:
+def rc_params(palette: Palette = PRINT) -> dict[RcKeyType, object]:
     """Global styling: recessive furniture, readable text, no clutter."""
     return {
         "figure.facecolor": palette.surface,
@@ -60,19 +71,13 @@ def rc_params(palette: Palette = PRINT) -> dict[str, Any]:
     }
 
 
-def draw_heading(
-    fig: Figure, *, title: str, subtitle: str, palette: Palette = PRINT
-) -> None:
+def draw_heading(fig: Figure, *, title: str, subtitle: str, palette: Palette = PRINT) -> None:
     """Put a consistent heading on a page."""
-    fig.suptitle(title, x=0.06, y=0.965, ha="left", fontsize=16, fontweight="bold",
-                 color=palette.text_primary)
-    fig.text(0.06, 0.925, subtitle, ha="left", fontsize=9.5,
-             color=palette.text_secondary)
+    fig.suptitle(title, x=0.06, y=0.965, ha="left", fontsize=16, fontweight="bold", color=palette.text_primary)
+    fig.text(0.06, 0.925, subtitle, ha="left", fontsize=9.5, color=palette.text_secondary)
 
 
-def draw_footer(
-    fig: Figure, *, left: str, right: str, palette: Palette = PRINT
-) -> None:
+def draw_footer(fig: Figure, *, left: str, right: str, palette: Palette = PRINT) -> None:
     fig.text(0.06, 0.035, left, ha="left", fontsize=7.5, color=palette.text_muted)
     fig.text(0.94, 0.035, right, ha="right", fontsize=7.5, color=palette.text_muted)
 
@@ -104,16 +109,21 @@ def annotate_peak(
     palette: Palette = PRINT,
 ) -> None:
     """A single direct label at the peak - never a number on every point."""
-    ax.plot([x], [y], marker="o", markersize=5, color=color, zorder=5,
-            markeredgecolor=palette.surface, markeredgewidth=1.5)
+    ax.plot(
+        [x], [y], marker="o", markersize=5, color=color, zorder=5, markeredgecolor=palette.surface, markeredgewidth=1.5
+    )
     ax.annotate(
-        text, xy=(x, y), xytext=(6, 6), textcoords="offset points",
-        fontsize=8, color=palette.text_primary, fontweight="bold",
+        text,
+        xy=(x, y),
+        xytext=(6, 6),
+        textcoords="offset points",
+        fontsize=8,
+        color=palette.text_primary,
+        fontweight="bold",
     )
 
 
 def draw_placeholder(ax: Axes, *, message: str, palette: Palette = PRINT) -> None:
     """Say why a chart is blank instead of showing empty axes."""
-    ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=10,
-            color=palette.text_muted, transform=ax.transAxes)
+    ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=10, color=palette.text_muted, transform=ax.transAxes)
     ax.set_axis_off()

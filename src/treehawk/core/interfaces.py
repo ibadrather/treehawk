@@ -7,7 +7,8 @@ implementations satisfy these structurally - no inheritance required.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol, TypeAlias, runtime_checkable
+from collections.abc import Mapping
+from typing import Protocol, TypeAlias, runtime_checkable
 
 from treehawk.core.config import MemoryDetail
 from treehawk.core.models import (
@@ -20,9 +21,10 @@ from treehawk.core.models import (
     Snapshot,
 )
 
-Record: TypeAlias = dict[str, Any]
+Record: TypeAlias = dict[str, object]
 """One serialised log record. Deliberately loose: sinks must stay indifferent to
-which fields a schema version happens to carry."""
+which fields a schema version happens to carry, so a value is narrowed where it
+is read (see :mod:`treehawk.core.values`)."""
 
 
 @runtime_checkable
@@ -170,17 +172,17 @@ class ExpansionContext:
     """
 
     __slots__ = (
-        "procs",
-        "tracked_pids",
-        "new_pids",
+        "_group_cache",
         "children",
         "groups",
-        "source",
-        "self_pid",
-        "self_group",
-        "self_sid",
+        "new_pids",
         "pinned_group",
-        "_group_cache",
+        "procs",
+        "self_group",
+        "self_pid",
+        "self_sid",
+        "source",
+        "tracked_pids",
     )
 
     def __init__(

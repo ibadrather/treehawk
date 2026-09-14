@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Final, Sequence
+from collections.abc import Sequence
+from typing import Final
 
 BLOCKS: Final = "▁▂▃▄▅▆▇█"
 
@@ -23,10 +24,7 @@ def sparkline(values: Sequence[float | None], *, width: int = 24) -> str:
     if top <= 0:
         return BLOCKS[0] * len(recent)
     scale = len(BLOCKS) - 1
-    return "".join(
-        " " if value is None else BLOCKS[min(scale, int(value / top * scale))]
-        for value in recent
-    )
+    return "".join(" " if value is None else BLOCKS[min(scale, int(value / top * scale))] for value in recent)
 
 
 def elapsed_clock(seconds: float) -> str:

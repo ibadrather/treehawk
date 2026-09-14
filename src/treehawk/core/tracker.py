@@ -12,8 +12,8 @@ from the running total between two samples.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Mapping
 
 from treehawk.core.interfaces import (
     ExpansionContext,
@@ -118,10 +118,9 @@ class Tracker:
             if pid in self._exclude_from_seed:
                 continue
             cmdline = self._source.read_cmdline(pid) if needs_cmdline else ""
-            if self._matcher.matches(info=info, cmdline=cmdline):
-                if info.identity not in self._members:
-                    self._members[info.identity] = "match"
-                    admitted.append(info)
+            if self._matcher.matches(info=info, cmdline=cmdline) and info.identity not in self._members:
+                self._members[info.identity] = "match"
+                admitted.append(info)
         if admitted:
             self._seeded = True
         return admitted
@@ -149,11 +148,7 @@ class Tracker:
         # scan is remembered, not the whole history - treehawk is expected to
         # run for days, and a machine with process churn would otherwise grow
         # this set without limit.
-        new_pids = (
-            {pid for pid in procs if pid not in self._seen_pids}
-            if self._seen_pids
-            else set()
-        )
+        new_pids = {pid for pid in procs if pid not in self._seen_pids} if self._seen_pids else set()
         self._seen_pids = set(procs)
 
         # Expansion runs even with nothing currently alive: a workload whose
