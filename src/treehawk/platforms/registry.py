@@ -1,7 +1,10 @@
 """Platform selection - the single place that decides which OS code to use.
 
-Supporting macOS or Windows later means writing implementations of the core
-interfaces and registering a builder here. No other module changes.
+Supporting another OS means writing implementations of the core interfaces in
+``platforms/<os>/`` and registering a builder here. No other module changes -
+Linux and macOS are both wired up this way, and each imports its own package
+inside its builder, so nothing platform-specific is imported until it is asked
+for.
 """
 
 from __future__ import annotations
@@ -18,9 +21,9 @@ from treehawk.core.interfaces import (
     ProcessSource,
 )
 from treehawk.core.models import HostInfo
-from treehawk.core.records import PSS
+from treehawk.core.records import PHYS_FOOTPRINT, PSS
 
-__all__ = ["Platform", "UnsupportedPlatform", "build_linux", "get_platform"]
+__all__ = ["Platform", "UnsupportedPlatform", "build_darwin", "build_linux", "get_platform"]
 
 
 @dataclass(frozen=True)
@@ -74,9 +77,52 @@ def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
     )
 
 
+def build_darwin() -> Platform:
+    """macOS, on libproc and coalitions.
+
+    The shape differs from Linux in two ways worth stating in the log rather
+    than hiding: there is no cgroup, so no kernel-side totals and no isolating
+    launcher; and the fair-memory measure is the kernel's phys_footprint
+    instead of PSS, which is why ``memory_kind`` travels with it.
+    """
+    from treehawk.platforms.darwin import (
+        CoalitionSource,
+        DarwinHostInfoSource,
+        DarwinProcessSource,
+        LibProc,
+    )
+    from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
+
+    table = LibProc()
+    coalitions = CoalitionSource(table)
+    notes = [
+        (
+            "macOS has no cgroup equivalent: group-level CPU and memory totals "
+            "are unavailable, and membership is inferred from coalitions, "
+            "sessions and the process tree"
+        )
+    ]
+    if not coalitions.available():
+        notes.append(
+            "coalitions are unreadable on this machine: a process that detaches between two samples may be missed"
+        )
+
+    return Platform(
+        name="darwin",
+        process_source=DarwinProcessSource(table),
+        host_source=DarwinHostInfoSource(),
+        group_source=coalitions,
+        # Placing a workload in a *new* coalition needs entitlements treehawk
+        # does not have, so `run` gives it its own session and nothing more.
+        launcher=FallbackLauncher([DirectLauncher()]),
+        memory_kind=PHYS_FOOTPRINT.key,
+        notes=notes,
+    )
+
+
 PlatformBuilder = Callable[[], Platform]
 
-PLATFORM_BUILDERS: dict[str, PlatformBuilder] = {"linux": build_linux}
+PLATFORM_BUILDERS: dict[str, PlatformBuilder] = {"darwin": build_darwin, "linux": build_linux}
 
 
 def get_platform(*, name: str | None = None) -> Platform:
