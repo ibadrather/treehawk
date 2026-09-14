@@ -1,12 +1,12 @@
 [project]
 name = "treehawk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ibad Rather", email = "ibad.rather.ir@gmail.com" }]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 keywords = ["monitoring", "cpu", "memory", "process", "cgroup", "procfs"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -16,6 +16,8 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -23,7 +25,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "matplotlib>=3.11.2",
+    "matplotlib>=3.10",
     "rich>=15.0.0",
     "typer>=0.27.2",
 ]
@@ -50,7 +52,7 @@ include = ["src/treehawk", "tests", "README.md", "LICENSE", "pyproject.toml"]
 [tool.mypy]
 strict = true
 files = ["src/treehawk"]
-python_version = "3.12"
+python_version = "3.10"
 warn_unreachable = true
 warn_unused_ignores = true
 enable_error_code = [

@@ -8,8 +8,8 @@ to work out what ``True`` meant.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 
+from treehawk.core.compat import StrEnum
 from treehawk.core.errors import ConfigError
 
 

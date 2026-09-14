@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
-from typing import Annotated, Callable, Final
+from typing import Annotated, Callable, Final, ParamSpec
 
 import typer
 from rich.console import Console
@@ -78,8 +78,10 @@ app = typer.Typer(
 stderr_console = Console(stderr=True)
 stdout_console = Console()
 
+P = ParamSpec("P")
 
-def _guard[**P](command: Callable[P, None]) -> Callable[P, None]:
+
+def _guard(command: Callable[P, None]) -> Callable[P, None]:
     """Turn any deliberate failure into one line of text and an exit code.
 
     Applied to every command, so nothing below the CLI has to know how a

@@ -8,6 +8,10 @@ does not grow its own private copy.
 
 from __future__ import annotations
 
+from typing import TypeVar
+
+T = TypeVar("T", int, float)
+
 
 def as_float(value: object) -> float | None:
     """The value as a float, or ``None`` if it is not a number."""
@@ -19,7 +23,7 @@ def as_int(value: object) -> int | None:
     return int(value) if isinstance(value, (int, float)) else None
 
 
-def peak_of[T: (int, float)](*, current: T | None, candidate: T | None) -> T | None:
+def peak_of(*, current: T | None, candidate: T | None) -> T | None:
     """The larger of the two, where ``None`` means "nothing measured yet"."""
     if candidate is None:
         return current

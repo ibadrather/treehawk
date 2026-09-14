@@ -8,9 +8,9 @@ functions stay short and the reshaping stay testable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Callable, Final, Mapping, Sequence
 
+from treehawk.core.compat import StrEnum
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
 from treehawk.core.records import target_of
