@@ -18,9 +18,7 @@ import sys
 from treehawk.core.compat import override
 from treehawk.core.interfaces import Record
 from treehawk.sinks.base import BaseSink
-
-STDOUT_PATH = "-"
-"""The path that means "write to stdout" rather than to a file."""
+from treehawk.sinks.constants import SINKS
 
 
 class JsonlSink(BaseSink):
@@ -36,7 +34,7 @@ class JsonlSink(BaseSink):
 
     @override
     def open(self, header: Record) -> None:
-        if self._path != STDOUT_PATH:
+        if self._path != SINKS.stdout_path:
             pathlib.Path(self._path).write_text("", encoding="utf-8")  # a fresh log, not an old one extended
         self._writing = True
         self._write(header)
@@ -54,7 +52,7 @@ class JsonlSink(BaseSink):
         if not self._writing:
             return
         line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
-        if self._path == STDOUT_PATH:
+        if self._path == SINKS.stdout_path:
             sys.stdout.write(line)
             sys.stdout.flush()
             return

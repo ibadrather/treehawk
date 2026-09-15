@@ -16,10 +16,10 @@ from __future__ import annotations
 import os
 import pathlib
 from collections.abc import Mapping
-from typing import Final
 
 from treehawk.core.config import MemoryDetail
 from treehawk.core.models import Identity, ProcInfo, ProcSample
+from treehawk.platforms.linux.constants import LINUX
 from treehawk.platforms.linux.procfs import (
     ProcStatParseError,
     parse_cgroup,
@@ -29,16 +29,13 @@ from treehawk.platforms.linux.procfs import (
     parse_status_memory,
 )
 
-DEFAULT_PROC_ROOT: Final = "/proc"
-_CMDLINE_CACHE_LIMIT: Final = 4096
-
 
 class LinuxProcessSource:
     """Implements ``ProcessSource`` against /proc."""
 
     def __init__(
         self,
-        root: str = DEFAULT_PROC_ROOT,
+        root: str = LINUX.proc_root,
         *,
         page_size: int | None = None,
     ) -> None:
@@ -112,7 +109,7 @@ class LinuxProcessSource:
         if cached is not None:
             return cached
         cmdline = self.read_cmdline(info.pid) or info.comm
-        if len(self._cmdline_cache) >= _CMDLINE_CACHE_LIMIT:
+        if len(self._cmdline_cache) >= LINUX.cmdline_cache_limit:
             self._cmdline_cache.clear()
         self._cmdline_cache[identity] = cmdline
         return cmdline

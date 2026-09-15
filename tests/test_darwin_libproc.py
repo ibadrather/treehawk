@@ -14,14 +14,9 @@ import struct
 import pytest
 from conftest import APPLE_SILICON_TIMEBASE
 
+from treehawk.platforms.darwin.constants import LIBPROC, TASK_ALL_INFO
 from treehawk.platforms.darwin.libproc import (
-    COALITION_INFO_SIZE,
-    RUSAGE_INFO_V4_SIZE,
-    TASK_ALL_INFO,
-    TASK_ALL_INFO_SIZE,
-    TIMEBASE_INFO_SIZE,
     TaskInfoParseError,
-    Timebase,
     coalition_id_of,
     coalition_path,
     nanoseconds_from_mach,
@@ -30,8 +25,8 @@ from treehawk.platforms.darwin.libproc import (
     parse_procargs2,
     parse_task_all_info,
     parse_timebase,
-    state_from_status,
 )
+from treehawk.platforms.darwin.models import Timebase, state_from_status
 
 SSLEEP = 3
 SZOMB = 5
@@ -53,7 +48,7 @@ def task_all_info(
 ) -> bytes:
     """A PROC_PIDTASKALLINFO buffer, laid out as the kernel lays it out."""
     return struct.pack(
-        TASK_ALL_INFO,
+        TASK_ALL_INFO.struct_format,
         0,  # pbi_flags
         status,
         0,  # pbi_xstatus
@@ -81,10 +76,10 @@ def task_all_info(
 
 def test_the_documented_layouts_match_the_kernel_structs() -> None:
     # From <sys/proc_info.h>: proc_bsdinfo is 136 bytes and proc_taskinfo 96.
-    assert TASK_ALL_INFO_SIZE == 136 + 96
-    assert COALITION_INFO_SIZE == 40
-    assert RUSAGE_INFO_V4_SIZE == 296
-    assert TIMEBASE_INFO_SIZE == 8
+    assert TASK_ALL_INFO.size == 136 + 96
+    assert LIBPROC.coalition_info_size == 40
+    assert LIBPROC.rusage_info_v4_size == 296
+    assert LIBPROC.timebase_info_size == 8
 
 
 def test_task_all_info_is_parsed_into_the_fields_treehawk_uses() -> None:
@@ -170,7 +165,7 @@ def test_a_cgroup_path_is_not_mistaken_for_a_coalition() -> None:
 
 
 def test_the_footprint_is_read_from_its_offset_in_rusage() -> None:
-    raw = bytearray(RUSAGE_INFO_V4_SIZE)
+    raw = bytearray(LIBPROC.rusage_info_v4_size)
     struct.pack_into("<Q", raw, 72, 7_749_896)  # ri_phys_footprint
 
     assert parse_phys_footprint(bytes(raw)) == 7_749_896

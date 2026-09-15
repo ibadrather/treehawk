@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Sequence
-from typing import Final
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -26,12 +25,10 @@ from treehawk.core.humanize import (
 from treehawk.core.interfaces import Record
 from treehawk.core.records import memory_measure, memory_reading, target_of
 from treehawk.core.values import as_float, as_int, as_mapping, as_records
-from treehawk.ui.theme import Palette, discovery_color
+from treehawk.ui.constants import UI
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import discovery_color
 from treehawk.ui.widgets import elapsed_clock, sparkline
-
-HISTORY: Final = 60
-"""Samples kept for the sparklines, and the width of the column that shows
-them. Bounded: a watch may run for days."""
 
 
 class Dashboard:
@@ -42,7 +39,7 @@ class Dashboard:
         *,
         palette: Palette,
         max_rows: int = 12,
-        history: int = HISTORY,
+        history: int = UI.history,
     ) -> None:
         self._palette = palette
         self._max_rows = max_rows
@@ -120,7 +117,7 @@ class Dashboard:
         table = Table.grid(padding=(0, 2))
         table.add_column(style=self._muted, width=4)
         table.add_column(justify="right", width=11)
-        table.add_column(width=HISTORY)
+        table.add_column(width=UI.history)
         table.add_column(style=self._muted)
 
         ncpu = as_mapping(self._header.get("host")).get("ncpu", "?")

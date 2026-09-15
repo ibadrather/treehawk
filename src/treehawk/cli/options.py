@@ -11,13 +11,12 @@ for attention.
 
 from __future__ import annotations
 
-from typing import Annotated, Final
+from typing import Annotated
 
 import typer
 
+from treehawk.cli.constants import CLI
 from treehawk.core.config import ExpansionName
-
-ADVANCED: Final = "Advanced"
 
 Interval = Annotated[
     float,
@@ -56,7 +55,7 @@ Duration = Annotated[
         "--duration",
         "-d",
         metavar="SECONDS",
-        rich_help_panel=ADVANCED,
+        rich_help_panel=CLI.advanced_panel,
         help="Stop after this long. By default treehawk runs until the process ends.",
     ),
 ]
@@ -65,7 +64,7 @@ Expand = Annotated[
     list[ExpansionName] | None,
     typer.Option(
         "--expand",
-        rich_help_panel=ADVANCED,
+        rich_help_panel=CLI.advanced_panel,
         help="Which rules may adopt processes into the workload. Repeatable; all four are used by default.",
     ),
 ]
@@ -74,7 +73,7 @@ NoPss = Annotated[
     bool,
     typer.Option(
         "--no-pss",
-        rich_help_panel=ADVANCED,
+        rich_help_panel=CLI.advanced_panel,
         help="Skip the fair-memory read (PSS on Linux, phys footprint on "
         "macOS). Cheaper per sample, but summed RSS over-counts pages "
         "shared between children.",
@@ -85,7 +84,7 @@ AggregateOnly = Annotated[
     bool,
     typer.Option(
         "--aggregate-only",
-        rich_help_panel=ADVANCED,
+        rich_help_panel=CLI.advanced_panel,
         help="Log only the workload total, not a row per process. Much smaller logs for a run that lasts days.",
     ),
 ]

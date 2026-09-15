@@ -20,6 +20,8 @@ from matplotlib.figure import Figure
 
 from treehawk import __version__
 from treehawk.charts import style
+from treehawk.charts.constants import CHARTS
+from treehawk.charts.models import RunSeries
 from treehawk.charts.pages import (
     CpuByProcessPage,
     CpuPage,
@@ -31,8 +33,9 @@ from treehawk.charts.pages import (
     RankingPage,
     SamplingPage,
 )
-from treehawk.charts.series import RunSeries, load_series
-from treehawk.ui.theme import PRINT, Palette
+from treehawk.charts.series import load_series
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import PRINT
 
 PAGES: Final[tuple[Page, ...]] = (
     OverviewPage(),
@@ -47,10 +50,6 @@ PAGES: Final[tuple[Page, ...]] = (
 """In reading order: what happened, then cpu, then memory, then who did it,
 then whether the sampling was good enough to believe."""
 
-FOOTER_BAND = 0.05
-"""Anything a page has already drawn below this is its own footer, and the
-writer must not draw a second one over it."""
-
 
 def write_pdf_report(
     *,
@@ -64,7 +63,7 @@ def write_pdf_report(
     written = 0
     with plt.rc_context(style.rc_params(palette)), PdfPages(destination) as pdf:
         for number, page in enumerate(pages, start=1):
-            figure = plt.figure(figsize=style.PAGE_SIZE)
+            figure = plt.figure(figsize=CHARTS.page_size)
             try:
                 if not page.draw(figure, series=series, palette=palette):
                     continue
@@ -78,7 +77,7 @@ def write_pdf_report(
 
 
 def _add_footer(figure: Figure, *, number: int, palette: Palette) -> None:
-    if any(text.get_position()[1] < FOOTER_BAND for text in figure.texts):
+    if any(text.get_position()[1] < CHARTS.footer_band for text in figure.texts):
         return  # the page drew its own footer and it says something better
     style.draw_footer(figure, left=f"treehawk {__version__}", right=str(number), palette=palette)
 

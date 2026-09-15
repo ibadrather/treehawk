@@ -7,13 +7,14 @@ import pathlib
 import socket
 
 from treehawk.core.models import HostInfo
+from treehawk.platforms.linux.constants import LINUX
 from treehawk.platforms.linux.procfs import parse_meminfo_total
 
 
 class LinuxHostInfoSource:
     """Implements ``HostInfoSource`` for Linux."""
 
-    def __init__(self, proc_root: str = "/proc") -> None:
+    def __init__(self, proc_root: str = LINUX.proc_root) -> None:
         self._proc_root = proc_root
 
     def host_info(self) -> HostInfo:

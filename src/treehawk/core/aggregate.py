@@ -9,12 +9,19 @@ Two small collaborators, each with one job:
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
-from typing import Final, TypedDict
 
 from treehawk.core.config import CpuSource
-from treehawk.core.models import GroupMetrics, HostInfo, Identity, ProcSample, Snapshot
-from treehawk.core.tracker import RefreshResult
+from treehawk.core.constants import CORE
+from treehawk.core.models import (
+    GroupMetrics,
+    HostInfo,
+    Identity,
+    ProcessTotals,
+    ProcSample,
+    RefreshResult,
+    RunSummary,
+    Snapshot,
+)
 from treehawk.core.values import as_float, as_int, peak_of
 
 
@@ -94,45 +101,13 @@ class Aggregator:
         return snap
 
 
-class ProcessTotals(TypedDict):
-    """Per-process figures accumulated over a whole run."""
-
-    pid: int
-    name: str
-    cmdline: str
-    via: str
-    cpu_seconds: float
-    peak_rss_bytes: int
-
-
-@dataclass(slots=True)
-class RunSummary:
-    """Whole-run figures, computed incrementally so nothing is kept in memory."""
-
-    samples: int = 0
-    duration_s: float = 0.0
-    peak_cpu_percent: float | None = None
-    mean_cpu_percent: float | None = None
-    peak_n_procs: int = 0
-    total_procs_seen: int = 0
-    peak_rss_bytes: int | None = None
-    peak_pss_bytes: int | None = None
-    peak_group_memory_bytes: int | None = None
-    cpu_seconds_total: float = 0.0
-    cpu_seconds_used: float = 0.0
-    overruns: int = 0
-    exit_code: int | None = None
-    top_by_cpu: list[ProcessTotals] = field(default_factory=list)
-    top_by_memory: list[ProcessTotals] = field(default_factory=list)
-
-
 class SummaryAccumulator:
     """Folds snapshots into a :class:`RunSummary` as the run proceeds.
 
     Per-process totals are kept for the whole run so the final tables can rank
     processes that have long since exited. A watch is expected to last until the
     workload ends - which may be days - so that table is pruned back to the
-    contenders once it grows past :data:`PROCESS_TABLE_LIMIT`.
+    contenders once it grows past ``CORE.process_table_limit``.
     """
 
     def __init__(self, *, clk_tck: int = 100, top_n: int = 5) -> None:
@@ -166,7 +141,7 @@ class SummaryAccumulator:
             )
         for sample in snapshot.procs:
             self._record_process(sample)
-        if len(self._seen) > PROCESS_TABLE_LIMIT:
+        if len(self._seen) > CORE.process_table_limit:
             self._prune()
 
     def _record_process(self, sample: ProcSample) -> None:
@@ -188,8 +163,8 @@ class SummaryAccumulator:
 
     def _prune(self) -> None:
         """Keep only processes that could still reach a top table."""
-        keep = set(_rank(entries=self._seen.values(), key=cpu_seconds_of, limit=PRUNE_KEEP))
-        keep |= set(_rank(entries=self._seen.values(), key=peak_rss_of, limit=PRUNE_KEEP))
+        keep = set(_rank(entries=self._seen.values(), key=cpu_seconds_of, limit=CORE.prune_keep))
+        keep |= set(_rank(entries=self._seen.values(), key=peak_rss_of, limit=CORE.prune_keep))
         self._seen = {identity: totals for identity, totals in self._seen.items() if totals["pid"] in keep}
 
     def finish(self, *, exit_code: int | None = None) -> RunSummary:
@@ -200,13 +175,6 @@ class SummaryAccumulator:
         summary.top_by_cpu = sorted(entries, key=cpu_seconds_of, reverse=True)[: self._top_n]
         summary.top_by_memory = sorted(entries, key=peak_rss_of, reverse=True)[: self._top_n]
         return summary
-
-
-PROCESS_TABLE_LIMIT: Final = 4096
-"""Distinct processes remembered for the summary before pruning kicks in."""
-
-PRUNE_KEEP: Final = 256
-"""Contenders kept per ranking when pruning."""
 
 
 def _rank(

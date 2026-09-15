@@ -16,9 +16,9 @@ from conftest import write_cgroup, write_proc
 
 from treehawk.core.interfaces import ProcessMatcher
 from treehawk.core.matchers import build_matcher
-from treehawk.core.models import ProcInfo
+from treehawk.core.models import ProcInfo, RefreshResult
 from treehawk.core.strategies import build_strategies
-from treehawk.core.tracker import RefreshResult, Tracker
+from treehawk.core.tracker import Tracker
 from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 from treehawk.platforms.linux.source import LinuxProcessSource
 

@@ -24,20 +24,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
-from typing import Final
 
 from treehawk.core.models import GroupMetrics
+from treehawk.platforms.darwin.constants import DARWIN
 from treehawk.platforms.darwin.libproc import LibProc, ProcessTable, coalition_id_of
-
-MEMBERSHIP_TTL: Final = 0.25
-"""Seconds a membership scan is reused for.
-
-Unlike a cgroup, whose members are one file read away, a coalition's are found
-only by asking every process which coalition it is in. The group rule asks more
-than once per sample - to decide whether a boundary is ours, then to adopt from
-it - so the scan is held briefly rather than repeated. Shorter than any usable
-sampling interval, so no sample ever sees a membership from a previous one.
-"""
 
 
 class CoalitionSource:
@@ -47,7 +37,7 @@ class CoalitionSource:
         self,
         table: ProcessTable | None = None,
         *,
-        ttl: float = MEMBERSHIP_TTL,
+        ttl: float = DARWIN.membership_ttl,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._table: ProcessTable = table or LibProc()

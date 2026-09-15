@@ -13,8 +13,8 @@ from the running total between two samples.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 
+from treehawk.core.constants import CORE
 from treehawk.core.interfaces import (
     ExpansionContext,
     ExpansionStrategy,
@@ -22,28 +22,7 @@ from treehawk.core.interfaces import (
     ProcessMatcher,
     ProcessSource,
 )
-from treehawk.core.models import Identity, ProcInfo
-
-MAX_EXPANSION_ROUNDS = 8
-"""Strategies feed each other (a cgroup adoption reveals a new subtree), so
-expansion repeats until it stabilises - bounded, to keep one sample bounded."""
-
-
-@dataclass(slots=True)
-class RefreshResult:
-    """Outcome of one membership pass."""
-
-    alive: list[ProcInfo] = field(default_factory=list)
-    zombies: list[ProcInfo] = field(default_factory=list)
-    via: dict[int, str] = field(default_factory=dict)
-    admitted: list[Identity] = field(default_factory=list)
-    exited: list[Identity] = field(default_factory=list)
-    alive_cpu_ticks: int = 0
-    exited_cpu_ticks: int = 0
-
-    @property
-    def total_cpu_ticks(self) -> int:
-        return self.alive_cpu_ticks + self.exited_cpu_ticks
+from treehawk.core.models import Identity, ProcInfo, RefreshResult
 
 
 class Tracker:
@@ -197,7 +176,7 @@ class Tracker:
             self_sid=self._self_sid,
             pinned_group=self._pinned_group,
         )
-        for _ in range(MAX_EXPANSION_ROUNDS):
+        for _ in range(CORE.max_expansion_rounds):
             grew = False
             for strategy in self._strategies:
                 for pid, reason in strategy.expand(context).items():

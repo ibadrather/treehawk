@@ -23,7 +23,8 @@ from treehawk.core.humanize import (
 from treehawk.core.interfaces import Record
 from treehawk.core.records import memory_measure, target_of
 from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
-from treehawk.ui.theme import Palette, discovery_color
+from treehawk.ui.models import Palette
+from treehawk.ui.theme import discovery_color
 
 Formatter = Callable[[float | None], str]
 """How one ranking column turns its measurement into text."""

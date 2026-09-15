@@ -8,8 +8,9 @@ different files. The monitor only ever sees interfaces.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 
+from treehawk.cli.constants import CLI
+from treehawk.cli.models import Session
 from treehawk.core.aggregate import Aggregator
 from treehawk.core.clock import SystemClock
 from treehawk.core.config import CpuSource, WatchConfig
@@ -18,20 +19,7 @@ from treehawk.core.monitor import Monitor
 from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
 from treehawk.gpu import build_collectors
-from treehawk.platforms.registry import Platform
-
-ANCESTOR_LIMIT = 64
-"""How far up the parent chain to walk before giving up. A process tree that
-deep is a loop we have failed to detect, not a real wrapper chain."""
-
-
-@dataclass(frozen=True, slots=True)
-class Session:
-    """A wired-up run, ready to start."""
-
-    monitor: Monitor
-    tracker: Tracker
-    platform: Platform
+from treehawk.platforms.models import Platform
 
 
 def build_session(
@@ -88,7 +76,7 @@ def build_session(
     return Session(monitor=monitor, tracker=tracker, platform=platform)
 
 
-def ancestors_of(*, source: ProcessSource, pid: int, limit: int = ANCESTOR_LIMIT) -> frozenset[int]:
+def ancestors_of(*, source: ProcessSource, pid: int, limit: int = CLI.ancestor_limit) -> frozenset[int]:
     """Every process between ``pid`` and PID 1."""
     found: set[int] = set()
     current = pid

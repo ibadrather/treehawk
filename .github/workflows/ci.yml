@@ -1,12 +1,31 @@
 name: CI
 
 # Lint, type check and test on every push to any branch and on every pull
-# request. The Release workflow calls this too, so nothing ships without it.
+# request - but only when something that can change the result changed: the
+# source, the tests, the tooling config or this workflow. A docs or diagram
+# change alone skips it. The Release workflow calls this too, so nothing ships
+# without it.
 
 on:
   push:
     branches: ["**"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/scripts/**"
+      - ".github/workflows/ci.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "ruff.toml"
   pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/scripts/**"
+      - ".github/workflows/ci.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "ruff.toml"
   workflow_call:
 
 permissions:

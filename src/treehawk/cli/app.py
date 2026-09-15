@@ -23,14 +23,14 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from types import FrameType
-from typing import Annotated, Final, ParamSpec
+from typing import Annotated, ParamSpec
 
 import typer
 from rich.console import Console
 
 from treehawk import __version__
+from treehawk.cli.constants import CLI
 from treehawk.cli.options import (
-    ADVANCED,
     AggregateOnly,
     Csv,
     Duration,
@@ -56,16 +56,13 @@ from treehawk.core.interfaces import ProcessLauncher, ProcessMatcher
 from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
-from treehawk.platforms.registry import Platform, get_platform
+from treehawk.platforms.models import Platform
+from treehawk.platforms.registry import get_platform
 from treehawk.report import Report, build_report
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
+from treehawk.sinks.constants import SINKS
 from treehawk.ui.theme import PALETTE
 from treehawk.ui.views import render_header_facts, render_summary
-
-TERMINATE_GRACE: Final = 5.0
-"""Seconds a workload is given to exit on SIGTERM before it is killed."""
-
-STDOUT_PATH: Final = "-"
 
 app = typer.Typer(
     name="treehawk",
@@ -205,7 +202,7 @@ def run(
         bool,
         typer.Option(
             "--no-isolate",
-            rich_help_panel=ADVANCED,
+            rich_help_panel=CLI.advanced_panel,
             help="Do not ask for an accounting boundary; track the workload through the process table only.",
         ),
     ] = False,
@@ -370,7 +367,7 @@ def _build_sinks(*, path: str, fmt: LogFormat, detail: LogDetail, screen: Consol
 
 
 def _announce_log_path(path: str) -> None:
-    if path != STDOUT_PATH:
+    if path != SINKS.stdout_path:
         stderr_console.print(f"[dim]logging to[/dim] {path}")
 
 
@@ -405,7 +402,7 @@ def _stop_workload(workload: LaunchedWorkload) -> int | None:
     if code is not None:
         return code
     workload.signal(signal.SIGTERM)
-    deadline = time.monotonic() + TERMINATE_GRACE
+    deadline = time.monotonic() + CLI.terminate_grace
     while time.monotonic() < deadline:
         code = workload.poll()
         if code is not None:

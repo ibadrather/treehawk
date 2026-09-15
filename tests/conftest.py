@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from treehawk.platforms.darwin.libproc import TaskInfo, Timebase
+from treehawk.platforms.darwin.models import TaskInfo, Timebase
 
 APPLE_SILICON_TIMEBASE = Timebase(numer=125, denom=3)
 """The real fraction on an M-series Mac; Intel reports 1/1. Tests use it so a

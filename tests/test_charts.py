@@ -13,8 +13,9 @@ import pytest
 from conftest import write_log
 from pypdf import PdfReader
 
+from treehawk.charts.models import Metric
 from treehawk.charts.report import PAGES, write_pdf_report
-from treehawk.charts.series import Metric, load_series, stack_for
+from treehawk.charts.series import load_series, stack_for
 from treehawk.core.errors import ReportError
 
 # -- reshaping ------------------------------------------------------------
