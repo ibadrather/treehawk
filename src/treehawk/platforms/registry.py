@@ -26,6 +26,7 @@ def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
         LinuxProcessSource,
     )
     from treehawk.platforms.linux.launcher import default_launcher
+    from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
 
     host_source = LinuxHostInfoSource(proc_root)
     host = host_source.host_info()
@@ -44,7 +45,8 @@ def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
         process_source=LinuxProcessSource(proc_root, page_size=host.page_size),
         host_source=host_source,
         group_source=cgroups,
-        launcher=default_launcher(cgroups),
+        launcher=default_launcher(cgroups, proc_root=proc_root),
+        direct_launcher=FallbackLauncher([DirectLauncher()]),
         notes=notes,
     )
 
@@ -79,14 +81,17 @@ def build_darwin() -> Platform:
             "coalitions are unreadable on this machine: a process that detaches between two samples may be missed"
         )
 
+    # Placing a workload in a *new* coalition needs entitlements treehawk does
+    # not have, so `run` gives it its own session and nothing more - with or
+    # without --no-isolate.
+    launcher = FallbackLauncher([DirectLauncher()])
     return Platform(
         name="darwin",
         process_source=DarwinProcessSource(table),
         host_source=DarwinHostInfoSource(),
         group_source=coalitions,
-        # Placing a workload in a *new* coalition needs entitlements treehawk
-        # does not have, so `run` gives it its own session and nothing more.
-        launcher=FallbackLauncher([DirectLauncher()]),
+        launcher=launcher,
+        direct_launcher=launcher,
         memory_kind=PHYS_FOOTPRINT.key,
         notes=notes,
     )

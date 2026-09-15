@@ -6,7 +6,7 @@ import pathlib
 from collections.abc import Callable, Iterable, Mapping
 
 import pytest
-from conftest import write_proc
+from conftest import FakeClock, RecordingSink, write_proc
 
 from treehawk.core.aggregate import Aggregator
 from treehawk.core.compat import override
@@ -26,44 +26,6 @@ from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
 from treehawk.core.values import as_mapping, as_records
 from treehawk.platforms.linux.source import LinuxProcessSource
-from treehawk.sinks.base import BaseSink
-
-
-class FakeClock:
-    """Time only moves when the loop asks it to."""
-
-    def __init__(self) -> None:
-        self.t = 0.0
-        self.sleeps: list[float] = []
-
-    def monotonic(self) -> float:
-        return self.t
-
-    def now_iso(self) -> str:
-        return f"2026-01-01T00:00:{self.t:06.3f}Z"
-
-    def sleep_until(self, deadline: float) -> None:
-        self.sleeps.append(deadline)
-        self.t = max(self.t, deadline)
-
-
-class RecordingSink(BaseSink):
-    def __init__(self) -> None:
-        self.header: Record | None = None
-        self.samples: list[Record] = []
-        self.summary: Record | None = None
-
-    @override
-    def open(self, header: Record) -> None:
-        self.header = header
-
-    @override
-    def sample(self, record: Record) -> None:
-        self.samples.append(record)
-
-    @override
-    def close(self, summary: Record) -> None:
-        self.summary = summary
 
 
 class ScriptedSource(LinuxProcessSource):
