@@ -12,8 +12,11 @@ uv run treehawk --help
 uv run ruff format
 uv run ruff check
 uv run mypy
-uv run pytest            # -m "not integration" for the fast ones
+uv run pytest            # tests/unit for the fast ones, tests/integration for real processes
 ```
+
+`tests/unit/` mirrors the package layout and runs against the fake kernels in
+`tests/conftest.py`; `tests/integration/` spawns real processes.
 
 CI runs all four on Python 3.10 to 3.14 on Linux, and on the oldest and newest
 of those on macOS (Apple Silicon). mypy runs at its strictest settings and

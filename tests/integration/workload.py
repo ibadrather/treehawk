@@ -5,7 +5,7 @@ double-forks and calls ``setsid``, so the child is re-parented to PID 1 and
 leaves the parent's session entirely. The parent then exits early, while the
 detached grandchild keeps burning CPU and holding memory.
 
-    python tests/workload.py [--seconds N] [--mb N] [--children N] [--detach]
+    python tests/integration/workload.py [--seconds N] [--mb N] [--children N] [--detach]
 """
 
 from __future__ import annotations

@@ -318,7 +318,8 @@ at import, so the module still type-checks everywhere.
 
 ```bash
 uv run pytest                        # everything
-uv run pytest -m "not integration"   # fast: fake kernels only
+uv run pytest tests/unit             # fast: fake kernels only
+uv run pytest tests/integration      # real processes (or -m integration)
 uv run mypy                          # strictest settings: src, tests, scripts
 uv run ruff format --check           # formatting
 uv run ruff check                    # lint
@@ -327,13 +328,15 @@ uv run ruff check                    # lint
 CI runs all of these on every push and pull request, on Python 3.10 to 3.14 on
 Linux, and on the oldest and newest of those on macOS (Apple Silicon).
 
-The unit tests run against fake kernels, so they need no privileges and no real
-workload: fake `/proc` and cgroup trees for Linux, since every reader takes its
-root as an argument, and a fake `ProcessTable` for macOS, since there is no
-directory to point at. Neither binds a platform library, so the whole suite
-runs on either OS. The integration tests spawn `tests/workload.py`, which
-deliberately double-forks a detached child, and assert it is still in the log
-after its parent is gone.
+`tests/unit/` mirrors the package (`core/`, `platforms/linux/`,
+`platforms/darwin/`, `sinks/`, ...), and the fake kernels they share live in
+`tests/conftest.py`. The unit tests run against fake kernels, so they need no
+privileges and no real workload: fake `/proc` and cgroup trees for Linux, since
+every reader takes its root as an argument, and a fake `ProcessTable` for macOS,
+since there is no directory to point at. Neither binds a platform library, so
+the whole suite runs on either OS. The integration tests spawn
+`tests/integration/workload.py`, which deliberately double-forks a detached
+child, and assert it is still in the log after its parent is gone.
 
 ## Releasing
 
