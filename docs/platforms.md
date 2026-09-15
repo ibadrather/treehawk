@@ -120,13 +120,22 @@ Implement `ProcessSource` and `HostInfoSource` — and optionally
 register a builder in `platforms/registry.py`. Nothing in `core/` changes;
 macOS was added exactly that way.
 
+A builder that can start processes fills two fields: `Platform.launcher`, which
+`run` uses to start the command inside a boundary, and
+`Platform.direct_launcher`, which `run --no-isolate` uses. Leave the second out
+and `--no-isolate` fails with "this platform cannot start processes". Where the
+OS cannot create a boundary, pass the same launcher to both, as macOS does.
+
 Two things are worth copying from it:
 
 - **Make the syscall boundary an injectable protocol.** The Linux readers take
   their root directory as an argument, which is what lets the tests point them
   at a fake `/proc`. macOS has no directory to point at, so
   `platforms/darwin/libproc.py` defines a `ProcessTable` protocol and the tests
-  substitute a fake one. The backend is therefore testable on a machine that
+  substitute a fake one. Constructors require that boundary rather than
+  defaulting to the real one (`DarwinProcessSource(table)`,
+  `ScopeLauncher(cgroups, proc_root=...)`), so the builder is the only place a
+  real backend is made. The backend is therefore testable on a machine that
   does not run that OS.
 - **Bind the platform library inside the builder, not at import.** The module
   then imports and type-checks everywhere. A `sys.platform` guard around the

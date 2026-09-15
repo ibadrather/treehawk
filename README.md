@@ -308,11 +308,16 @@ are untouched.
 
 **Adding another OS**: implement `ProcessSource`, `HostInfoSource` and
 optionally `GroupMetricSource`/`ProcessLauncher` in `platforms/<os>/`, then
-register a builder in `platforms/registry.py`. macOS was added exactly that
-way and changed nothing in `core/`. Two things are worth copying from it: make
-the syscall boundary an injectable protocol so the backend can be tested
-without that OS, and bind any platform library inside the builder rather than
-at import, so the module still type-checks everywhere.
+register a builder in `platforms/registry.py`. A builder that can start
+processes sets both `Platform.launcher` (what `run` uses) and
+`Platform.direct_launcher` (what `run --no-isolate` uses); where the OS cannot
+create a boundary, pass the same launcher to both, as macOS does. macOS was
+added exactly that way and changed nothing in `core/`. Two things are worth
+copying from it: make the syscall boundary an injectable protocol, and let the
+builder be the only place the real backend is constructed — no constructor
+falls back to it — so the backend can be tested without that OS; and bind any
+platform library inside the builder rather than at import, so the module still
+type-checks everywhere.
 
 ## Tests
 
@@ -334,7 +339,12 @@ Linux, and on the oldest and newest of those on macOS (Apple Silicon).
 privileges and no real workload: fake `/proc` and cgroup trees for Linux, since
 every reader takes its root as an argument, and a fake `ProcessTable` for macOS,
 since there is no directory to point at. Neither binds a platform library, so
-the whole suite runs on either OS. The integration tests spawn
+the whole suite runs on either OS. The rest of the machine is faked there too:
+`FakeClock`, `RecordingSink`, `FakeLauncher`, and `fake_platform`, which bundles
+the fake trees into a `Platform`. The commands take their platform, clock and
+PID from a `Runtime` (`cli/models.py`), so `tests/unit/cli/` runs `watch` and
+`run` end to end by handing `CliRunner.invoke(obj=Runtime(...))` a fake one,
+without touching the real process table. The integration tests spawn
 `tests/integration/workload.py`, which deliberately double-forks a detached
 child, and assert it is still in the log after its parent is gone.
 
