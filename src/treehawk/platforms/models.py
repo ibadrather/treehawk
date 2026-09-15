@@ -23,6 +23,9 @@ class Platform:
     host_source: HostInfoSource
     group_source: GroupMetricSource | None = None
     launcher: ProcessLauncher | None = None
+    """Starts a workload inside an accounting boundary, where the platform can make one."""
+    direct_launcher: ProcessLauncher | None = None
+    """Starts a workload without asking for a boundary - what ``run --no-isolate`` uses."""
     memory_kind: str = PSS.key
     """Which fair-memory measure this platform's ``ProcessSource`` reports.
 

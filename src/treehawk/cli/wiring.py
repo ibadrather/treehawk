@@ -3,18 +3,18 @@
 Kept apart from argument parsing so that the two things that change for
 different reasons - what the flags are, and what the objects are - change in
 different files. The monitor only ever sees interfaces.
+
+Nothing here reaches for the machine: the platform, the clock and treehawk's
+own PID are all handed in, so the wiring is tested against a fake one.
 """
 
 from __future__ import annotations
 
-import os
-
 from treehawk.cli.constants import CLI
 from treehawk.cli.models import Session
 from treehawk.core.aggregate import Aggregator
-from treehawk.core.clock import SystemClock
 from treehawk.core.config import CpuSource, WatchConfig
-from treehawk.core.interfaces import ProcessMatcher, ProcessSource, Sink
+from treehawk.core.interfaces import Clock, ProcessMatcher, ProcessSource, Sink
 from treehawk.core.monitor import Monitor
 from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
@@ -29,13 +29,14 @@ def build_session(
     sink: Sink,
     matcher: ProcessMatcher,
     mode: str,
+    clock: Clock,
+    self_pid: int,
     argv: list[str] | None = None,
     pinned_group: str | None = None,
     notes: tuple[str, ...] = (),
 ) -> Session:
     host = platform.host_info()
     source = platform.process_source
-    self_pid = os.getpid()
     # treehawk's own wrapper chain (shell, uv, timeout, ...) is never part of
     # the workload: it carries the keyword because the user typed it there, and
     # adopting it would drag in the whole terminal. An explicit --pid names its
@@ -62,7 +63,7 @@ def build_session(
             cpu_source=(CpuSource.GROUP if pinned_group is not None else CpuSource.PROCESSES),
         ),
         sink=sink,
-        clock=SystemClock(),
+        clock=clock,
         config=config,
         host=host,
         groups=platform.group_source,

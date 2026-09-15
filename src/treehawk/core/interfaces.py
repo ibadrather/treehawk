@@ -139,6 +139,21 @@ class ExpansionStrategy(Protocol):
 
 
 @runtime_checkable
+class BoundaryStrategy(ExpansionStrategy, Protocol):
+    """An expansion strategy that adopts whole group boundaries, and says which.
+
+    The monitor reads kernel totals for the boundaries accepted here, so the
+    tracker asks for this capability by type rather than probing for an
+    attribute.
+    """
+
+    @property
+    def accepted(self) -> set[str]:
+        """Group paths accepted as belonging to the workload."""
+        ...
+
+
+@runtime_checkable
 class MetricCollector(Protocol):
     """Contributes extra metrics to each sample (GPU, I/O, ... ).
 

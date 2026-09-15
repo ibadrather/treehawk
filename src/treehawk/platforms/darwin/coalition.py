@@ -27,7 +27,7 @@ from collections.abc import Callable, Mapping
 
 from treehawk.core.models import GroupMetrics
 from treehawk.platforms.darwin.constants import DARWIN
-from treehawk.platforms.darwin.libproc import LibProc, ProcessTable, coalition_id_of
+from treehawk.platforms.darwin.libproc import ProcessTable, coalition_id_of
 
 
 class CoalitionSource:
@@ -35,12 +35,12 @@ class CoalitionSource:
 
     def __init__(
         self,
-        table: ProcessTable | None = None,
+        table: ProcessTable,
         *,
         ttl: float = DARWIN.membership_ttl,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._table: ProcessTable = table or LibProc()
+        self._table = table
         self._ttl = ttl
         self._monotonic = monotonic
         self._members: Mapping[int, set[int]] = {}

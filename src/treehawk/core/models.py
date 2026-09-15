@@ -205,10 +205,13 @@ class LaunchedWorkload(ABC):
         pid: int,
         argv: list[str],
         group_path: str | None = None,
+        notes: tuple[str, ...] = (),
     ) -> None:
         self.pid = pid
         self.argv = argv
         self.group_path = group_path
+        self.notes: list[str] = list(notes)
+        """How this workload came to be started the way it was, for the log header."""
 
     @property
     def isolated(self) -> bool:
