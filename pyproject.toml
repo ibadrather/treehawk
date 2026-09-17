@@ -1,6 +1,6 @@
 [project]
 name = "treehawk"
-version = "0.5.0"
+version = "0.6.0"
 description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
 readme = "README.md"
 license = "MIT"

@@ -172,3 +172,33 @@ def test_the_console_falls_back_to_rss_rather_than_mislabelling_it(tmp_path: pat
     assert "rss=" in text
     assert "pss=" not in text  # the figure printed is RSS, so do not call it pss
     assert text.count("rss=") == 1  # and do not print the same number twice
+
+
+def test_a_printed_line_is_fanned_out_like_any_other_record() -> None:
+    class Recorder(BaseSink):
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        @override
+        def output(self, line: str) -> None:
+            self.lines.append(line)
+
+    first, second = Recorder(), Recorder()
+    CompositeSink([first, second]).output("epoch 0")
+
+    assert first.lines == second.lines == ["epoch 0"]
+
+
+def test_a_sink_that_does_not_care_what_the_workload_printed_ignores_it() -> None:
+    """The log records what the workload used, not what it said."""
+    sink = JsonlSink("-")
+
+    sink.output("epoch 0")  # must not raise, and must not reach the log
+
+
+def test_the_console_sink_passes_a_printed_line_straight_through(tmp_path: pathlib.Path) -> None:
+    destination = tmp_path / "screen.txt"
+    with destination.open("w", encoding="utf-8") as stream:
+        ConsoleSink(stream).output("epoch 0 loss=2.31")
+
+    assert destination.read_text() == "epoch 0 loss=2.31\n"

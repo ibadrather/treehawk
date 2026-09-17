@@ -53,6 +53,21 @@ class LiveSink(BaseSink):
     @override
     def sample(self, record: Record) -> None:
         self._dashboard.update(record)
+        self._redraw()
+
+    @override
+    def output(self, line: str) -> None:
+        """Show a line the workload printed, inside the dashboard.
+
+        Called from the reader thread rather than the sampling loop, which is
+        the whole point of routing it here: the workload's output and the live
+        region reach the terminal through one Rich console, so they take turns
+        instead of overwriting each other.
+        """
+        self._dashboard.append_output(line)
+        self._redraw()
+
+    def _redraw(self) -> None:
         if self._live is not None:
             self._live.update(self._dashboard.render())
 

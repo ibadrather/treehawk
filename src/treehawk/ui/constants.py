@@ -17,5 +17,10 @@ class UiConstants:
     sparkline_blocks: str = "▁▂▃▄▅▆▇█"
     """Sparkline glyphs, lowest to highest."""
 
+    output_lines: int = 8
+    """Lines of the workload's own output kept on screen. Bounded so the live
+    region stays a fixed height whatever the workload prints; the full stream
+    is in the file beside the log."""
+
 
 UI: Final = UiConstants()

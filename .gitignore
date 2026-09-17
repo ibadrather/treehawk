@@ -37,3 +37,7 @@ treehawk-*.pdf
 
 # MkDocs build output
 site/
+
+
+*.jsonl
+*.out

@@ -13,6 +13,10 @@ class SinkConstants:
     stdout_path: str = "-"
     """The path that means "write to stdout" rather than to a file."""
 
+    workload_log_suffix: str = ".out"
+    """Extension of the file holding everything a launched workload printed.
+    It sits beside the log, under the same name, because the two are one run."""
+
     csv_sample_columns: tuple[str, ...] = (
         "seq",
         "t",

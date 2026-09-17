@@ -44,6 +44,34 @@ including processes that live and die between two samples.
 
 See [How it works](how-it-works.md#run-and-watch) for how `run` and `watch` differ.
 
+### What the command prints
+
+The command's own output does not go straight to the terminal, because the
+dashboard is repainting a region of it — left to themselves the two overwrite
+each other and neither is readable. Instead treehawk gives the command a pty of
+its own and reads it:
+
+- the last few lines appear in an `output` panel at the bottom of the dashboard;
+- the whole stream, escape codes and all, is written to `<log>.out` — so
+  `treehawk-20260913-100000.jsonl` is accompanied by
+  `treehawk-20260913-100000.out`.
+
+A pty rather than a pipe, so the command still sees a terminal: it keeps its
+colours and its line buffering, and treehawk does not change how the thing it is
+measuring behaves.
+
+```bash
+treehawk run -- python train.py          # logs in the dashboard, kept in .out
+tail -f treehawk-*.out                   # the full stream, from another shell
+treehawk run --no-capture -- htop        # hand the terminal over instead
+```
+
+`--no-capture` is the escape hatch for a command that needs the terminal
+itself — one that prompts for input, or draws its own full-screen view. Nothing
+is drawn while it runs and no `.out` file is written. `--quiet` has the same
+effect on the command's output, since it draws no dashboard to protect, and so
+does redirecting treehawk's own output to a pipe or a file.
+
 ## Options
 
 Shared by `watch` and `run`:
@@ -59,7 +87,15 @@ Shared by `watch` and `run`:
 | `--no-pss` | | skip PSS; cheaper at short intervals |
 | `--aggregate-only` | | log workload totals only, not a row per process |
 
-Without a terminal (a pipe, CI), the dashboard is replaced by plain lines.
+`run` only:
+
+| Option | |
+|---|---|
+| `--no-isolate` | do not ask for a cgroup; track through the process table |
+| `--no-capture` | let the command write to this terminal instead of the dashboard |
+
+Without a terminal (a pipe, CI), the dashboard is replaced by plain lines, and
+the command writes to the same stream rather than being captured.
 
 ## report and pdf
 

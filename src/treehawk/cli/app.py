@@ -38,11 +38,13 @@ from treehawk.cli.options import (
     Duration,
     Expand,
     Interval,
+    NoCapture,
     NoPss,
     Output,
     Quiet,
 )
 from treehawk.cli.wiring import build_session
+from treehawk.core.capture import OutputReader
 from treehawk.core.config import (
     DEFAULT_EXPANSIONS,
     ExpansionName,
@@ -52,9 +54,10 @@ from treehawk.core.config import (
     MemoryDetail,
     MissingWorkload,
     WatchConfig,
+    WorkloadOutput,
 )
 from treehawk.core.errors import ConfigError, TreehawkError
-from treehawk.core.interfaces import Clock, ProcessLauncher, ProcessMatcher
+from treehawk.core.interfaces import Clock, ProcessLauncher, ProcessMatcher, Sink
 from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
@@ -187,7 +190,7 @@ def watch(
         _announce_log_path(path)
 
     session.monitor.run()
-    _report_sink_errors(sinks)
+    _report_errors(sinks.errors)
 
 
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -203,6 +206,7 @@ def run(
     expand: Expand = None,
     no_pss: NoPss = False,
     aggregate_only: AggregateOnly = False,
+    no_capture: NoCapture = False,
     no_isolate: Annotated[
         bool,
         typer.Option(
@@ -217,6 +221,11 @@ def run(
     The command goes after [bold]--[/bold]. On Linux it runs inside its own
     cgroup, so every descendant is accounted for exactly - detached or not;
     elsewhere it gets its own session and membership is inferred.
+
+    Whatever the workload prints is read over a pty of its own: the last lines
+    appear in the dashboard, and the whole stream is kept beside the log as
+    [bold].out[/bold]. Use [bold]--no-capture[/bold] to hand it this terminal
+    instead.
 
     [dim]treehawk run -- python train.py --epochs 10[/dim]
     """
@@ -236,17 +245,18 @@ def run(
     )
     platform = runtime.platform()
     path = output or _default_log_path(fmt)
-    sinks = _build_sinks(
-        path=path,
-        fmt=fmt,
-        detail=config.detail,
-        screen=None if quiet else stderr_console,
-    )
+    screen = None if quiet else stderr_console
+    sinks = _build_sinks(path=path, fmt=fmt, detail=config.detail, screen=screen)
     launcher = _select_launcher(platform, isolation=Isolation.NONE if no_isolate else Isolation.CGROUP)
+    destination = _select_workload_output(screen=screen, no_capture=no_capture)
+    workload_log = _workload_log_path(path) if destination is WorkloadOutput.CAPTURE else None
 
     if not quiet:
         _announce_log_path(path)
-    workload = launcher.launch(argv)
+        if workload_log is not None:
+            stderr_console.print(f"[dim]workload output to[/dim] {workload_log}")
+    workload = launcher.launch(argv, output=destination)
+    reader = _start_reader(workload=workload, sink=sinks, mirror=workload_log)
 
     session = build_session(
         platform=platform,
@@ -268,7 +278,11 @@ def run(
         session.monitor.run(read_exit_code=workload.poll)
     finally:
         code = _stop_workload(workload, clock=runtime.clock)
-    _report_sink_errors(sinks)
+        # After the workload, so the last thing it printed is drained rather
+        # than cut off by our own teardown.
+        if reader is not None:
+            reader.stop()
+    _report_errors(sinks.errors + (reader.errors if reader is not None else []))
     if code:
         raise typer.Exit(code)
 
@@ -361,8 +375,43 @@ def _build_config(
 
 
 def _default_log_path(fmt: LogFormat) -> str:
+    return _stamped_name(f".{fmt}")
+
+
+def _stamped_name(suffix: str) -> str:
+    """``treehawk-<when><suffix>``, in the current directory."""
     stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    return f"treehawk-{stamp}.{fmt}"
+    return f"treehawk-{stamp}{suffix}"
+
+
+def _select_workload_output(*, screen: Console | None, no_capture: bool) -> WorkloadOutput:
+    """Whether to read the workload's output or leave it the terminal.
+
+    Capturing exists to protect the live region, so it is worth doing exactly
+    when there is one: ``--quiet`` and a redirected stderr both mean nothing is
+    being repainted, and then the workload is better off owning the terminal it
+    would have had anyway.
+    """
+    if no_capture or screen is None or not screen.is_terminal:
+        return WorkloadOutput.INHERIT
+    return WorkloadOutput.CAPTURE
+
+
+def _workload_log_path(log_path: str) -> str:
+    """Where everything the workload printed is kept: beside the log, as ``.out``."""
+    if log_path == SINKS.stdout_path:
+        return _stamped_name(SINKS.workload_log_suffix)
+    return str(Path(log_path).with_suffix(SINKS.workload_log_suffix))
+
+
+def _start_reader(*, workload: LaunchedWorkload, sink: Sink, mirror: str | None) -> OutputReader | None:
+    """Begin draining the workload's output, if there is any to drain."""
+    stream = workload.output_stream
+    if stream is None:
+        return None
+    reader = OutputReader(stream=stream, sink=sink, mirror=mirror)
+    reader.start()
+    return reader
 
 
 def _build_sinks(*, path: str, fmt: LogFormat, detail: LogDetail, screen: Console | None) -> CompositeSink:
@@ -380,18 +429,19 @@ def _announce_log_path(path: str) -> None:
         stderr_console.print(f"[dim]logging to[/dim] {path}")
 
 
-def _report_sink_errors(sinks: CompositeSink) -> None:
+def _report_errors(errors: list[BaseException]) -> None:
     """Say what a destination lost, once the data that survived is safe.
 
     A sink that fails mid-run is reported rather than raised: losing the screen
     is no reason to lose the log, and by the time we get here the log has
-    already been closed out.
+    already been closed out. The reader that drains a workload's output is held
+    to the same rule, for the same reason.
     """
-    if not sinks.errors:
+    if not errors:
         return
-    first = sinks.errors[0]
+    first = errors[0]
     stderr_console.print(
-        f"[bold]treehawk:[/bold] {len(sinks.errors)} output error(s); first was {type(first).__name__}: {first}"
+        f"[bold]treehawk:[/bold] {len(errors)} output error(s); first was {type(first).__name__}: {first}"
     )
 
 

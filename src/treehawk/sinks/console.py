@@ -102,5 +102,15 @@ class ConsoleSink(BaseSink):
                 f"the {self._measure.long} read"
             )
 
+    @override
+    def output(self, line: str) -> None:
+        """Pass a line the workload printed straight through.
+
+        This sink is what a pipe or a CI log gets, and there is no cursor
+        control to protect there: interleaved plain lines are exactly what the
+        workload would have produced on its own.
+        """
+        self._write_line(line)
+
     def _write_line(self, text: str) -> None:
         print(text, file=self._stream, flush=True)

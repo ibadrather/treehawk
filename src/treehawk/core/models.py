@@ -10,7 +10,7 @@ import signal
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TypeAlias, TypedDict
+from typing import IO, TypeAlias, TypedDict
 
 from treehawk.core.constants import CORE
 
@@ -206,12 +206,17 @@ class LaunchedWorkload(ABC):
         argv: list[str],
         group_path: str | None = None,
         notes: tuple[str, ...] = (),
+        output_stream: IO[bytes] | None = None,
     ) -> None:
         self.pid = pid
         self.argv = argv
         self.group_path = group_path
         self.notes: list[str] = list(notes)
         """How this workload came to be started the way it was, for the log header."""
+        self.output_stream = output_stream
+        """The workload's combined stdout and stderr, when treehawk captured
+        them, else None. Whoever reads it owns closing it - there is exactly
+        one reader (see :class:`~treehawk.core.capture.OutputReader`)."""
 
     @property
     def isolated(self) -> bool:

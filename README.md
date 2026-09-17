@@ -34,11 +34,13 @@ treehawk run -- python train.py --epochs 10
 
 Either way it keeps sampling until the workload ends — no duration to set, and
 `Ctrl-C` or a shutdown `SIGTERM` still writes a complete summary. While it runs
-you get a live dashboard; afterwards, read the log back:
+you get a live dashboard, with whatever the workload is printing in a panel at
+the bottom of it rather than scrawled across it; afterwards, read the log back:
 
 ```bash
 treehawk report treehawk-20260913-100000.jsonl   # summary in the terminal
 treehawk pdf    treehawk-20260913-100000.jsonl   # an 8-page PDF report
+cat             treehawk-20260913-100000.out     # everything the workload printed
 ```
 
 Linux and macOS, including Apple Silicon. Metrics come from the kernel
@@ -72,6 +74,17 @@ From a checkout:
 uv sync            # or: pip install -e .
 uv run treehawk --help
 ```
+
+To make your checkout the global `treehawk` command, run this from the repo
+root:
+
+```bash
+uv tool install --editable . --force
+```
+
+The install is editable, so a source change takes effect the next time you run
+`treehawk`. A change to dependencies or entry points in `pyproject.toml` needs
+the command run again. To go back to a release build, rerun the install script.
 
 ## The problem it solves
 
@@ -214,11 +227,19 @@ Advanced:
     --no-pss             skip smaps_rollup (cheaper at short intervals)
     --aggregate-only     log only the workload total, not a row per process
     --no-isolate         (run) do not ask for an accounting boundary
+    --no-capture         (run) let the command write to this terminal itself
 ```
 
 Sampling uses absolute deadlines, so intervals do not drift. A sample that
 takes longer than the interval is flagged `overrun`, counted in the summary, and
 marked on the CPU chart.
+
+`run` reads the command's output over a pty of its own instead of letting it
+write to the terminal the dashboard is repainting: the last lines show in an
+`output` panel and the whole stream is kept beside the log as `.out`. A pty, not
+a pipe, so the command keeps its colours and its line buffering — treehawk
+should not change how the thing it is measuring behaves. `--no-capture` hands
+the terminal over for a command that needs it.
 
 ## Platform support
 
@@ -279,8 +300,9 @@ core/         platform-agnostic policy - models, interfaces, membership, samplin
   matchers.py     one class per way of naming the workload
   monitor.py      the sampling loop; knows nothing about any OS
   aggregate.py    counters -> rates; samples -> summary
+  capture.py      draining a launched workload's own output
 platforms/    concrete OS implementations of those protocols
-  posix.py        launching: the session and signalling both OSes share
+  posix.py        launching: the session, the pty and the signalling both share
   linux/          procfs.py, cgroup2.py, source.py, launcher.py
   darwin/         libproc.py, coalition.py, source.py, host.py
 gpu/          the seam for GPU metrics (protocol defined, nothing registered yet)

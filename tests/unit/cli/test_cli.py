@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 from treehawk.cli import app
 from treehawk.cli.constants import CLI
 from treehawk.cli.models import Runtime
+from treehawk.core.config import WorkloadOutput
 from treehawk.core.interfaces import Record
 from treehawk.core.values import as_records
 from treehawk.platforms.models import Platform
@@ -212,6 +213,43 @@ def test_no_isolate_uses_the_platform_s_direct_launcher(
     assert result.exit_code == 0, result.output
     assert not isolating.workloads
     assert len(direct.workloads) == 1
+
+
+def test_quiet_leaves_the_workload_the_terminal(
+    tmp_path: pathlib.Path, proc_root: pathlib.Path, cgroup_root: pathlib.Path
+) -> None:
+    """Capturing is there to protect the live region; --quiet draws none."""
+    write_proc(proc_root, 100, cmdline="python job.py")
+    launcher = FakeLauncher()
+    log = tmp_path / "run.jsonl"
+
+    result = runner.invoke(
+        app,
+        ["run", "-q", "-o", str(log), "-d", "1", "--", "python", "job.py"],
+        obj=on(fake_platform(proc_root, cgroup_root, launcher=launcher)),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert launcher.requested == [WorkloadOutput.INHERIT]
+    assert not log.with_suffix(".out").exists()
+
+
+def test_no_capture_leaves_the_workload_the_terminal(
+    tmp_path: pathlib.Path, proc_root: pathlib.Path, cgroup_root: pathlib.Path
+) -> None:
+    write_proc(proc_root, 100, cmdline="python job.py")
+    launcher = FakeLauncher()
+    log = tmp_path / "run.jsonl"
+
+    result = runner.invoke(
+        app,
+        ["run", "--no-capture", "-o", str(log), "-d", "1", "--", "python", "job.py"],
+        obj=on(fake_platform(proc_root, cgroup_root, launcher=launcher)),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert launcher.requested == [WorkloadOutput.INHERIT]
+    assert not log.with_suffix(".out").exists()
 
 
 def test_a_workload_that_ignores_sigterm_is_killed_after_the_grace_period(

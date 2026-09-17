@@ -8,7 +8,9 @@ Everything else is a unit test of one piece of that.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import pty
 import subprocess
 import sys
 
@@ -28,6 +30,35 @@ def treehawk(*args: str, timeout: float = 90) -> subprocess.CompletedProcess[str
         text=True,
         timeout=timeout,
     )
+
+
+def treehawk_on_a_terminal(*args: str, timeout: float = 90) -> str:
+    """Run treehawk with a pty for its own stdio, and return what it drew.
+
+    Capturing the workload only happens when there is a live region to protect,
+    which means a real terminal - so the only honest way to exercise it is to
+    give treehawk one.
+    """
+    master, slave = pty.openpty()
+    process = subprocess.Popen(
+        [sys.executable, "-m", "treehawk", *args],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+    )
+    os.close(slave)
+    drawn = bytearray()
+    with os.fdopen(master, "rb", 0) as stream:
+        while True:
+            try:
+                chunk = stream.read(65536)
+            except OSError:
+                break  # the pty reports the last writer letting go as EIO
+            if not chunk:
+                break
+            drawn += chunk
+    assert process.wait(timeout) == 0
+    return drawn.decode("utf-8", "replace")
 
 
 def read_log(path: str) -> tuple[Record, list[Record], Record]:
@@ -263,3 +294,70 @@ def test_csv_output_is_written_and_joinable(tmp_path: pathlib.Path) -> None:
     procs = list(csv_module.DictReader((tmp_path / "run.procs.csv").open()))
     assert rows and procs
     assert {p["seq"] for p in procs} <= {r["seq"] for r in rows}
+
+
+def test_the_workload_s_output_is_kept_beside_the_log_and_shown_in_the_dashboard(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The dashboard and the workload no longer fight over the terminal.
+
+    Both used to write to it directly: the workload moved the cursor out from
+    under the region Rich was repainting, and each wrecked the other. Now the
+    workload gets a pty of its own, its last lines are drawn inside the
+    dashboard, and the whole stream is kept in a file beside the log.
+    """
+    log = tmp_path / "run.jsonl"
+
+    drawn = treehawk_on_a_terminal(
+        "run",
+        "-i",
+        "0.25",
+        "-o",
+        str(log),
+        "--",
+        sys.executable,
+        WORKLOAD,
+        "--seconds",
+        "1",
+        "--mb",
+        "8",
+        "--parent-seconds",
+        "1",
+    )
+
+    printed = log.with_suffix(".out")
+    assert printed.exists(), "the workload's output was not kept"
+    assert "parent pid=" in printed.read_text(), printed.read_text()
+    # Drawn inside the dashboard rather than over it.
+    assert "output" in drawn
+    assert "parent pid=" in drawn
+    # And the run itself is unaffected.
+    _, samples, summary = read_log(str(log))
+    assert samples
+    assert summary["exit_code"] == 0
+
+
+def test_no_capture_leaves_the_workload_the_terminal(tmp_path: pathlib.Path) -> None:
+    """The escape hatch for a workload that wants a terminal of its own."""
+    log = tmp_path / "run.jsonl"
+
+    drawn = treehawk_on_a_terminal(
+        "run",
+        "-i",
+        "0.25",
+        "--no-capture",
+        "-o",
+        str(log),
+        "--",
+        sys.executable,
+        WORKLOAD,
+        "--seconds",
+        "1",
+        "--mb",
+        "8",
+        "--parent-seconds",
+        "1",
+    )
+
+    assert not log.with_suffix(".out").exists()
+    assert "parent pid=" in drawn  # it reached the terminal directly

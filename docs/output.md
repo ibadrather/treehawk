@@ -38,6 +38,22 @@ jq -s 'map(select(.type == "sample")) | max_by(.cpu_percent) | {t, cpu_percent}'
 jq -r 'select(.type == "sample") | [.t, .cpu_percent, .pss_bytes] | @csv' run.jsonl
 ```
 
+## What the workload printed
+
+`treehawk run` also keeps the command's own stdout and stderr, together and in
+order, in `<log>.out` — so `run.jsonl` is accompanied by `run.out`. It is the
+raw stream, escape codes included, so replaying it shows what the command would
+have shown:
+
+```bash
+cat run.out                    # or less -R, to render the colours
+grep -n "Traceback" run.out    # what went wrong, next to what it cost
+```
+
+Only `run` writes it, and only when it captured the output — see
+[Usage](usage.md#what-the-command-prints) for when that is. `watch` never does:
+the process was already running and its output was never treehawk's to read.
+
 ## The PDF report
 
 `treehawk pdf run.jsonl` renders eight pages, each answering one question:
