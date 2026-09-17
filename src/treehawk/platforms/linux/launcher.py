@@ -42,12 +42,12 @@ class ScopeLauncher:
 
     def __init__(
         self,
-        cgroups: CgroupV2Source | None = None,
+        cgroups: CgroupV2Source,
         *,
-        proc_root: str = LINUX.proc_root,
+        proc_root: str,
         timeout: float = LINUX.scope_resolve_timeout,
     ) -> None:
-        self._cgroups = cgroups or CgroupV2Source()
+        self._cgroups = cgroups
         self._proc_root = proc_root
         self._timeout = timeout
 
@@ -86,9 +86,16 @@ class ScopeLauncher:
         return None
 
 
-def default_launcher(cgroups: CgroupV2Source | None = None) -> FallbackLauncher:
-    """The launcher used by the CLI: isolated if possible, direct otherwise."""
-    return FallbackLauncher([ScopeLauncher(cgroups), DirectLauncher()])
+def default_launcher(cgroups: CgroupV2Source | None, *, proc_root: str) -> FallbackLauncher:
+    """The launcher used by the CLI: isolated if possible, direct otherwise.
+
+    Both readers are handed in rather than defaulted, so a platform built over a
+    fake ``/proc`` and cgroup mount never probes the real ones. With no cgroup2
+    mount there is no boundary to ask for, so the scope launcher is left out.
+    """
+    if cgroups is None:
+        return FallbackLauncher([DirectLauncher()])
+    return FallbackLauncher([ScopeLauncher(cgroups, proc_root=proc_root), DirectLauncher()])
 
 
 def _read_cgroup(*, proc_root: str, pid: int) -> str | None:

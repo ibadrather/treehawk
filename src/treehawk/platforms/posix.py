@@ -74,6 +74,10 @@ class FallbackLauncher:
     Any :class:`LaunchFailed` from a member is a reason to try the next one -
     which is what lets a platform offer an isolating launcher without having to
     promise it will work here (no user bus, a container, no systemd at all).
+
+    What was passed over, and why, is written onto the workload that is
+    returned rather than kept here, so one launcher can start any number of
+    workloads without their notes running together.
     """
 
     @property
@@ -85,8 +89,6 @@ class FallbackLauncher:
 
     def __init__(self, launchers: list[ProcessLauncher]) -> None:
         self._launchers = launchers
-        self.notes: list[str] = []
-        self.used: str | None = None
 
     def launch(self, argv: list[str]) -> LaunchedWorkload:
         errors: list[str] = []
@@ -99,13 +101,12 @@ class FallbackLauncher:
             except (OSError, LaunchFailed) as exc:
                 errors.append(f"{launcher.name}: {exc}")
                 continue
-            self.used = launcher.name
             if not workload.isolated:
-                self.notes.append(
+                workload.notes.append(
                     "no kernel accounting boundary: membership is inferred from the "
                     "process table, so a process that both detaches and leaves the "
                     "workload's group could be missed"
                 )
-            self.notes.extend(errors)
+            workload.notes.extend(errors)
             return workload
         raise LaunchFailed("could not start the workload: " + "; ".join(errors))

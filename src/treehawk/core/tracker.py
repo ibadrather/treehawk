@@ -16,6 +16,7 @@ from collections.abc import Mapping
 
 from treehawk.core.constants import CORE
 from treehawk.core.interfaces import (
+    BoundaryStrategy,
     ExpansionContext,
     ExpansionStrategy,
     GroupMetricSource,
@@ -83,7 +84,8 @@ class Tracker:
         if self._pinned_group:
             paths.add(self._pinned_group)
         for strategy in self._strategies:
-            paths |= getattr(strategy, "accepted", set())
+            if isinstance(strategy, BoundaryStrategy):
+                paths |= strategy.accepted
         return paths
 
     def seed(self, procs: Mapping[int, ProcInfo]) -> list[ProcInfo]:

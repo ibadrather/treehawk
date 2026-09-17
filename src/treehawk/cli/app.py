@@ -2,7 +2,9 @@
 
 This is the composition root: the only module that knows about every layer. It
 reads arguments, picks implementations, and hands them to the monitor - which
-sees nothing but interfaces.
+sees nothing but interfaces. What it needs from the machine itself - the
+platform, the clock, its own PID - it takes from a :class:`Runtime`, so a test
+can run every command against a fake one.
 
 It is also the only place that handles errors. Everything underneath raises a
 :class:`TreehawkError` and lets it travel; :func:`_guard` turns it into a line
@@ -18,7 +20,6 @@ from __future__ import annotations
 import functools
 import json
 import signal
-import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ from rich.console import Console
 
 from treehawk import __version__
 from treehawk.cli.constants import CLI
+from treehawk.cli.models import Runtime
 from treehawk.cli.options import (
     AggregateOnly,
     Csv,
@@ -52,12 +54,11 @@ from treehawk.core.config import (
     WatchConfig,
 )
 from treehawk.core.errors import ConfigError, TreehawkError
-from treehawk.core.interfaces import ProcessLauncher, ProcessMatcher
+from treehawk.core.interfaces import Clock, ProcessLauncher, ProcessMatcher
 from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
 from treehawk.platforms.models import Platform
-from treehawk.platforms.registry import get_platform
 from treehawk.report import Report, build_report
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
 from treehawk.sinks.constants import SINKS
@@ -116,6 +117,7 @@ def main_callback(
 @app.command()
 @_guard
 def watch(
+    ctx: typer.Context,
     *,
     target: Annotated[
         str | None,
@@ -151,6 +153,7 @@ def watch(
     [dim]treehawk watch train.py
     treehawk watch --pid 4213[/dim]
     """
+    runtime = _runtime(ctx)
     matcher = _select_matcher(target=target, pid=pid, exact=exact, regex=regex)
     fmt = LogFormat.CSV if csv else LogFormat.JSONL
     config = _build_config(
@@ -161,7 +164,7 @@ def watch(
         memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
         missing_workload=MissingWorkload.WAIT if wait else MissingWorkload.FAIL,
     )
-    platform = get_platform()
+    platform = runtime.platform()
     path = output or _default_log_path(fmt)
     sinks = _build_sinks(
         path=path,
@@ -175,6 +178,8 @@ def watch(
         sink=sinks,
         matcher=matcher,
         mode="watch",
+        clock=runtime.clock,
+        self_pid=runtime.self_pid(),
         notes=tuple(platform.notes),
     )
     _install_signal_handlers(monitor=session.monitor)
@@ -215,6 +220,7 @@ def run(
 
     [dim]treehawk run -- python train.py --epochs 10[/dim]
     """
+    runtime = _runtime(ctx)
     argv = [argument for argument in ctx.args if argument != "--"]
     if not argv:
         raise ConfigError("nothing to run; put the command after --")
@@ -228,7 +234,7 @@ def run(
         memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
         missing_workload=MissingWorkload.FAIL,
     )
-    platform = get_platform()
+    platform = runtime.platform()
     path = output or _default_log_path(fmt)
     sinks = _build_sinks(
         path=path,
@@ -241,7 +247,6 @@ def run(
     if not quiet:
         _announce_log_path(path)
     workload = launcher.launch(argv)
-    notes = tuple(platform.notes) + tuple(getattr(launcher, "notes", ()))
 
     session = build_session(
         platform=platform,
@@ -249,9 +254,11 @@ def run(
         sink=sinks,
         matcher=build_matcher(kind="pid", value=workload.pid),
         mode="run",
+        clock=runtime.clock,
+        self_pid=runtime.self_pid(),
         argv=argv,
         pinned_group=workload.group_path,
-        notes=notes,
+        notes=tuple(platform.notes) + tuple(workload.notes),
     )
     # The workload already exists, so seed now rather than searching for it.
     session.tracker.seed(platform.process_source.scan())
@@ -260,7 +267,7 @@ def run(
     try:
         session.monitor.run(read_exit_code=workload.poll)
     finally:
-        code = _stop_workload(workload)
+        code = _stop_workload(workload, clock=runtime.clock)
     _report_sink_errors(sinks)
     if code:
         raise typer.Exit(code)
@@ -305,6 +312,11 @@ def pdf(
 # --------------------------------------------------------------------------
 
 
+def _runtime(ctx: typer.Context) -> Runtime:
+    """The machine this invocation runs on: the real one, unless a test passed its own."""
+    return ctx.obj if isinstance(ctx.obj, Runtime) else Runtime()
+
+
 def _select_matcher(*, target: str | None, pid: int | None, exact: str | None, regex: str | None) -> ProcessMatcher:
     given = [value for value in (target, pid, exact, regex) if value is not None]
     if len(given) > 1:
@@ -321,13 +333,10 @@ def _select_matcher(*, target: str | None, pid: int | None, exact: str | None, r
 
 
 def _select_launcher(platform: Platform, *, isolation: Isolation) -> ProcessLauncher:
-    if platform.launcher is None:
+    launcher = platform.launcher if isolation is Isolation.CGROUP else platform.direct_launcher
+    if launcher is None:
         raise ConfigError("this platform cannot start processes")
-    if isolation is Isolation.CGROUP:
-        return platform.launcher
-    from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
-
-    return FallbackLauncher([DirectLauncher()])
+    return launcher
 
 
 def _build_config(
@@ -396,18 +405,18 @@ def _install_signal_handlers(*, monitor: Monitor, workload: LaunchedWorkload | N
         signal.signal(signum, handler)
 
 
-def _stop_workload(workload: LaunchedWorkload) -> int | None:
+def _stop_workload(workload: LaunchedWorkload, *, clock: Clock) -> int | None:
     """Stop the workload if monitoring ended first, and report its exit code."""
     code = workload.poll()
     if code is not None:
         return code
     workload.signal(signal.SIGTERM)
-    deadline = time.monotonic() + CLI.terminate_grace
-    while time.monotonic() < deadline:
+    deadline = clock.monotonic() + CLI.terminate_grace
+    while clock.monotonic() < deadline:
         code = workload.poll()
         if code is not None:
             return code
-        time.sleep(0.05)
+        clock.sleep_until(clock.monotonic() + CLI.stop_poll_interval)
     workload.signal(signal.SIGKILL)
     return workload.poll()
 

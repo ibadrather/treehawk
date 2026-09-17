@@ -26,12 +26,12 @@ class LiveSink(BaseSink):
     def __init__(
         self,
         *,
-        console: Console | None = None,
+        console: Console,
         palette: Palette = PALETTE,
         max_rows: int = 12,
         refresh_per_second: float = 4.0,
     ) -> None:
-        self._console = console or Console(stderr=True)
+        self._console = console
         self._palette = palette
         self._dashboard = Dashboard(palette=palette, max_rows=max_rows)
         self._refresh = refresh_per_second

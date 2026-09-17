@@ -12,8 +12,16 @@ uv run treehawk --help
 uv run ruff format
 uv run ruff check
 uv run mypy
-uv run pytest            # -m "not integration" for the fast ones
+uv run pytest            # tests/unit for the fast ones, tests/integration for real processes
 ```
+
+`tests/unit/` mirrors the package layout and runs against the fakes in
+`tests/conftest.py`: fake kernels (`/proc` and cgroup trees, a `ProcessTable`)
+and the rest of the machine (`FakeClock`, `RecordingSink`, `FakeLauncher`, and
+`fake_platform`, which bundles them into a `Platform`). The commands take their
+platform, clock and PID from a `Runtime` (`cli/models.py`), so `tests/unit/cli/`
+runs `watch` and `run` end to end through `CliRunner.invoke(obj=Runtime(...))`
+without touching the real machine. `tests/integration/` spawns real processes.
 
 CI runs all four on Python 3.10 to 3.14 on Linux, and on the oldest and newest
 of those on macOS (Apple Silicon). mypy runs at its strictest settings and
@@ -38,11 +46,18 @@ registry entry:
 | a way to name a process | `ProcessMatcher` | `core/matchers.py` |
 | an output format | `Sink` | `sinks/factory.py` |
 | a PDF page | `Page` | `charts/report.py` |
-| an operating system | `ProcessSource`, `HostInfoSource` | `platforms/registry.py` |
+| an operating system | `ProcessSource`, `HostInfoSource`; optionally `GroupMetricSource`, `ProcessLauncher` | `platforms/registry.py` |
+
+A platform that can start processes sets both `Platform.launcher` (used by
+`run`) and `Platform.direct_launcher` (used by `run --no-isolate`); without the
+second, `--no-isolate` fails with "this platform cannot start processes". Where
+the OS cannot create a boundary, pass the same launcher to both, as macOS does.
 
 macOS was added exactly that way, without touching `core/`. Two things are
 worth copying from it. Make the syscall boundary an injectable protocol — as
-`platforms/darwin/libproc.py` does with `ProcessTable` — so the backend can be
+`platforms/darwin/libproc.py` does with `ProcessTable` — and require it in the
+constructor rather than defaulting to the real one: only the builder in
+`platforms/registry.py` constructs the real backend, so the backend can be
 tested on a machine that does not run that OS. And bind any platform library
 inside the builder rather than at import time, so the module still imports and
 type-checks everywhere; a `sys.platform` guard would hide it from mypy on the

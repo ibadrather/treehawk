@@ -22,7 +22,6 @@ from treehawk.core.config import MemoryDetail
 from treehawk.core.models import Identity, ProcInfo, ProcSample
 from treehawk.platforms.darwin.constants import DARWIN
 from treehawk.platforms.darwin.libproc import (
-    LibProc,
     ProcessTable,
     coalition_path,
     nanoseconds_from_mach,
@@ -31,10 +30,10 @@ from treehawk.platforms.darwin.models import Timebase
 
 
 class DarwinProcessSource:
-    """Implements ``ProcessSource`` against libproc."""
+    """Implements ``ProcessSource`` against libproc - or any ``ProcessTable``."""
 
-    def __init__(self, table: ProcessTable | None = None) -> None:
-        self._table: ProcessTable = table or LibProc()
+    def __init__(self, table: ProcessTable) -> None:
+        self._table = table
         # Read once: the timebase is a property of the machine, and every CPU
         # figure on macOS is scaled by it.
         self._timebase: Timebase = self._table.timebase()

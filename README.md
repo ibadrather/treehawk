@@ -308,17 +308,23 @@ are untouched.
 
 **Adding another OS**: implement `ProcessSource`, `HostInfoSource` and
 optionally `GroupMetricSource`/`ProcessLauncher` in `platforms/<os>/`, then
-register a builder in `platforms/registry.py`. macOS was added exactly that
-way and changed nothing in `core/`. Two things are worth copying from it: make
-the syscall boundary an injectable protocol so the backend can be tested
-without that OS, and bind any platform library inside the builder rather than
-at import, so the module still type-checks everywhere.
+register a builder in `platforms/registry.py`. A builder that can start
+processes sets both `Platform.launcher` (what `run` uses) and
+`Platform.direct_launcher` (what `run --no-isolate` uses); where the OS cannot
+create a boundary, pass the same launcher to both, as macOS does. macOS was
+added exactly that way and changed nothing in `core/`. Two things are worth
+copying from it: make the syscall boundary an injectable protocol, and let the
+builder be the only place the real backend is constructed — no constructor
+falls back to it — so the backend can be tested without that OS; and bind any
+platform library inside the builder rather than at import, so the module still
+type-checks everywhere.
 
 ## Tests
 
 ```bash
 uv run pytest                        # everything
-uv run pytest -m "not integration"   # fast: fake kernels only
+uv run pytest tests/unit             # fast: fake kernels only
+uv run pytest tests/integration      # real processes (or -m integration)
 uv run mypy                          # strictest settings: src, tests, scripts
 uv run ruff format --check           # formatting
 uv run ruff check                    # lint
@@ -327,13 +333,20 @@ uv run ruff check                    # lint
 CI runs all of these on every push and pull request, on Python 3.10 to 3.14 on
 Linux, and on the oldest and newest of those on macOS (Apple Silicon).
 
-The unit tests run against fake kernels, so they need no privileges and no real
-workload: fake `/proc` and cgroup trees for Linux, since every reader takes its
-root as an argument, and a fake `ProcessTable` for macOS, since there is no
-directory to point at. Neither binds a platform library, so the whole suite
-runs on either OS. The integration tests spawn `tests/workload.py`, which
-deliberately double-forks a detached child, and assert it is still in the log
-after its parent is gone.
+`tests/unit/` mirrors the package (`core/`, `platforms/linux/`,
+`platforms/darwin/`, `sinks/`, ...), and the fake kernels they share live in
+`tests/conftest.py`. The unit tests run against fake kernels, so they need no
+privileges and no real workload: fake `/proc` and cgroup trees for Linux, since
+every reader takes its root as an argument, and a fake `ProcessTable` for macOS,
+since there is no directory to point at. Neither binds a platform library, so
+the whole suite runs on either OS. The rest of the machine is faked there too:
+`FakeClock`, `RecordingSink`, `FakeLauncher`, and `fake_platform`, which bundles
+the fake trees into a `Platform`. The commands take their platform, clock and
+PID from a `Runtime` (`cli/models.py`), so `tests/unit/cli/` runs `watch` and
+`run` end to end by handing `CliRunner.invoke(obj=Runtime(...))` a fake one,
+without touching the real process table. The integration tests spawn
+`tests/integration/workload.py`, which deliberately double-forks a detached
+child, and assert it is still in the log after its parent is gone.
 
 ## Releasing
 
