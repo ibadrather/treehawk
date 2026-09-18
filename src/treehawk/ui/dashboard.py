@@ -40,11 +40,13 @@ class Dashboard:
         palette: Palette,
         max_rows: int = 12,
         history: int = UI.history,
+        output_lines: int = UI.output_lines,
     ) -> None:
         self._palette = palette
         self._max_rows = max_rows
         self._cpu: deque[float | None] = deque(maxlen=history)
         self._memory: deque[float | None] = deque(maxlen=history)
+        self._output: deque[str] = deque(maxlen=output_lines)
         self._header: Record = {}
         self._latest: Record | None = None
         self._peak_cpu: float | None = None
@@ -62,6 +64,14 @@ class Dashboard:
 
     def start(self, header: Record) -> None:
         self._header = header
+
+    def append_output(self, line: str) -> None:
+        """Remember one line the workload printed, dropping the oldest.
+
+        Appending to a bounded deque is atomic, which is what makes it safe for
+        the reader thread to call this while the sampling loop renders.
+        """
+        self._output.append(line)
 
     def update(self, record: Record) -> None:
         self._latest = record
@@ -81,7 +91,19 @@ class Dashboard:
     # -- rendering --------------------------------------------------------
 
     def render(self) -> RenderableType:
+        """Title, stats, what the workload printed, then the processes.
+
+        The process table goes last because it is the only part whose height
+        the workload decides. A busy dashboard is taller than the terminal, and
+        Rich crops the bottom of the live region - so the part that is cropped
+        should be the one that is bounded, fixed-height panels first and the
+        table that can run to a dozen rows after them. The rows lost that way
+        are all in the log; a line the workload printed and nobody saw is not.
+        """
         parts: list[RenderableType] = [self._title(), self._stats()]
+        printed = self._printed()
+        if printed is not None:
+            parts.append(printed)
         table = self._processes()
         if table is not None:
             parts.append(table)
@@ -191,6 +213,32 @@ class Dashboard:
         return Panel(
             table,
             title="processes",
+            title_align="left",
+            border_style=self._palette.grid,
+            padding=(0, 1),
+        )
+
+    def _printed(self) -> RenderableType | None:
+        """The tail of what the workload itself printed, or None if it was quiet.
+
+        Every line is forced onto one row: a workload is free to print a line
+        far wider than the terminal, and letting it wrap would change the height
+        of the live region between two refreshes.
+        """
+        lines = list(self._output)
+        if not lines:
+            return None
+        body = Group(
+            *(
+                # from_ansi so the workload's own colours survive, rather than
+                # showing up as escape sequences.
+                Text.from_ansi(line, no_wrap=True, overflow="ellipsis")
+                for line in lines
+            )
+        )
+        return Panel(
+            body,
+            title="output",
             title_align="left",
             border_style=self._palette.grid,
             padding=(0, 1),

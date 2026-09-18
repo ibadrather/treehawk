@@ -80,6 +80,18 @@ NoPss = Annotated[
     ),
 ]
 
+NoCapture = Annotated[
+    bool,
+    typer.Option(
+        "--no-capture",
+        rich_help_panel=CLI.advanced_panel,
+        help="Let the workload write straight to this terminal instead of into "
+        "the dashboard. Needed by a workload that wants a terminal of its own - "
+        "one that prompts, or draws its own full-screen view - and nothing else "
+        "is drawn while it runs.",
+    ),
+]
+
 AggregateOnly = Annotated[
     bool,
     typer.Option(

@@ -21,10 +21,12 @@ import pathlib
 import signal
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import IO
 
 import pytest
 
 from treehawk.core.compat import override
+from treehawk.core.config import WorkloadOutput
 from treehawk.core.errors import LaunchFailed
 from treehawk.core.interfaces import ProcessLauncher, Record
 from treehawk.core.models import HostInfo, LaunchedWorkload
@@ -404,8 +406,15 @@ class FakeWorkload(LaunchedWorkload):
         notes: tuple[str, ...] = (),
         exit_code: int | None = 0,
         ignores_sigterm: bool = False,
+        output_stream: IO[bytes] | None = None,
     ) -> None:
-        super().__init__(pid=pid, argv=argv, group_path=group_path, notes=notes)
+        super().__init__(
+            pid=pid,
+            argv=argv,
+            group_path=group_path,
+            notes=notes,
+            output_stream=output_stream,
+        )
         self.exit_code = exit_code
         self.ignores_sigterm = ignores_sigterm
         self.signals: list[int] = []
@@ -434,7 +443,11 @@ class FakeLauncher:
     notes: tuple[str, ...] = ()
     exit_code: int | None = 0
     ignores_sigterm: bool = False
+    output_stream: IO[bytes] | None = None
+    """Handed to the workload as its captured output, when a test supplies one."""
     workloads: list[FakeWorkload] = field(default_factory=list)
+    requested: list[WorkloadOutput] = field(default_factory=list)
+    """What each launch was asked to do with the workload's output."""
 
     @property
     def name(self) -> str:
@@ -443,7 +456,8 @@ class FakeLauncher:
     def available(self) -> bool:
         return self.is_available
 
-    def launch(self, argv: list[str]) -> LaunchedWorkload:
+    def launch(self, argv: list[str], *, output: WorkloadOutput = WorkloadOutput.INHERIT) -> LaunchedWorkload:
+        self.requested.append(output)
         if self.failure is not None:
             raise LaunchFailed(self.failure)
         workload = FakeWorkload(
@@ -453,6 +467,7 @@ class FakeLauncher:
             notes=self.notes,
             exit_code=self.exit_code,
             ignores_sigterm=self.ignores_sigterm,
+            output_stream=(self.output_stream if output is WorkloadOutput.CAPTURE else None),
         )
         self.workloads.append(workload)
         return workload

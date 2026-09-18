@@ -78,6 +78,22 @@ class Isolation(StrEnum):
     NONE = "none"
 
 
+class WorkloadOutput(StrEnum):
+    """What becomes of a launched workload's own stdout and stderr."""
+
+    CAPTURE = "capture"
+    """treehawk reads them over a pty, keeps the whole stream in a file beside
+    the log, and shows the last few lines in the dashboard. Necessary whenever
+    the live view is on screen: a child writing straight to the terminal moves
+    the cursor out from under the region Rich is repainting, and neither
+    survives it."""
+
+    INHERIT = "inherit"
+    """The workload writes to the terminal itself, as if treehawk were not
+    there. Right when there is no live region to protect, and the only way for
+    a workload that wants a controlling terminal of its own."""
+
+
 class LogFormat(StrEnum):
     """On-disk formats the log can be written in."""
 

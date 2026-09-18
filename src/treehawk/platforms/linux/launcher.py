@@ -21,12 +21,18 @@ import shutil
 import subprocess
 import time
 
+from treehawk.core.config import WorkloadOutput
 from treehawk.core.errors import LaunchFailed
 from treehawk.core.models import LaunchedWorkload
 from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 from treehawk.platforms.linux.constants import LINUX
 from treehawk.platforms.linux.procfs import parse_cgroup
-from treehawk.platforms.posix import DirectLauncher, FallbackLauncher, SubprocessWorkload
+from treehawk.platforms.posix import (
+    DirectLauncher,
+    FallbackLauncher,
+    SubprocessWorkload,
+    start_process,
+)
 
 
 class ScopeUnavailable(LaunchFailed):
@@ -54,7 +60,7 @@ class ScopeLauncher:
     def available(self) -> bool:
         return shutil.which("systemd-run") is not None and self._cgroups.available()
 
-    def launch(self, argv: list[str]) -> LaunchedWorkload:
+    def launch(self, argv: list[str], *, output: WorkloadOutput = WorkloadOutput.INHERIT) -> LaunchedWorkload:
         unit = f"treehawk-{os.getpid()}-{int(time.time())}"
         wrapper = [
             "systemd-run",
@@ -66,11 +72,15 @@ class ScopeLauncher:
             "--",
             *argv,
         ]
-        process = subprocess.Popen(wrapper, start_new_session=True)
+        # systemd-run --scope execs in place, so the pty it is handed is the
+        # workload's pty; nothing about the boundary changes.
+        process, stream = start_process(wrapper, output=output)
         group = self._resolve_group(process=process, unit=unit)
         if group is None:
+            if stream is not None:
+                stream.close()  # the fallback launcher will make a pty of its own
             raise ScopeUnavailable(f"could not place the workload in a cgroup (unit {unit})")
-        return SubprocessWorkload(process=process, argv=argv, group_path=group)
+        return SubprocessWorkload(process=process, argv=argv, group_path=group, output_stream=stream)
 
     def _resolve_group(self, *, process: subprocess.Popen[bytes], unit: str) -> str | None:
         """Wait for the child to appear inside the new scope's cgroup."""

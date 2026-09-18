@@ -28,6 +28,13 @@ class BaseSink:
     def close(self, summary: Record) -> None:
         """Receive the run's summary record. Ignored unless overridden."""
 
+    def output(self, line: str) -> None:
+        """Receive one line the workload printed. Ignored unless overridden.
+
+        A sink that writes metrics has no business with it; the log records
+        what the workload *used*, not what it said.
+        """
+
 
 class CompositeSink(BaseSink):
     """Fans every record out to several sinks; itself a sink.
@@ -60,6 +67,10 @@ class CompositeSink(BaseSink):
     @override
     def close(self, summary: Record) -> None:
         self._deliver(lambda sink: sink.close(summary))
+
+    @override
+    def output(self, line: str) -> None:
+        self._deliver(lambda sink: sink.output(line))
 
     def _deliver(self, send: Callable[[Sink], None]) -> None:
         for sink in self._sinks:

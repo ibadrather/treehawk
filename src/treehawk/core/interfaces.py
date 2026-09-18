@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol, TypeAlias, runtime_checkable
 
-from treehawk.core.config import MemoryDetail
+from treehawk.core.config import MemoryDetail, WorkloadOutput
 from treehawk.core.models import (
     GroupMetrics,
     HostInfo,
@@ -89,7 +89,7 @@ class ProcessLauncher(Protocol):
 
     def available(self) -> bool: ...
 
-    def launch(self, argv: list[str]) -> LaunchedWorkload: ...
+    def launch(self, argv: list[str], *, output: WorkloadOutput) -> LaunchedWorkload: ...
 
 
 @runtime_checkable
@@ -179,6 +179,15 @@ class Sink(Protocol):
     def sample(self, record: Record) -> None: ...
 
     def close(self, summary: Record) -> None: ...
+
+    def output(self, line: str) -> None:
+        """Receive one line the workload itself printed.
+
+        Separate from :meth:`sample` because it is not a measurement and does
+        not belong in the log: a sink that records metrics ignores it, and one
+        that draws a screen shows it.
+        """
+        ...
 
 
 @runtime_checkable

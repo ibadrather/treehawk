@@ -287,3 +287,93 @@ def test_the_summary_omits_a_group_figure_no_platform_could_supply() -> None:
     )
 
     assert "cgroup" not in rendered
+
+
+# -- what the workload printed ----------------------------------------------
+
+
+def test_the_output_panel_is_absent_until_the_workload_prints_something() -> None:
+    dashboard = Dashboard(palette=PALETTE)
+    dashboard.start(header())
+
+    assert "output" not in draw(dashboard.render())
+
+
+def test_the_output_panel_shows_what_the_workload_printed() -> None:
+    dashboard = Dashboard(palette=PALETTE)
+    dashboard.start(header())
+    dashboard.append_output("epoch 0 loss=2.31")
+
+    drawn = draw(dashboard.render())
+
+    assert "output" in drawn
+    assert "epoch 0 loss=2.31" in drawn
+
+
+def test_only_the_last_lines_are_kept_so_the_region_stays_a_fixed_height() -> None:
+    dashboard = Dashboard(palette=PALETTE, output_lines=3)
+    dashboard.start(header())
+    for step in range(10):
+        dashboard.append_output(f"step {step}")
+
+    drawn = draw(dashboard.render())
+
+    assert "step 9" in drawn
+    assert "step 6" not in drawn
+
+
+def test_a_line_wider_than_the_terminal_is_truncated_rather_than_wrapped() -> None:
+    """Wrapping would change the height of the live region between refreshes."""
+    dashboard = Dashboard(palette=PALETTE, output_lines=1)
+    dashboard.start(header())
+    dashboard.append_output("x" * 500)
+
+    lines = [line for line in draw(dashboard.render()).splitlines() if "x" in line]
+
+    assert len(lines) == 1
+    assert "\u2026" in lines[0]
+
+
+def test_the_workload_s_own_colours_are_read_rather_than_shown_as_escapes() -> None:
+    dashboard = Dashboard(palette=PALETTE, output_lines=1)
+    dashboard.start(header())
+    dashboard.append_output("\x1b[32m[ok]\x1b[0m done")
+
+    drawn = draw(dashboard.render())
+
+    assert "[ok] done" in drawn
+    assert "[32m" not in drawn
+
+
+def test_the_output_panel_is_drawn_above_the_process_table() -> None:
+    """Order matters: a busy dashboard is taller than the terminal.
+
+    Rich crops the bottom of the live region, so the bounded panels go first
+    and the process table - whose height the workload decides, and whose rows
+    are all in the log anyway - is what gets cropped.
+    """
+    dashboard = Dashboard(palette=PALETTE)
+    dashboard.start(header())
+    dashboard.update(sample())
+    dashboard.append_output("epoch 0 loss=2.31")
+
+    drawn = draw(dashboard.render())
+
+    # The panel titles, not the word "processes" in the stats row above them.
+    assert drawn.index("─ output") < drawn.index("─ processes")
+
+
+def test_the_live_sink_takes_a_printed_line_at_any_point_in_the_run() -> None:
+    """The reader thread does not know where the sampling loop has got to.
+
+    It can hand over a line before the first sample or after the summary has
+    been drawn, and neither may raise: the workload keeps printing until it is
+    gone, and a reader that dies on one line stops draining the rest.
+    """
+    sink = LiveSink(console=Console(record=True, width=120, force_terminal=False))
+
+    sink.output("before the run opened")
+    sink.open(header())
+    sink.output("during the run")
+    sink.close({"samples": 1})
+    sink.output("after the summary")
