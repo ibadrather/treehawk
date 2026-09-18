@@ -1,16 +1,23 @@
 # treehawk
 
-[![CI](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/ibadrather/treehawk?sort=semver)](https://github.com/ibadrather/treehawk/releases/latest)
-[![Python 3.10](https://img.shields.io/badge/python-3.10-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://github.com/ibadrather/treehawk/actions/workflows/ci.yml)
-[![Linux](https://img.shields.io/badge/platform-linux-FCC624?logo=linux&logoColor=black)](#)
-[![macOS](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white)](#)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-ibadrather.github.io%2Ftreehawk-4531cc)](https://ibadrather.github.io/treehawk/)
+<table>
+  <tr>
+    <th align="left">Build</th>
+    <td><a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml/badge.svg?branch=main"></a> <a href="https://github.com/ibadrather/treehawk/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ibadrather/treehawk?sort=semver"></a></td>
+  </tr>
+  <tr>
+    <th align="left">Python</th>
+    <td><a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="Python 3.10" src="https://img.shields.io/badge/python-3.10-3776AB?logo=python&amp;logoColor=white"></a> <a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="Python 3.11" src="https://img.shields.io/badge/python-3.11-3776AB?logo=python&amp;logoColor=white"></a> <a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&amp;logoColor=white"></a> <a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&amp;logoColor=white"></a> <a href="https://github.com/ibadrather/treehawk/actions/workflows/ci.yml"><img alt="Python 3.14" src="https://img.shields.io/badge/python-3.14-3776AB?logo=python&amp;logoColor=white"></a></td>
+  </tr>
+  <tr>
+    <th align="left">Platforms</th>
+    <td><a href="#platform-support"><img alt="Linux" src="https://img.shields.io/badge/platform-linux-FCC624?logo=linux&amp;logoColor=black"></a> <a href="#platform-support"><img alt="macOS" src="https://img.shields.io/badge/platform-macOS-000000?logo=apple&amp;logoColor=white"></a></td>
+  </tr>
+  <tr>
+    <th align="left">Project</th>
+    <td><a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a> <a href="https://ibadrather.github.io/treehawk/"><img alt="Docs" src="https://img.shields.io/badge/docs-ibadrather.github.io%2Ftreehawk-4531cc"></a></td>
+  </tr>
+</table>
 
 Log the CPU and RAM a process uses — **and every process it spawns**, including
 children that daemonize and detach themselves.
@@ -56,10 +63,15 @@ is spelled out below](#platform-support).
 curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
 ```
 
-The script installs the `treehawk` command from the latest GitHub release with
-`uv tool install` (or `pipx`, if that is what you have). If neither is present
-it installs uv first, and uv fetches a suitable Python by itself. Pin a version
-with `| sh -s -- --version 0.4.0`; `--help` lists the rest.
+The script needs no uv, pipx or other tooling. It installs the latest GitHub
+release into its own virtual environment under `~/.local/share/treehawk`,
+links the `treehawk` command into `~/.local/bin`, and adds that directory to
+your `PATH` in your shell profiles. It builds the environment with any Python
+3.10+ already on the system, or with uv if you have it. If there is neither, it
+downloads a temporary copy of uv just to fetch a Python. Pin a version with
+`| sh -s -- --version 0.4.0`. Leave shell profiles alone with
+`--no-modify-path`. `--help` lists the rest. To upgrade, run the script again;
+to uninstall, `rm -rf ~/.local/share/treehawk ~/.local/bin/treehawk`.
 
 Or install a release yourself (Linux or macOS, Python 3.10+):
 
