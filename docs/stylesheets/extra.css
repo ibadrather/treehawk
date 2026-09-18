@@ -71,6 +71,53 @@
   --md-code-hl-name-color: #d4d4d4;
   background-color: #282c34;
   border-radius: 0.5rem;
+  /* Keep the last characters of a line clear of the copy button. */
+  padding-right: 2.8rem;
+}
+
+/* The copy button sits on the dark block in both schemes, so its colours are
+   set here rather than derived from the scheme's (light) code background. */
+.md-typeset pre {
+  --md-code-bg-color: #282c34;
+  --md-code-bg-color--light: #282c34;
+  --md-code-bg-color--lighter: #282c34;
+  /* Clips the copy button's fade to the block; the code still scrolls. */
+  overflow: hidden;
+  border-radius: 0.5rem;
+}
+.md-typeset .md-code__nav {
+  top: 0;
+  right: 0;
+  padding: 0.45em;
+  border-radius: 0 0.5rem 0 0.4rem;
+  background-color: #282c34;
+  box-shadow: -0.6rem 0 0.6rem #282c34;
+}
+.md-typeset :hover > .md-code__nav {
+  background-color: #333842;
+}
+.md-typeset .md-code__button {
+  color: rgba(255, 255, 255, 0.45);
+}
+.md-typeset :hover > * > .md-code__button {
+  color: rgba(255, 255, 255, 0.75);
+}
+.md-typeset .md-code__button.focus-visible,
+.md-typeset .md-code__button:hover {
+  color: #6fc2ba;
+}
+
+/* Phones: Material runs code blocks edge to edge, so drop the corners and
+   keep the copy button visible without hover. */
+@media screen and (max-width: 44.984375em) {
+  .md-typeset pre,
+  .md-typeset pre > code,
+  .md-typeset .md-code__nav {
+    border-radius: 0;
+  }
+  .md-typeset .md-code__button {
+    color: rgba(255, 255, 255, 0.7);
+  }
 }
 
 /* Pill buttons. */
@@ -119,4 +166,41 @@
 }
 .hero img {
   width: 3rem;
+}
+.md-typeset .hero .md-button {
+  margin: 0.5rem 0.4rem 0 0;
+}
+[data-md-color-scheme="treehawk-dark"] .hero {
+  background:
+    radial-gradient(circle at 10% 20%, rgba(127, 109, 249, 0.22), transparent 45%),
+    radial-gradient(circle at 85% 35%, rgba(111, 194, 186, 0.16), transparent 42%),
+    #17151d;
+  color: #ffffff;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+[data-md-color-scheme="treehawk-dark"] .md-typeset .hero h1 {
+  color: #ffffff;
+}
+[data-md-color-scheme="treehawk-dark"] .md-typeset .hero h1 span,
+[data-md-color-scheme="treehawk-dark"] .md-typeset .hero .md-button {
+  color: var(--brand-primary-soft);
+  border-color: var(--brand-primary-soft);
+}
+[data-md-color-scheme="treehawk-dark"] .md-typeset .hero .md-button--primary,
+[data-md-color-scheme="treehawk-dark"] .md-typeset .hero .md-button:hover {
+  color: #ffffff;
+  border-color: var(--brand-primary);
+}
+
+/* Phones: a tighter hero with full-width, stacked buttons. */
+@media screen and (max-width: 44.984375em) {
+  .hero {
+    padding: 1.2rem 1rem;
+    border-radius: 14px;
+  }
+  .md-typeset .hero .md-button {
+    display: block;
+    margin: 0.6rem 0 0;
+    text-align: center;
+  }
 }
