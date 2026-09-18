@@ -42,9 +42,10 @@ or newer. The two differ in what the kernel will total up for you; see
 curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
 ```
 
-The script installs the latest release with `uv tool install` (or `pipx`), and
-installs uv first if neither is present. Pin a version with
-`| sh -s -- --version 0.4.0`. Or install it yourself:
+The script needs no uv or pipx. It installs the latest release into its own
+virtual environment, links `treehawk` into `~/.local/bin` and puts that on your
+`PATH`. It uses any Python 3.10+ already present, or uv when there is none. Pin
+a version with `| sh -s -- --version 0.4.0`. Or install it yourself:
 
 ```bash
 uv tool install git+https://github.com/ibadrather/treehawk
