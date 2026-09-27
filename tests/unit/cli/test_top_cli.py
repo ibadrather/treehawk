@@ -185,7 +185,7 @@ def test_the_shipped_unit_file_is_what_install_writes() -> None:
         log_dir="/var/lib/treehawk",
     )
     assert shipped == expected
-    assert shipped in (REPO / "docs" / "top.md").read_text()
+    assert shipped in (REPO / "docs" / "machine.md").read_text()
 
 
 def test_parsing() -> None:

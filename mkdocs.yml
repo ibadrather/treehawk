@@ -12,6 +12,7 @@ theme:
   font: false # brand fonts are loaded by stylesheets/extra.css
   features:
     - navigation.instant
+    - navigation.sections
     - navigation.tracking
     - navigation.top
     - content.code.copy
@@ -47,9 +48,12 @@ exclude_docs: |
 
 nav:
   - Introduction: index.md
-  - Usage: usage.md
-  - Whole machine (Linux service): top.md
-  - How it works: how-it-works.md
-  - Output: output.md
-  - Platforms: platforms.md
+  - Install: install.md
+  - Use:
+      - Track a workload: workload.md
+      - Track the whole machine: machine.md
+      - Read the results: results.md
+  - Understand:
+      - How it works: how-it-works.md
+      - Platforms: platforms.md
   - Development: development.md

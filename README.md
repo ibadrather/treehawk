@@ -11,7 +11,7 @@
   </tr>
   <tr>
     <th align="left">Platforms</th>
-    <td><a href="#platform-support"><img alt="Linux" src="https://img.shields.io/badge/platform-linux-FCC624?logo=linux&amp;logoColor=black"></a> <a href="#platform-support"><img alt="macOS" src="https://img.shields.io/badge/platform-macOS-000000?logo=apple&amp;logoColor=white"></a></td>
+    <td><a href="https://ibadrather.github.io/treehawk/platforms/"><img alt="Linux" src="https://img.shields.io/badge/platform-linux-FCC624?logo=linux&amp;logoColor=black"></a> <a href="https://ibadrather.github.io/treehawk/platforms/"><img alt="macOS" src="https://img.shields.io/badge/platform-macOS-000000?logo=apple&amp;logoColor=white"></a></td>
   </tr>
   <tr>
     <th align="left">Project</th>
@@ -20,42 +20,10 @@
 </table>
 
 Log the CPU and RAM a process uses — **and every process it spawns**, including
-children that daemonize and detach themselves.
+children that daemonize and detach themselves. Or follow the busiest processes
+of the whole machine, as a service from boot to shutdown.
 
 **Documentation: <https://ibadrather.github.io/treehawk/>**
-
-Point it at something already running, by keyword or by the exact command line:
-
-```bash
-treehawk watch train.py                       # substring of the command line
-treehawk watch --exact "python train.py"      # the whole command line
-treehawk watch --regex 'worker-\d+'
-treehawk watch --pid 4213
-```
-
-…or let treehawk start the command, which is more accurate (see below):
-
-```bash
-treehawk run -- python train.py --epochs 10
-```
-
-Either way it keeps sampling until the workload ends — no duration to set, and
-`Ctrl-C` or a shutdown `SIGTERM` still writes a complete summary. While it runs
-you get a live dashboard, with whatever the workload is printing in a panel at
-the bottom of it rather than scrawled across it; afterwards, read the log back:
-
-```bash
-treehawk report treehawk-20260913-100000.jsonl   # summary in the terminal
-treehawk pdf    treehawk-20260913-100000.jsonl   # an 8-page PDF report
-cat             treehawk-20260913-100000.out     # everything the workload printed
-```
-
-Linux and macOS, including Apple Silicon. Metrics come from the kernel
-directly — `/proc` and cgroup v2 on Linux, `libproc` and `sysctl` on macOS —
-not from `ps`, `top` or `pidstat`, and not from a third-party library. Typer
-and Rich are used for the interface, matplotlib only when you ask for a PDF.
-The two platforms differ in what the kernel will tell you; [what works where
-is spelled out below](#platform-support).
 
 ## Install
 
@@ -63,357 +31,45 @@ is spelled out below](#platform-support).
 curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
 ```
 
-The script needs no uv, pipx or other tooling. It installs the latest GitHub
-release into its own virtual environment under `~/.local/share/treehawk`,
-links the `treehawk` command into `~/.local/bin`, and adds that directory to
-your `PATH` in your shell profiles. It builds the environment with any Python
-3.10+ already on the system, or with uv if you have it. If there is neither, it
-downloads a temporary copy of uv just to fetch a Python. Pin a version with
-`| sh -s -- --version 0.4.0`. Leave shell profiles alone with
-`--no-modify-path`. `--help` lists the rest. To upgrade, run the script again;
-to uninstall, `rm -rf ~/.local/share/treehawk ~/.local/bin/treehawk`.
+Linux and macOS, including Apple Silicon, with Python 3.10+. The script needs no
+uv or pipx. For its options, upgrading, uninstalling and other ways to install,
+see [Install](https://ibadrather.github.io/treehawk/install/).
 
-Or install a release yourself (Linux or macOS, Python 3.10+):
+## Quick tour
 
 ```bash
-uv tool install https://github.com/ibadrather/treehawk/releases/download/v0.4.0/treehawk-0.4.0-py3-none-any.whl
-uv tool install git+https://github.com/ibadrather/treehawk   # latest main
-```
+treehawk run -- python train.py --epochs 10   # start a command and follow it; exact
+treehawk watch train.py                       # attach to one already running
+treehawk report treehawk-*.jsonl              # summary in the terminal
+treehawk pdf    treehawk-*.jsonl              # an 8-page PDF report
 
-From a checkout:
-
-```bash
-uv sync            # or: pip install -e .
-uv run treehawk --help
-```
-
-To make your checkout the global `treehawk` command, run this from the repo
-root:
-
-```bash
-uv tool install --editable . --force
-```
-
-The install is editable, so a source change takes effect the next time you run
-`treehawk`. A change to dependencies or entry points in `pyproject.toml` needs
-the command run again. To go back to a release build, rerun the install script.
-
-## Whole machine, as a service (Linux)
-
-`treehawk top` follows the top N processes of the whole machine by CPU and
-by memory. It logs **spikes** (a jump far above a process' own baseline) and
-**leak suspects** (memory that keeps rising). On Linux with systemd it can run
-from boot to shutdown:
-
-```bash
-sudo "$(command -v treehawk)" service install     # --interval auto, --top 20, ...
+treehawk top                                  # the top processes of the whole machine
+sudo "$(command -v treehawk)" service install # ... as a systemd service (Linux)
 treehawk report /var/lib/treehawk --since 2h
-treehawk pdf    /var/lib/treehawk -o machine.pdf
 ```
 
-Logs rotate hourly and are compressed, with one directory per boot and a disk
-budget. A unit file to copy by hand is in
-[`packaging/treehawk.service`](packaging/treehawk.service). See
-[Whole machine](https://ibadrather.github.io/treehawk/top/) for details.
+Both modes sample until stopped or until the workload ends. While they run you
+get a live dashboard, and afterwards a log you can summarise, chart, or query
+with `jq`.
 
-## The problem it solves
-
-Monitoring "a process and its children" by walking parent-child links works
-right up until a child daemonizes — `fork`, `setsid`, `fork` again, original
-parent exits. The survivor is re-parented to PID 1 (or to a subreaper such as
-`systemd --user`) and has left its parent's session. A moment later there is no
-link left to follow, and a naive monitor reports that the workload finished
-while it is still burning a core.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/daemonize.dark.svg">
-  <img alt="How a daemonized child escapes a parent-child walk, and how treehawk keeps it" src="docs/assets/diagrams/daemonize.light.svg">
-</picture>
-
-treehawk keeps membership by four independent rules and *never evicts* a
-process once admitted — it stays tracked until that exact process exits, no
-matter what its parent becomes:
-
-| rule | catches |
+| | |
 |---|---|
-| `tree` | ordinary children and grandchildren |
-| `cgroup` | anything inside a kernel boundary the workload owns — the one thing a fork cannot escape |
-| `session` | children re-parented away that kept the session |
-| `orphan` | a process that appeared during the watch, lost its parent, and sits in a tracked process' boundary |
+| [Track a workload](https://ibadrather.github.io/treehawk/workload/) | `watch` and `run`, and their options |
+| [Track the whole machine](https://ibadrather.github.io/treehawk/machine/) | `top`, the service, spikes and leak suspects |
+| [Read the results](https://ibadrather.github.io/treehawk/results/) | `report`, `pdf`, and the log formats |
+| [How it works](https://ibadrather.github.io/treehawk/how-it-works/) | membership rules, memory measures, limitations |
+| [Platforms](https://ibadrather.github.io/treehawk/platforms/) | what Linux and macOS can and cannot report |
 
-Choose them with `--expand tree --expand cgroup --expand orphan` (all four are on
-by default).
+Metrics come from the kernel directly (`/proc` and cgroup v2 on Linux,
+`libproc` and `sysctl` on macOS), not from `ps`, `top` or a third-party library.
 
-The boundary the `cgroup` rule follows is a **cgroup** on Linux and a
-**coalition** on macOS — the rule keeps its Linux name, and so does the `via`
-value in the log. They are the same idea: a process that forks, calls
-`setsid`, forks again and is re-parented to init keeps the one it started in,
-while unrelated programs sit in their own.
-
-The `orphan` rule is the one that closes the daemonization gap in attach mode.
-It recognises re-parenting by noticing that the adopting reaper lives in a
-*different* boundary, which is what separates a detached grandchild from an
-unrelated process started in the same terminal.
-
-### `run` is exact; `watch` is very good
-
-`treehawk run` starts the command inside its own transient cgroup
-(`systemd-run --user --scope`). Membership is then a kernel fact rather than an
-inference, CPU and memory totals come from `cpu.stat` and `memory.current`, and
-nothing is missed before the first sample — including processes that are born
-and die between two samples. If systemd is unavailable treehawk falls back to
-`/proc` tracking and says so in the log header.
-
-On macOS, `run` still starts the command and still misses nothing before the
-first sample, but it cannot create a boundary: placing a process in a new
-coalition needs entitlements treehawk does not have. Membership is inferred
-there in both modes, and the log header says so.
-
-`treehawk watch` has to infer membership. It is reliable in practice, but a
-process that detaches *and* moves itself to an unrelated boundary in the gap
-between two samples can be missed. Use `run` when exactness matters.
-
-## Output
-
-JSON Lines by default: a `header` record, one `sample` per interval, and a
-`summary` at the end. Records are flushed as they are written, so a killed run
-still leaves a readable log.
-
-```jsonc
-{"type":"sample","seq":12,"t":6.0,"ts":"...","n_procs":3,
- "cpu_percent":287.4,          // sum across processes; 100% = one core
- "cpu_percent_norm":9.0,       // of the whole machine
- "cpu_seconds_total":18.4,     // lifetime cpu time, incl. exited children
- "cpu_seconds_used":17.9,      // ...since treehawk attached
- "rss_bytes":1379926016,       // sum of RSS: double-counts shared pages
- "pss_bytes":1104150528,       // shared pages divided fairly - the honest number
- "swap_bytes":0,
- "group_memory_bytes":1107296256,      // the kernel's own figure, when available
- "group_memory_peak_bytes":1342177280,
- "overrun":false,
- "procs":[{"pid":9001,"ppid":1,"name":"python","cmdline":"python train.py",
-           "cpu_percent":99.8,"rss_bytes":...,"pss_bytes":...,"via":"orphan"}]}
-```
-
-`via` says which rule found each process — useful when a result surprises you.
-
-`--csv` writes `run.csv` (one row per sample) and `run.procs.csv` (one
-row per process per sample, joinable on `seq`), with the header and summary
-alongside as JSON.
-
-### Which memory number to trust
-
-Three are recorded because each is wrong in a different way:
-
-* **`rss_bytes`** — always available, but summing RSS over a fork tree counts
-  every shared page once per child. Overstates real use, sometimes by a lot.
-* **`pss_bytes`** — the platform's fair measure: what the workload really costs
-  the machine. Disable with `--no-pss` if sampling fast. Which measure it is
-  differs by platform, so the header says which in `memory_kind`:
-  * `pss` on Linux — each shared page divided among the processes mapping it.
-    Needs permission to read `smaps_rollup` (same user).
-  * `phys_footprint` on macOS — the kernel's own charge for what a process
-    costs, the number Activity Monitor shows. macOS has no PSS, and treehawk
-    will not put a different measure behind that name without saying so.
-* **`group_memory_bytes`** — the kernel's own charge for the boundary. Exact
-  when one exists, `null` otherwise — which is always the case on macOS.
-
-## The PDF report
-
-`treehawk pdf run.jsonl` renders the run as pages, each answering one question:
-
-| Page | Question |
-|---|---|
-| Overview | What happened, in five numbers, and how each process was found |
-| CPU over time | Was it busy, and did it stay busy? |
-| Memory over time | How much, by each of the three measures |
-| Process lifetimes | Who was alive, when — one bar per process |
-| CPU by process | Which process was burning the CPU |
-| Memory by process | Which process was holding the memory |
-| Biggest consumers | The two league tables |
-| Sampling quality | Can you trust the other seven pages? |
-
-Pages that need per-process detail are left out of an `--aggregate-only` log
-rather than printed blank.
-
-## Options
-
-Four options cover normal use; everything else is grouped under **Advanced** in
-`--help` so it stays out of the way.
-
-```
--i, --interval SECONDS   sampling period (default 1.0)
--o, --output PATH        log file; '-' for stdout
-    --csv                write CSV instead of JSON Lines
--q, --quiet              no dashboard, just write the log
-
-watch only:
--p, --pid / -e, --exact / -r, --regex    other ways to name the process
-    --wait                               keep looking until it appears
-
-Advanced:
--d, --duration SECONDS   stop early (default: run until the process ends)
-    --expand RULE        limit which membership rules may adopt processes
-    --no-pss             skip smaps_rollup (cheaper at short intervals)
-    --aggregate-only     log only the workload total, not a row per process
-    --no-isolate         (run) do not ask for an accounting boundary
-    --no-capture         (run) let the command write to this terminal itself
-```
-
-Sampling uses absolute deadlines, so intervals do not drift. A sample that
-takes longer than the interval is flagged `overrun`, counted in the summary, and
-marked on the CPU chart.
-
-`run` reads the command's output over a pty of its own instead of letting it
-write to the terminal the dashboard is repainting: the last lines show in an
-`output` panel and the whole stream is kept beside the log as `.out`. A pty, not
-a pipe, so the command keeps its colours and its line buffering — treehawk
-should not change how the thing it is measuring behaves. `--no-capture` hands
-the terminal over for a command that needs it.
-
-## Platform support
-
-Both platforms read the kernel directly, and the membership rules work the same
-way on each. What differs is how much the kernel is willing to total up for
-you — so `run` is exact on Linux and merely very good on macOS.
-
-| | Linux | macOS (Intel and Apple Silicon) |
-|---|---|---|
-| source of metrics | `/proc`, cgroup v2 | `libproc`, `sysctl` |
-| the boundary a fork cannot escape | cgroup | coalition |
-| `tree` / `session` / `orphan` rules | yes | yes |
-| `cgroup` rule | yes | yes, over coalitions |
-| **kernel-side group totals** (`group_memory_bytes`, exact CPU) | yes | **no** — macOS exposes none without entitlements |
-| **`run` creates its own boundary** | yes, via `systemd-run --user --scope` | **no** — creating a coalition needs entitlements |
-| processes born and dying between samples | counted under `run` | not counted |
-| fair memory measure (`memory_kind`) | `pss` | `phys_footprint` |
-| per-process CPU resolution | `CLK_TCK`, usually 10 ms | nanoseconds |
-| other users' processes | visible, without `pss` | not visible |
-| `top`: machine-wide cpu and memory line | yes | **no**, processes only |
-| `top` as a service | yes, systemd | **no** |
-
-Anything treehawk cannot measure on your machine is stated in the log header's
-`notes` and shown on screen when the run starts, rather than silently omitted.
-
-## Limitations
-
-* **Processes that live and die between two samples** are invisible to polling.
-  On Linux their CPU still lands in the totals under `run` mode (the cgroup
-  counter sees them); under `watch`, and anywhere on macOS, it is lost.
-  Shorten `--interval` or use `run`.
-* **`watch` can miss a process that detaches and changes boundary** in the gap
-  between samples.
-* **Another user's processes** are partly opaque. On Linux they expose `stat`
-  but not `smaps_rollup`, so `pss` is `null`. On macOS they refuse both their
-  command line and their footprint, and a root-owned process is not visible to
-  `scan` at all — which is no obstacle to watching your own workload, but means
-  treehawk is not a whole-machine monitor there. It never fakes a value it
-  could not read.
-* treehawk never adopts its own ancestors (your shell, `uv`, `timeout`), since
-  they carry the keyword you typed.
-* **A watch is meant to be left running.** Nothing accumulates without bound —
-  the sparkline history, the "seen this process before" set and the summary
-  table are all capped — but the log itself grows at roughly 1 KB per sample per
-  five processes (~90 MB/day at the default interval). Use `--aggregate-only`
-  or a longer interval for a run measured in days.
-
-## Design
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagrams/architecture.dark.svg">
-  <img alt="Layers: cli wires platforms and sinks into the core monitor" src="docs/assets/diagrams/architecture.light.svg">
-</picture>
-
-```
-core/         platform-agnostic policy - models, interfaces, membership, sampling
-  interfaces.py   the narrow protocols everything else depends on
-  tracker.py      membership: sticky admission, exit accounting
-  strategies.py   one class per membership rule
-  matchers.py     one class per way of naming the workload
-  monitor.py      the sampling loop; knows nothing about any OS
-  aggregate.py    counters -> rates; samples -> summary
-  capture.py      draining a launched workload's own output
-platforms/    concrete OS implementations of those protocols
-  posix.py        launching: the session, the pty and the signalling both share
-  linux/          procfs.py, cgroup2.py, source.py, launcher.py
-  darwin/         libproc.py, coalition.py, source.py, host.py
-gpu/          the seam for GPU metrics (protocol defined, nothing registered yet)
-sinks/        jsonl, csv, plain console, live dashboard, and a composite
-ui/           Rich rendering: one palette, the dashboard, the summary views
-charts/       matplotlib: log -> series -> pages -> PDF
-cli/          the composition root: options, wiring, commands
-```
-
-`core` never imports `platforms`, `ui` or `charts`; the CLI injects the
-implementations. Adding a membership rule, an output format, a matcher, a report
-page or a metric collector means adding a class and a registry entry — not
-editing the loop.
-
-Everything, tests included, is fully annotated and checked by mypy at the
-strictest settings it offers (see `[tool.mypy]` in `pyproject.toml`), including
-the protocols the layers meet at. `ui/theme.py` holds the one palette both the
-dashboard and the PDF draw from, so a process keeps its colour whether you watch
-it live or read it back later.
-
-**Adding GPU metrics** later: implement `MetricCollector` (`namespace`,
-`collect(snapshot)`, `close()`), register it in `gpu/registry.py`, and its keys
-appear in every sample under its namespace. The loop, the schema and the sinks
-are untouched.
-
-**Adding another OS**: implement `ProcessSource`, `HostInfoSource` and
-optionally `GroupMetricSource`/`ProcessLauncher` in `platforms/<os>/`, then
-register a builder in `platforms/registry.py`. A builder that can start
-processes sets both `Platform.launcher` (what `run` uses) and
-`Platform.direct_launcher` (what `run --no-isolate` uses); where the OS cannot
-create a boundary, pass the same launcher to both, as macOS does. macOS was
-added exactly that way and changed nothing in `core/`. Two things are worth
-copying from it: make the syscall boundary an injectable protocol, and let the
-builder be the only place the real backend is constructed — no constructor
-falls back to it — so the backend can be tested without that OS; and bind any
-platform library inside the builder rather than at import, so the module still
-type-checks everywhere.
-
-## Tests
+## Development
 
 ```bash
-uv run pytest                        # everything
-uv run pytest tests/unit             # fast: fake kernels only
-uv run pytest tests/integration      # real processes (or -m integration)
-uv run mypy                          # strictest settings: src, tests, scripts
-uv run ruff format --check           # formatting
-uv run ruff check                    # lint
+uv sync
+uv run ruff format && uv run ruff check && uv run mypy && uv run pytest
 ```
 
-CI runs all of these on every push and pull request, on Python 3.10 to 3.14 on
-Linux, and on the oldest and newest of those on macOS (Apple Silicon).
-
-`tests/unit/` mirrors the package (`core/`, `platforms/linux/`,
-`platforms/darwin/`, `sinks/`, ...), and the fake kernels they share live in
-`tests/conftest.py`. The unit tests run against fake kernels, so they need no
-privileges and no real workload: fake `/proc` and cgroup trees for Linux, since
-every reader takes its root as an argument, and a fake `ProcessTable` for macOS,
-since there is no directory to point at. Neither binds a platform library, so
-the whole suite runs on either OS. The rest of the machine is faked there too:
-`FakeClock`, `RecordingSink`, `FakeLauncher`, and `fake_platform`, which bundles
-the fake trees into a `Platform`. The commands take their platform, clock and
-PID from a `Runtime` (`cli/models.py`), so `tests/unit/cli/` runs `watch` and
-`run` end to end by handing `CliRunner.invoke(obj=Runtime(...))` a fake one,
-without touching the real process table. The integration tests spawn
-`tests/integration/workload.py`, which deliberately double-forks a detached
-child, and assert it is still in the log after its parent is gone.
-
-## Releasing
-
-The version is written in one place, `pyproject.toml`. Any change to the package
-(`src/` or `pyproject.toml`) must raise it; the **Version bump** workflow fails a
-push to `main` or a pull request that does not:
-
-```bash
-uv version --bump patch      # or minor / major
-```
-
-When `main` carries a version that has no release yet, the **Release** workflow
-runs the full CI matrix (Python 3.10 to 3.14 on Linux, plus macOS), builds the sdist
-and the universal wheel, and publishes GitHub release `v<version>` with both plus `install.sh`
-attached. Pre-release versions such as `0.3.0rc1` are marked as pre-releases and
-never become "latest".
+Read [`AGENTS.md`](AGENTS.md) before changing anything, and
+[Development](https://ibadrather.github.io/treehawk/development/) for the
+architecture, tests and releases.
