@@ -11,7 +11,7 @@ uv run treehawk --help
 ```bash
 uv run ruff format
 uv run ruff check
-uv run mypy
+make typecheck         # ty check at the venv's Python version
 uv run pytest            # tests/unit for the fast ones, tests/integration for real processes
 ```
 
@@ -26,8 +26,8 @@ without touching the real machine. `tests/integration/` spawns real processes:
 the tests check it is still in the log after its parent has gone.
 
 CI runs all four on Python 3.10 to 3.14 on Linux, and on the oldest and newest
-of those on macOS (Apple Silicon). mypy runs at its strictest settings and
-they are never loosened; see [`AGENTS.md`](https://github.com/ibadrather/treehawk/blob/main/AGENTS.md).
+of those on macOS (Apple Silicon). ty runs with every rule as an error and
+that is never loosened; see [`AGENTS.md`](https://github.com/ibadrather/treehawk/blob/main/AGENTS.md).
 
 ## Releasing
 
@@ -74,7 +74,7 @@ constructor rather than defaulting to the real one: only the builder in
 `platforms/registry.py` constructs the real backend, so the backend can be
 tested on a machine that does not run that OS. And bind any platform library
 inside the builder rather than at import time, so the module still imports and
-type-checks everywhere; a `sys.platform` guard would hide it from mypy on the
+type-checks everywhere; a `sys.platform` guard would hide it from ty on the
 other runner.
 
 ## Docs

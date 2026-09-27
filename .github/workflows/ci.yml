@@ -17,6 +17,7 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - "ruff.toml"
+      - "ty.toml"
   pull_request:
     paths:
       - "src/**"
@@ -26,6 +27,7 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - "ruff.toml"
+      - "ty.toml"
   workflow_call:
 
 permissions:
@@ -53,7 +55,7 @@ jobs:
         run: uv run ruff check --output-format=github
 
   typecheck:
-    name: Type check (mypy, Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    name: Type check (ty, Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -61,8 +63,8 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
-          # platforms/darwin binds no library at import, so mypy checks it on
-          # Linux too - these two are here to catch a typeshed difference, not
+          # platforms/darwin binds no library at import, so ty checks it on
+          # Linux too - these two are here to catch a platform difference, not
           # to be the only place the macOS code is seen.
           - os: macos-latest
             python-version: "3.10"
@@ -84,8 +86,10 @@ jobs:
       - name: Install
         run: uv sync --locked
 
-      - name: mypy
-        run: uv run mypy
+      # ty takes the Python version from requires-python (3.10) unless told
+      # otherwise, which would check every job against 3.10's stdlib.
+      - name: ty
+        run: uv run ty check --python-version ${{ matrix.python-version }} --output-format github
 
   test:
     name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})

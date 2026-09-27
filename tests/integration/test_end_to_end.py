@@ -63,10 +63,12 @@ def treehawk_on_a_terminal(*args: str, timeout: float = 90) -> str:
 
 def read_log(path: str) -> tuple[Record, list[Record], Record]:
     lines = pathlib.Path(path).read_text().splitlines()
-    records: list[Record] = [json.loads(line) for line in lines if line.strip()]
+    parsed = [json.loads(line) for line in lines if line.strip()]
+    records = as_records(parsed)
+    assert len(records) == len(parsed), "every log line must be a JSON object"
     header = next(r for r in records if r["type"] == "header")
     samples = [r for r in records if r["type"] == "sample"]
-    summary = next((r for r in records if r["type"] == "summary"), {})
+    summary: Record = next((r for r in records if r["type"] == "summary"), {})
     return header, samples, summary
 
 

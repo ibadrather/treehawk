@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TypeVar
 
-T = TypeVar("T", int, float)
+from treehawk.core.compat import TypeIs
+
+T = TypeVar("T", bound=float)
 
 
 def as_float(value: object) -> float | None:
@@ -24,16 +26,31 @@ def as_int(value: object) -> int | None:
     return int(value) if isinstance(value, (int, float)) else None
 
 
+def is_record(value: object) -> TypeIs[dict[str, object]]:
+    """Whether the value is a record.
+
+    Only the container is checked, not its keys: records come from JSON or
+    from treehawk itself, and neither produces a key that is not a string.
+    Checking would mean copying every record just to prove it.
+    """
+    return isinstance(value, dict)
+
+
+def as_record(value: object) -> dict[str, object] | None:
+    """The value itself if it is a record, or ``None`` if it is not."""
+    return value if is_record(value) else None
+
+
 def as_mapping(value: object) -> Mapping[str, object]:
     """The value as a record-like mapping, or an empty one if it is not."""
-    return value if isinstance(value, dict) else {}
+    return value if is_record(value) else {}
 
 
 def as_records(value: object) -> list[dict[str, object]]:
     """The value as a list of records, skipping anything that is not one."""
     if not isinstance(value, (list, tuple)):
         return []
-    return [item for item in value if isinstance(item, dict)]
+    return [item for item in value if is_record(item)]
 
 
 def as_sequence(value: object) -> Sequence[object]:
