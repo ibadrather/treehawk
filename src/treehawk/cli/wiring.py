@@ -13,13 +13,15 @@ from __future__ import annotations
 from treehawk.cli.constants import CLI
 from treehawk.cli.models import Session
 from treehawk.core.aggregate import Aggregator
-from treehawk.core.config import CpuSource, WatchConfig
+from treehawk.core.config import CpuSource, TopConfig, WatchConfig
 from treehawk.core.interfaces import Clock, ProcessMatcher, ProcessSource, Sink
 from treehawk.core.monitor import Monitor
 from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
 from treehawk.gpu import build_collectors
 from treehawk.platforms.models import Platform
+from treehawk.top.monitor import TopMonitor
+from treehawk.top.pacing import build_pacing
 
 
 def build_session(
@@ -75,6 +77,32 @@ def build_session(
         notes=notes,
     )
     return Session(monitor=monitor, tracker=tracker, platform=platform)
+
+
+def build_top_monitor(
+    *,
+    platform: Platform,
+    config: TopConfig,
+    sink: Sink,
+    clock: Clock,
+    notes: tuple[str, ...] = (),
+) -> TopMonitor:
+    """Whole-machine tracking, wired to ``platform``."""
+    config.validate()
+    notes_out = list(notes)
+    if platform.system_source is None:
+        notes_out.append(f"no machine-wide cpu and memory figures on {platform.name} yet; processes only")
+    return TopMonitor(
+        source=platform.process_source,
+        sink=sink,
+        clock=clock,
+        config=config,
+        host=platform.host_info(),
+        system=platform.system_source,
+        pacing=build_pacing(config),
+        memory_kind=platform.memory_kind,
+        notes=notes_out,
+    )
 
 
 def ancestors_of(*, source: ProcessSource, pid: int, limit: int = CLI.ancestor_limit) -> frozenset[int]:

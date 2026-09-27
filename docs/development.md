@@ -21,13 +21,27 @@ and the rest of the machine (`FakeClock`, `RecordingSink`, `FakeLauncher`, and
 `fake_platform`, which bundles them into a `Platform`). The commands take their
 platform, clock and PID from a `Runtime` (`cli/models.py`), so `tests/unit/cli/`
 runs `watch` and `run` end to end through `CliRunner.invoke(obj=Runtime(...))`
-without touching the real machine. `tests/integration/` spawns real processes.
+without touching the real machine. `tests/integration/` spawns real processes:
+`tests/integration/workload.py` deliberately double-forks a detached child, and
+the tests check it is still in the log after its parent has gone.
 
 CI runs all four on Python 3.10 to 3.14 on Linux, and on the oldest and newest
 of those on macOS (Apple Silicon). mypy runs at its strictest settings and
 they are never loosened; see [`AGENTS.md`](https://github.com/ibadrather/treehawk/blob/main/AGENTS.md).
-Any change to `src/` or `pyproject.toml` must raise the version with
-`uv version --bump patch`; a new version on `main` is released automatically.
+
+## Releasing
+
+The version is written in one place, `pyproject.toml`. Any change to `src/` or
+`pyproject.toml` must raise it, or the **Version bump** workflow fails:
+
+```bash
+uv version --bump patch      # or minor / major
+```
+
+When `main` carries a version with no release yet, the **Release** workflow
+runs the full CI matrix, builds the sdist and the wheel, and publishes GitHub
+release `v<version>` with both, plus `install.sh`. Pre-release versions such as
+`0.8.0rc1` are marked as pre-releases and never become "latest".
 
 ## Architecture
 
@@ -66,11 +80,17 @@ other runner.
 ## Docs
 
 This site is MkDocs Material, built and published to GitHub Pages by
-`.github/workflows/docs.yml`. Preview it locally:
+`.github/workflows/docs.yml`. Preview it locally, or build it the way CI does:
 
 ```bash
-uvx --with mkdocs-material mkdocs serve
+make docs          # http://127.0.0.1:8000, with live reload
+make docs-build    # mkdocs build --strict
 ```
+
+Every command-line option has to appear somewhere in `docs/`:
+`tests/unit/cli/test_docs_coverage.py` fails when a new flag is added without
+documentation. Document an option on the page for the feature it belongs to, in
+that page's options table.
 
 Diagrams are [draw.io](https://www.drawio.com/) files in `docs/assets/diagrams/`.
 Edit one, then export light and dark SVGs (needs draw.io desktop):

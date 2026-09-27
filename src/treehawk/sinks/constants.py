@@ -17,6 +17,19 @@ class SinkConstants:
     """Extension of the file holding everything a launched workload printed.
     It sits beside the log, under the same name, because the two are one run."""
 
+    segment_prefix: str = "top-"
+    """File name prefix of one ``top`` log segment."""
+
+    segment_suffix: str = ".jsonl"
+    archive_suffix: str = ".gz"
+    """Added to a segment once it is closed and compressed."""
+
+    unknown_boot: str = "boot-unknown"
+    """Directory for segments from a machine that has no boot id."""
+
+    boot_dir_length: int = 8
+    """Characters of the boot id used to name its directory."""
+
     csv_sample_columns: tuple[str, ...] = (
         "seq",
         "t",

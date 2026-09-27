@@ -1,5 +1,8 @@
 # Variables
 PYTHON := python
+MKDOCS := uvx --with mkdocs-material==9.7.7 mkdocs
+
+.PHONY: setup dev-setup lint typecheck docs docs-build clean
 
 # Install dependencies
 setup:
@@ -28,8 +31,18 @@ typecheck:
 	uv run mypy
 
 
-# Clean Python cache files
+# Preview the docs at http://127.0.0.1:8000 with live reload
+docs:
+	$(MKDOCS) serve
+
+# Build the docs into site/ the way CI does
+docs-build:
+	$(MKDOCS) build --strict
+
+
+# Remove the virtualenv, caches and build output
 clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	rm -r .venv
+	find . -path ./.venv -prune -o -type d -name "__pycache__" -exec rm -rf {} +
+	find . -path ./.venv -prune -o -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -path ./.venv -prune -o -type f -name "*.py[cod]" -delete
+	rm -rf .venv site build dist htmlcov .coverage .pytest_cache .mypy_cache .ruff_cache .tox

@@ -6,6 +6,8 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from treehawk.cli.constants import CLI
+from treehawk.cli.service import ServiceManager, systemctl
 from treehawk.core.clock import SystemClock
 from treehawk.core.interfaces import Clock
 from treehawk.core.monitor import Monitor
@@ -36,3 +38,7 @@ class Runtime:
     platform: Callable[[], Platform] = get_platform
     clock: Clock = field(default_factory=SystemClock)
     self_pid: Callable[[], int] = os.getpid
+    is_root: Callable[[], bool] = lambda: os.geteuid() == 0
+    systemctl: ServiceManager = systemctl
+    unit_dir: str = CLI.unit_dir
+    """Where the service's unit file goes; a test points it at a temporary directory."""

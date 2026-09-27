@@ -13,15 +13,22 @@ from __future__ import annotations
 
 import json
 import pathlib
+import zlib
 from collections.abc import Iterator
-from typing import TypedDict
+from typing import Final, TypedDict
 
 from treehawk.core.aggregate import cpu_seconds_of, peak_rss_of
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
 from treehawk.core.values import as_float, as_int, as_records, peak_of
 
-__all__ = ["Report", "ReportError", "build_report", "read_records"]
+__all__ = ["Report", "ReportError", "build_report", "log_files", "peek_header", "read_records"]
+
+LOG_SUFFIXES: Final = (".jsonl", ".jsonl.gz")
+"""What counts as a log when a directory is read."""
+
+GZIP_CHUNK: Final = 65536
+"""Compressed bytes read at a time."""
 
 
 class Report(TypedDict):
@@ -32,20 +39,79 @@ class Report(TypedDict):
 
 
 def read_records(path: str) -> Iterator[Record]:
+    """Every record in a log: a file, a compressed file, or a directory of them.
+
+    A directory is read segment by segment, oldest first, which is how
+    ``top`` leaves its logs.
+    """
+    location = pathlib.Path(path)
+    if location.is_dir():
+        for segment in log_files(location):
+            yield from _read_file(segment)
+        return
+    yield from _read_file(location)
+
+
+def log_files(directory: pathlib.Path) -> list[pathlib.Path]:
+    """The logs under ``directory``, oldest first."""
+    found = [
+        candidate for candidate in directory.rglob("*") if candidate.is_file() and candidate.name.endswith(LOG_SUFFIXES)
+    ]
+    return sorted(found, key=lambda candidate: (candidate.stat().st_mtime, candidate.name))
+
+
+def peek_header(path: str) -> Record:
+    """The first header in a log, without reading the rest of it."""
+    for record in read_records(path):
+        if record.get("type") == "header":
+            return record
+    return {}
+
+
+def _read_file(path: pathlib.Path) -> Iterator[Record]:
     try:
-        with pathlib.Path(path).open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue  # a truncated final line from a killed run
-                if isinstance(record, dict):
-                    yield record
+        for line in _lines(path):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # a truncated final line from a killed run
+            if isinstance(record, dict):
+                yield record
     except OSError as exc:
         raise ReportError(f"cannot read {path}: {exc}") from exc
+
+
+def _lines(path: pathlib.Path) -> Iterator[str]:
+    if not path.name.endswith(".gz"):
+        with path.open("r", encoding="utf-8") as handle:
+            yield from handle
+        return
+    yield from _gzip_lines(path)
+
+
+def _gzip_lines(path: pathlib.Path) -> Iterator[str]:
+    """Lines of a gzip file, decompressed as a stream.
+
+    A segment cut short - by a power cut while it was being compressed - still
+    yields every complete line it holds, where ``gzip.open`` would raise and
+    lose them.
+    """
+    decompressor = zlib.decompressobj(zlib.MAX_WBITS | 16)
+    pending = b""
+    with path.open("rb") as handle:
+        while chunk := handle.read(GZIP_CHUNK):
+            try:
+                pending += decompressor.decompress(chunk)
+            except zlib.error:
+                break
+            *complete, pending = pending.split(b"\n")
+            for line in complete:
+                yield line.decode("utf-8", "replace")
+    if pending:
+        yield pending.decode("utf-8", "replace")
 
 
 def build_report(path: str, *, top_n: int = 5) -> Report:

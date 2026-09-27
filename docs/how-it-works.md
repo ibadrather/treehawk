@@ -1,5 +1,8 @@
 # How it works
 
+The first four sections cover `watch` and `run`; [Whole-machine
+tracking](#whole-machine-tracking) covers `top`.
+
 ## Membership
 
 A process joins the workload when the matcher selects it, or when one of four
@@ -65,17 +68,57 @@ treehawk never writes a value it could not read: `null` means unavailable.
 ## Sampling
 
 Samples are taken on absolute deadlines, so they do not drift. A sample that
-arrives more than 1.5 intervals late is flagged `overrun` and counted in the
-summary. `cpu_percent` is CPU time over the last interval, where `100` is one core;
-it is `null` in the first sample.
+arrives more than 1.5 intervals late is flagged `overrun`, counted in the
+summary, and marked on the CPU chart. `cpu_percent` is CPU time over the last
+interval, where `100` is one core; it is `null` in the first sample.
+
+## Whole-machine tracking
+
+`top` reads every process once per sample, which costs one `stat` read per
+process. It ranks them by CPU and by memory, and reads only the top N of each in
+depth (PSS, swap).
+
+**`--interval auto`** lets sampling use about 5% of one core. A sample that
+took 5 ms earns a 100 ms interval. The interval is kept between 0.1 s and 5 s,
+and moves towards its target gradually rather than jumping.
+
+**A spike** is a reading more than 4 standard deviations above that process'
+own running baseline *and* above it by a floor, so a process idling at 0.1%
+cannot fire by reaching 0.5%:
+
+| | Floor | Baseline follows a new level in |
+|---|---|---|
+| process CPU | 25% of one core | 60 s |
+| process memory | 64 MiB | 120 s |
+| machine CPU | 20% of all cores | 60 s |
+| machine memory | 256 MiB | 120 s |
+
+A process has to be watched for 15 s before it can spike. After a spike it
+stays quiet for 60 s.
+
+**A creep**, or leak suspect, is memory growing in a straight line. Each minute
+is reduced to its *lowest* reading, so a garbage collector's sawtooth reads as
+its floor. A line is then fitted through the last 30 minutes. A process is named
+when that line rises by at least 16 MiB an hour (64 MiB for the whole machine),
+fits with r² ≥ 0.8, and the floor has grown by at least 8 MiB (64 MiB). It is
+named again only after growing another 25%.
 
 ## Limitations
 
-- Linux (`/proc` and cgroup v2) and macOS (`libproc` and `sysctl`); see
-  [Platforms](platforms.md) for what each kernel will and will not report.
-- Polling cannot see processes that start and end between samples (under
-  `watch`, and anywhere on macOS).
+- Polling cannot see processes that start and end between two samples. On Linux,
+  `run` still counts their CPU through the cgroup. Under `watch`, and anywhere
+  on macOS, it is lost. `top` never names such a process, although on Linux its
+  CPU still shows in the machine line. Shorten `--interval`, or use `run`.
+- `watch` can miss a process that detaches *and* changes boundary between two
+  samples.
+- treehawk never adopts its own ancestors (your shell, `uv`, `timeout`), since
+  they carry the keyword you typed.
 - Other users' processes have no `pss_bytes`, and on macOS are not visible at
-  all.
-- The log grows about 1 KB per sample per five processes; use `--aggregate-only`
-  or a longer interval for runs measured in days.
+  all. See [Platforms](platforms.md) for everything macOS will not report.
+- A workload log grows about 1 KB per sample per five processes, or about
+  90 MB a day at the default interval. Use `--aggregate-only` or a longer
+  interval for runs measured in days. Memory use does not grow: the history
+  treehawk keeps on screen and for the summary is capped.
+- A spike needs 15 s of history for that process, and a leak suspect needs 30
+  minutes of steady growth.
+- GPU usage is not collected yet. The `top` log already has a column for it.

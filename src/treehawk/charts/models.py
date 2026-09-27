@@ -12,8 +12,10 @@ from dataclasses import dataclass, field
 from treehawk.charts.constants import CHARTS
 from treehawk.core.compat import StrEnum
 from treehawk.core.interfaces import Record
+from treehawk.core.models import Identity
 from treehawk.core.records import target_of
 from treehawk.core.values import as_float, as_int, as_mapping
+from treehawk.top.models import TopHistory
 from treehawk.ui.theme import discovery_group
 
 
@@ -111,3 +113,31 @@ class RunSeries:
     ) -> list[ProcessTrack]:
         """The ``limit`` processes that matter most by ``rank``, biggest first."""
         return sorted(self.tracks, key=rank, reverse=True)[:limit]
+
+
+@dataclass(slots=True)
+class TopSeries:
+    """A ``top`` log, reduced to what the pages draw.
+
+    ``t`` is hours since the first sample; each point is the *largest* reading
+    of its time bucket, so a short spike is never averaged away however long
+    the log is.
+    """
+
+    history: TopHistory
+    started: float
+    """Unix time of the first sample, which ``t`` counts from."""
+    bucket_seconds: float
+    t: list[float] = field(default_factory=list)
+    host_cpu: list[float | None] = field(default_factory=list)
+    host_memory: list[float | None] = field(default_factory=list)
+    process_cpu: dict[Identity, list[float | None]] = field(default_factory=dict)
+    process_rss: dict[Identity, list[float | None]] = field(default_factory=dict)
+
+    @property
+    def hours(self) -> float:
+        return self.t[-1] if self.t else 0.0
+
+    def hours_at(self, epoch: float) -> float:
+        """Where a wall-clock moment falls on ``t``."""
+        return (epoch - self.started) / 3600.0

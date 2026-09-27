@@ -9,6 +9,7 @@ from treehawk.core.interfaces import (
     HostInfoSource,
     ProcessLauncher,
     ProcessSource,
+    SystemSource,
 )
 from treehawk.core.models import HostInfo
 from treehawk.core.records import PSS
@@ -26,6 +27,8 @@ class Platform:
     """Starts a workload inside an accounting boundary, where the platform can make one."""
     direct_launcher: ProcessLauncher | None = None
     """Starts a workload without asking for a boundary - what ``run --no-isolate`` uses."""
+    system_source: SystemSource | None = None
+    """Machine-wide CPU and memory, for ``top``. None where not implemented yet."""
     memory_kind: str = PSS.key
     """Which fair-memory measure this platform's ``ProcessSource`` reports.
 

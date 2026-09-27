@@ -24,6 +24,7 @@ def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
         CgroupV2Source,
         LinuxHostInfoSource,
         LinuxProcessSource,
+        LinuxSystemSource,
     )
     from treehawk.platforms.linux.launcher import default_launcher
     from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
@@ -45,6 +46,7 @@ def build_linux(*, proc_root: str = "/proc", cgroup_root: str = "/sys/fs/cgroup"
         process_source=LinuxProcessSource(proc_root, page_size=host.page_size),
         host_source=host_source,
         group_source=cgroups,
+        system_source=LinuxSystemSource(proc_root),
         launcher=default_launcher(cgroups, proc_root=proc_root),
         direct_launcher=FallbackLauncher([DirectLauncher()]),
         notes=notes,

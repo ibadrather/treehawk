@@ -22,5 +22,8 @@ class UiConstants:
     region stays a fixed height whatever the workload prints; the full stream
     is in the file beside the log."""
 
+    top_events: int = 6
+    """Recent events kept under the live ``top`` table."""
+
 
 UI: Final = UiConstants()
