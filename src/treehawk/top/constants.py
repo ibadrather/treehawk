@@ -28,13 +28,13 @@ class TopConstants:
     overrun_factor: float = 1.5
     """A sample this many intervals after the last one is flagged ``overrun``."""
 
-    segment_seconds: float = 3600.0
-    """How much time one log file covers."""
-    keep_bytes: int = 1024 * _MIB
-    """Disk the whole log directory may use before the oldest files go."""
+    default_segment: str = "1h"
+    """How much time one log file covers, as ``--segment`` takes it."""
+    default_keep: str = "1G"
+    """Disk the whole log directory may use before the oldest files go, as ``--keep`` takes it."""
 
     summary_rank_limit: int = 10
-    """Processes listed per ranking in a segment summary and in a report."""
+    """Processes listed per ranking in a report."""
 
     report_events: int = 12
     """Spikes listed per resource in a report, the largest first."""
@@ -75,7 +75,6 @@ class TopConstants:
         "rss_bytes",
         "pss_bytes",
         "swap_bytes",
-        "gpu_memory_bytes",
         "reasons",
     )
     """Order of the fields in each row of a sample's ``top`` list. Written into

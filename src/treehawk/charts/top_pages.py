@@ -21,7 +21,7 @@ from treehawk.core.interfaces import Record
 from treehawk.core.models import Identity
 from treehawk.core.values import as_float, as_mapping
 from treehawk.top.history import largest_spikes, leak_suspects
-from treehawk.top.models import EventKind, ProcessHistory, Resource
+from treehawk.top.models import HOST_PID, EventKind, ProcessHistory, Resource
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import PRINT
 from treehawk.ui.top_views import format_value, local_time
@@ -83,7 +83,7 @@ class TopOverviewPage(TopPage):
 
 class HostPage(TopPage):
     title = "The whole machine"
-    subtitle = "busy share of every core, and memory in use; red marks are spikes, amber are leak suspects"
+    subtitle = "busy share of every core, and memory in use; red marks are machine-wide spikes, amber a steady rise"
 
     @override
     def draw(self, fig: Figure, *, series: TopSeries, palette: Palette = PRINT) -> bool:
@@ -190,8 +190,7 @@ class EventsPage(TopPage):
         if not rows:
             return False
         style.draw_heading(fig, title=self.title, subtitle=self.subtitle, palette=palette)
-        for column, (x, label) in enumerate(((0.06, "when"), (0.24, "what"), (0.36, "reading"), (0.58, "who"))):
-            del column
+        for x, label in ((0.06, "when"), (0.24, "what"), (0.36, "reading"), (0.58, "who")):
             fig.text(x, 0.84, label, fontsize=9, color=palette.text_muted, fontweight="bold")
         for index, (when, what, reading, who) in enumerate(rows[:34]):
             y = 0.81 - index * 0.021
@@ -273,7 +272,7 @@ def _broken(*, series: TopSeries, values: Sequence[float | None]) -> tuple[list[
 
 def _mark_events(ax: Axes, *, series: TopSeries, resource: Resource, palette: Palette) -> None:
     for event in series.history.events:
-        if event.get("resource") != str(resource):
+        if event.get("pid") != HOST_PID or event.get("resource") != str(resource):
             continue
         moment = as_float(event.get("time"))
         if moment is None:

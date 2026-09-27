@@ -118,14 +118,6 @@ class SystemSample:
         return self.swap_total_bytes - self.swap_free_bytes
 
 
-@dataclass(frozen=True, slots=True)
-class GpuUsage:
-    """One process' share of the GPUs, as a GPU backend reports it."""
-
-    memory_bytes: int | None = None
-    percent: float | None = None
-
-
 @dataclass(slots=True)
 class Snapshot:
     """One fully computed sample: the aggregate plus its per-process detail."""

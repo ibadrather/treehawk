@@ -121,4 +121,4 @@ named again only after growing another 25%.
   treehawk keeps on screen and for the summary is capped.
 - A spike needs 15 s of history for that process, and a leak suspect needs 30
   minutes of steady growth.
-- GPU usage is not collected yet. The `top` log already has a column for it.
+- GPU usage is not collected yet.

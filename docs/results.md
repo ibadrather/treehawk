@@ -154,6 +154,6 @@ Each segment is complete on its own: it opens with a `header`, ends with a
 
 Each row in `top` is a list in the order the header's `row_fields` names:
 `pid`, `starttime`, `cpu_percent`, `rss_bytes`, `pss_bytes`, `swap_bytes`,
-`gpu_memory_bytes`, `reasons`. `reasons` says why the process is there: `c` for
+`reasons`. `reasons` says why the process is there: `c` for
 CPU, `m` for memory, or `cm` for both. Because a command line is written once
 per segment and not in every row, a log can run for the lifetime of a machine.

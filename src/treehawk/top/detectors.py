@@ -5,21 +5,18 @@ per reading, so they run over the whole process table - not just the top N. A
 process that starts leaking is worth flagging long before it is big enough to
 rank.
 
-Keys are whatever the caller tracks: a process identity, or a name for the
-machine as a whole.
+Keys are process identities; the machine as a whole has one of its own.
 """
 
 from __future__ import annotations
 
 import math
 from collections import deque
-from collections.abc import Hashable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
 
+from treehawk.core.models import Identity
 from treehawk.top.models import Creep, CreepRule, Spike, SpikeRule
-
-K = TypeVar("K", bound=Hashable)
 
 
 @dataclass(slots=True)
@@ -31,7 +28,7 @@ class _Baseline:
     quiet_until: float = 0.0
 
 
-class SpikeDetector(Generic[K]):
+class SpikeDetector:
     """Flags a reading far above that key's own recent behaviour.
 
     The baseline is an exponentially weighted mean and variance whose weight
@@ -41,9 +38,9 @@ class SpikeDetector(Generic[K]):
 
     def __init__(self, rule: SpikeRule) -> None:
         self._rule = rule
-        self._state: dict[K, _Baseline] = {}
+        self._state: dict[Identity, _Baseline] = {}
 
-    def observe(self, *, key: K, value: float, t: float) -> Spike | None:
+    def observe(self, *, key: Identity, value: float, t: float) -> Spike | None:
         state = self._state.get(key)
         if state is None:
             self._state[key] = _Baseline(mean=value, first_t=t, last_t=t)
@@ -68,12 +65,9 @@ class SpikeDetector(Generic[K]):
         state.quiet_until = t + rule.cooldown
         return Spike(value=value, baseline=state.mean)
 
-    def forget(self, keys: Iterable[K]) -> None:
+    def forget(self, keys: Iterable[Identity]) -> None:
         for key in keys:
             self._state.pop(key, None)
-
-    def __len__(self) -> int:
-        return len(self._state)
 
 
 @dataclass(slots=True)
@@ -85,14 +79,14 @@ class _Trend:
     """The floor at the last report, so a key is not reported every bucket."""
 
 
-class CreepDetector(Generic[K]):
+class CreepDetector:
     """Flags memory that keeps rising in a straight line: a leak suspect."""
 
     def __init__(self, rule: CreepRule) -> None:
         self._rule = rule
-        self._state: dict[K, _Trend] = {}
+        self._state: dict[Identity, _Trend] = {}
 
-    def observe(self, *, key: K, value: float, t: float) -> Creep | None:
+    def observe(self, *, key: Identity, value: float, t: float) -> Creep | None:
         state = self._state.get(key)
         if state is None:
             self._state[key] = _Trend(
@@ -126,12 +120,9 @@ class CreepDetector(Generic[K]):
         state.reported_at = last
         return Creep(slope_per_hour=slope_per_hour, r2=r2, first=first, last=last)
 
-    def forget(self, keys: Iterable[K]) -> None:
+    def forget(self, keys: Iterable[Identity]) -> None:
         for key in keys:
             self._state.pop(key, None)
-
-    def __len__(self) -> int:
-        return len(self._state)
 
 
 def _fit_line(points: Iterable[tuple[float, float]]) -> tuple[float, float] | None:

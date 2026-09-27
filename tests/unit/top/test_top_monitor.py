@@ -172,16 +172,12 @@ def test_segments_roll_with_their_own_header_and_summary() -> None:
     assert [record["samples"] for record in summaries] == [3, 3, 1]
 
 
-def test_the_summary_counts_cpu_used_while_ranked() -> None:
-    source = base_machine(every_sample(lambda s: s.bump(20, ticks=50), times=5))
-    sink, monitor = run(source, samples=5)
-    del monitor
+def test_the_summary_counts_samples_and_events() -> None:
+    sink, _ = run(base_machine(), samples=5, system=FakeSystemSource())
     summary = sink.of("summary")[0]
-    top_cpu = as_sequence(summary["top_by_cpu"])
-    first = as_mapping(top_cpu[0])
-    assert first["pid"] == 20
-    assert first["cpu_seconds"] == pytest.approx(2.0)  # four intervals at half a core
+    assert summary["samples"] == 5
     assert summary["events"] == {"enter": 2}
+    assert summary["peak_host_cpu_percent"] == pytest.approx(25.0)
 
 
 def test_no_pss_skips_the_fair_measure() -> None:

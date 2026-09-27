@@ -53,11 +53,26 @@ def read_records(path: str) -> Iterator[Record]:
 
 
 def log_files(directory: pathlib.Path) -> list[pathlib.Path]:
-    """The logs under ``directory``, oldest first."""
+    """The logs under ``directory``, oldest first.
+
+    Ordered by file name, which for ``top`` segments starts with the time the
+    segment began: a modification time changes when a file is compressed late
+    or copied, a name does not.
+    """
     found = [
         candidate for candidate in directory.rglob("*") if candidate.is_file() and candidate.name.endswith(LOG_SUFFIXES)
     ]
-    return sorted(found, key=lambda candidate: (candidate.stat().st_mtime, candidate.name))
+    return sorted(found, key=_log_stem)
+
+
+def _log_stem(path: pathlib.Path) -> str:
+    """``top-20260927-100000-1.jsonl.gz`` -> ``top-20260927-100000-1``, so a
+    same-second second segment sorts after the first."""
+    name = path.name
+    for suffix in sorted(LOG_SUFFIXES, key=len, reverse=True):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
 
 
 def peek_header(path: str) -> Record:

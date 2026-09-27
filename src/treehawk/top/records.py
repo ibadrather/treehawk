@@ -21,14 +21,14 @@ from dataclasses import asdict
 from treehawk import SCHEMA_VERSION, __version__
 from treehawk.core.config import TopConfig
 from treehawk.core.interfaces import Record
-from treehawk.core.models import HostInfo, ProcSample
+from treehawk.core.models import HostInfo
 from treehawk.top.constants import TOP
 from treehawk.top.models import HostReading, RankedProc, Resource, TopEvent, TopSummary
 
 MODE = "top"
 """The ``mode`` of every ``top`` header; what the readers dispatch on."""
 
-REASON_LETTERS = {Resource.CPU: "c", Resource.MEMORY: "m", Resource.GPU: "g"}
+REASON_LETTERS = {Resource.CPU: "c", Resource.MEMORY: "m"}
 """How the resources that ranked a process are spelled in its row."""
 
 
@@ -93,7 +93,6 @@ def sample_record(
 
 def _row(entry: RankedProc) -> list[object]:
     sample = entry.sample
-    gpu_memory = entry.gpu.memory_bytes if entry.gpu is not None else None
     return [
         sample.info.pid,
         sample.info.starttime,
@@ -101,7 +100,6 @@ def _row(entry: RankedProc) -> list[object]:
         sample.info.rss_bytes,
         sample.pss_bytes,
         sample.swap_bytes,
-        gpu_memory,
         reasons_text(entry.reasons),
     ]
 
@@ -110,11 +108,6 @@ def reasons_text(reasons: Iterable[Resource]) -> str:
     """``{CPU, MEMORY}`` -> ``"cm"``, always in the same order."""
     present = set(reasons)
     return "".join(letter for resource, letter in REASON_LETTERS.items() if resource in present)
-
-
-def row_of(sample: ProcSample, *, reasons: Iterable[Resource]) -> list[object]:
-    """One compact row, for a caller that has a sample but no ranking."""
-    return _row(RankedProc(sample=sample, reasons=frozenset(reasons)))
 
 
 def event_record(event: TopEvent) -> Record:

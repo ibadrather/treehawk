@@ -6,7 +6,7 @@ import pytest
 from conftest import FakeProcessSource
 
 from treehawk.core.config import Pacing, TopConfig
-from treehawk.core.models import GpuUsage, SystemSample
+from treehawk.core.models import SystemSample
 from treehawk.top.models import Resource
 from treehawk.top.pacing import AutoInterval, FixedInterval, build_pacing
 from treehawk.top.ranker import Ranker
@@ -59,12 +59,6 @@ def test_zombies_and_idle_processes_are_not_ranked_by_cpu() -> None:
     selection = Ranker(n=5).rank(procs=source.scan(), cpu={(5, 5): 99.0})
     assert (5, 5) not in selection.chosen
     assert all(Resource.CPU not in reasons for reasons in selection.chosen.values())
-
-
-def test_gpu_memory_ranks_when_a_gpu_source_reports_it() -> None:
-    procs = machine().scan()
-    selection = Ranker(n=1).rank(procs=procs, cpu={}, gpu={4: GpuUsage(memory_bytes=4 * 1024 * MIB)})
-    assert selection.chosen[4, 4] == frozenset({Resource.GPU})
 
 
 def test_cpu_rates_need_two_readings_and_notice_exits() -> None:

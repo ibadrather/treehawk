@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from treehawk.core.compat import StrEnum
 from treehawk.core.interfaces import Record
-from treehawk.core.models import GpuUsage, Identity, ProcessTotals, ProcSample
+from treehawk.core.models import Identity, ProcSample
 
 
 class Resource(StrEnum):
@@ -14,7 +14,6 @@ class Resource(StrEnum):
 
     CPU = "cpu"
     MEMORY = "mem"
-    GPU = "gpu"
 
 
 class EventKind(StrEnum):
@@ -35,6 +34,9 @@ class EventKind(StrEnum):
 
 HOST_PID = 0
 """The pid an event about the whole machine carries. No process has it."""
+
+HOST: Identity = (HOST_PID, 0)
+"""The key the machine as a whole is tracked under, beside every process."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +99,6 @@ class RankedProc:
 
     sample: ProcSample
     reasons: frozenset[Resource]
-    gpu: GpuUsage | None = None
 
     @property
     def identity(self) -> Identity:
@@ -167,10 +168,7 @@ class TopSummary:
     mean_host_cpu_percent: float | None = None
     peak_host_mem_used_bytes: int | None = None
     peak_n_procs: int = 0
-    total_procs_seen: int = 0
     events: dict[str, int] = field(default_factory=dict)
-    top_by_cpu: list[ProcessTotals] = field(default_factory=list)
-    top_by_memory: list[ProcessTotals] = field(default_factory=list)
 
 
 @dataclass(slots=True)

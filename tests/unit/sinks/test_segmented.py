@@ -39,8 +39,8 @@ def test_the_open_segment_is_readable_while_it_is_written(tmp_path: pathlib.Path
     sink = SegmentedJsonlSink(str(tmp_path))
     sink.open(header("2026-09-27T10:00:00Z"))
     sink.sample({"type": "sample", "seq": 0})
-    assert sink.path is not None
-    assert [record["type"] for record in read_records(str(sink.path))] == ["header", "sample"]
+    (open_segment,) = tmp_path.rglob("top-*.jsonl")
+    assert [record["type"] for record in read_records(str(open_segment))] == ["header", "sample"]
     sink.close({"type": "summary"})
     sink.wait()
 
@@ -55,19 +55,22 @@ def test_a_machine_without_a_boot_id_still_gets_a_directory(tmp_path: pathlib.Pa
 
 def test_two_segments_in_the_same_second_do_not_collide(tmp_path: pathlib.Path) -> None:
     sink = SegmentedJsonlSink(str(tmp_path))
-    write_segment(sink, "2026-09-27T10:00:00Z")
-    write_segment(sink, "2026-09-27T10:00:00Z")
-    assert len(list((tmp_path / "abcd1234").iterdir())) == 2
+    write_segment(sink, "2026-09-27T10:00:00Z", samples=1)
+    write_segment(sink, "2026-09-27T10:00:00Z", samples=2)
+    assert [path.name for path in log_files(tmp_path)] == [
+        "top-20260927-100000.jsonl.gz",
+        "top-20260927-100000-1.jsonl.gz",
+    ]
 
 
 def test_the_oldest_segments_go_when_over_budget(tmp_path: pathlib.Path) -> None:
     sink = SegmentedJsonlSink(str(tmp_path), keep_bytes=1)
     write_segment(sink, "2026-09-27T10:00:00Z", padding=5000)
     first = next((tmp_path / "abcd1234").iterdir())
-    os.utime(first, (1, 1))  # unmistakably the oldest
+    os.utime(first, (2_000_000_000, 2_000_000_000))  # touched later, e.g. compressed after a crash
     write_segment(sink, "2026-09-27T11:00:00Z", padding=5000)
     remaining = [path.name for path in (tmp_path / "abcd1234").iterdir()]
-    assert first.name not in remaining
+    assert remaining == ["top-20260927-110000.jsonl.gz"]
 
 
 def test_without_a_budget_nothing_is_deleted(tmp_path: pathlib.Path) -> None:
@@ -88,13 +91,25 @@ def test_a_segment_left_behind_by_a_crash_is_compressed_on_the_next_start(tmp_pa
     assert [record["type"] for record in read_records(str(recovered))] == ["header", "sample"]
 
 
+def test_other_logs_in_the_directory_are_left_alone(tmp_path: pathlib.Path) -> None:
+    workload = tmp_path / "my-workload.jsonl"
+    nested = tmp_path / "sub" / "other.jsonl"
+    nested.parent.mkdir()
+    for path in (workload, nested):
+        path.write_text('{"type":"header"}\n')
+    write_segment(SegmentedJsonlSink(str(tmp_path)), "2026-09-27T10:00:00Z")
+    assert workload.read_text() == '{"type":"header"}\n'
+    assert nested.read_text() == '{"type":"header"}\n'
+    assert not workload.with_name(workload.name + ".gz").exists()
+
+
 def test_a_directory_is_read_oldest_segment_first(tmp_path: pathlib.Path) -> None:
     sink = SegmentedJsonlSink(str(tmp_path))
     write_segment(sink, "2026-09-27T10:00:00Z", samples=1)
     write_segment(sink, "2026-09-27T11:00:00Z", samples=2)
-    files = log_files(tmp_path)
-    os.utime(files[0], (100, 100))
-    os.utime(files[1], (200, 200))
+    first, second = log_files(tmp_path)
+    os.utime(first, (200, 200))  # modification times say otherwise; the names win
+    os.utime(second, (100, 100))
     records = list(read_records(str(tmp_path)))
     assert [record["type"] for record in records] == [
         "header",

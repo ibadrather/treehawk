@@ -68,7 +68,6 @@ from treehawk.core.errors import ConfigError, TreehawkError
 from treehawk.core.interfaces import Clock, ProcessLauncher, ProcessMatcher, Sink
 from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
-from treehawk.core.monitor import Monitor
 from treehawk.platforms.models import Platform
 from treehawk.report import Report, build_report, peek_header
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
@@ -77,7 +76,6 @@ from treehawk.sinks.segmented import SegmentedJsonlSink
 from treehawk.sinks.top_screen import TopLiveSink, build_top_screen_sink
 from treehawk.top.constants import TOP
 from treehawk.top.history import history_record, load_history
-from treehawk.top.monitor import TopMonitor
 from treehawk.top.records import MODE as TOP_MODE
 from treehawk.ui.theme import PALETTE
 from treehawk.ui.top_views import render_top_report
@@ -207,7 +205,7 @@ def watch(
         self_pid=runtime.self_pid(),
         notes=tuple(platform.notes),
     )
-    _install_signal_handlers(monitor=session.monitor)
+    _install_signal_handlers(stop=session.monitor.request_stop)
     if not quiet:
         _announce_log_path(path)
 
@@ -294,7 +292,7 @@ def run(
     )
     # The workload already exists, so seed now rather than searching for it.
     session.tracker.seed(platform.process_source.scan())
-    _install_signal_handlers(monitor=session.monitor, workload=workload)
+    _install_signal_handlers(stop=session.monitor.request_stop, workload=workload)
 
     try:
         session.monitor.run(read_exit_code=workload.poll)
@@ -426,8 +424,8 @@ def top(
             help=f"Where the logs go, one directory per boot. Default: ./{CLI.default_top_dir}",
         ),
     ] = None,
-    keep: Keep = "1G",
-    segment: Segment = "1h",
+    keep: Keep = TOP.default_keep,
+    segment: Segment = TOP.default_segment,
     quiet: Quiet = False,
     no_pss: NoPss = False,
     duration: Duration = None,
@@ -459,7 +457,7 @@ def top(
         clock=runtime.clock,
         notes=tuple(platform.notes),
     )
-    _install_top_signal_handlers(monitor)
+    _install_signal_handlers(stop=monitor.request_stop)
     if not quiet:
         stderr_console.print(f"[dim]logging to[/dim] {log_dir}")
     try:
@@ -484,8 +482,8 @@ def service_install(
         Path,
         typer.Option("--dir", metavar="PATH", help="Where the service logs."),
     ] = Path(CLI.service_state_dir),
-    keep: Keep = "1G",
-    segment: Segment = "1h",
+    keep: Keep = TOP.default_keep,
+    segment: Segment = TOP.default_segment,
     no_pss: NoPss = False,
 ) -> None:
     """Install and start the service; it starts again at every boot.
@@ -585,14 +583,6 @@ def _top_config(*, interval: str, top_n: int, segment: str, no_pss: bool, durati
 def _require_root(runtime: Runtime) -> None:
     if not runtime.is_root():
         raise ConfigError('installing a system service needs root: sudo "$(command -v treehawk)" service ...')
-
-
-def _install_top_signal_handlers(monitor: TopMonitor) -> None:
-    def handler(_signum: int, _frame: FrameType | None) -> None:
-        monitor.request_stop()
-
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(signum, handler)
 
 
 def _select_matcher(*, target: str | None, pid: int | None, exact: str | None, regex: str | None) -> ProcessMatcher:
@@ -709,11 +699,13 @@ def _report_errors(errors: list[BaseException]) -> None:
     )
 
 
-def _install_signal_handlers(*, monitor: Monitor, workload: LaunchedWorkload | None = None) -> None:
+def _install_signal_handlers(*, stop: Callable[[], None], workload: LaunchedWorkload | None = None) -> None:
+    """On SIGINT or SIGTERM, pass the signal on to the workload, if any, and ``stop`` sampling."""
+
     def handler(signum: int, _frame: FrameType | None) -> None:
         if workload is not None:
             workload.signal(signum)
-        monitor.request_stop()
+        stop()
 
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, handler)

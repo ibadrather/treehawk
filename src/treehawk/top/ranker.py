@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from treehawk.core.models import GpuUsage, Identity, ProcInfo
+from treehawk.core.models import Identity, ProcInfo
 from treehawk.top.models import Resource, Selection
 
 
@@ -21,13 +21,7 @@ class Ranker:
         self._n = n
         self._previous: set[Identity] = set()
 
-    def rank(
-        self,
-        *,
-        procs: Mapping[int, ProcInfo],
-        cpu: Mapping[Identity, float],
-        gpu: Mapping[int, GpuUsage] | None = None,
-    ) -> Selection:
+    def rank(self, *, procs: Mapping[int, ProcInfo], cpu: Mapping[Identity, float]) -> Selection:
         """This sample's top N, and how it differs from the last one's."""
         live = [info for info in procs.values() if not info.is_zombie]
         reasons: dict[Identity, set[Resource]] = {}
@@ -40,8 +34,6 @@ class Ranker:
 
         pick(Resource.CPU, lambda info: cpu.get(info.identity, 0.0))
         pick(Resource.MEMORY, lambda info: float(info.rss_bytes or 0))
-        if gpu:
-            pick(Resource.GPU, lambda info: float(_gpu_memory(gpu.get(info.pid))))
 
         by_identity = {info.identity: info for info in live}
         order = sorted(
@@ -55,9 +47,3 @@ class Ranker:
         left = sorted(self._previous - current)
         self._previous = current
         return Selection(chosen=chosen, entered=entered, left=left)
-
-
-def _gpu_memory(usage: GpuUsage | None) -> int:
-    if usage is None or usage.memory_bytes is None:
-        return 0
-    return usage.memory_bytes

@@ -211,9 +211,19 @@ def leak_suspects(events: Sequence[Record]) -> list[Record]:
     return sorted(latest.values(), key=lambda event: as_float(event.get("slope_per_hour")) or 0.0, reverse=True)
 
 
-def history_record(history: TopHistory, *, limit: int = TOP.summary_rank_limit) -> Record:
-    """The report as plain data, for ``--json``."""
+def ranked_processes(
+    history: TopHistory, *, limit: int = TOP.summary_rank_limit
+) -> tuple[list[ProcessHistory], list[ProcessHistory]]:
+    """The ``limit`` biggest users of cpu time, and of peak resident memory."""
     processes = list(history.processes.values())
+    by_cpu = sorted(processes, key=lambda entry: entry.cpu_seconds, reverse=True)[:limit]
+    by_memory = sorted(processes, key=lambda entry: entry.peak_rss_bytes, reverse=True)[:limit]
+    return by_cpu, by_memory
+
+
+def history_record(history: TopHistory) -> Record:
+    """The report as plain data, for ``--json``."""
+    by_cpu, by_memory = ranked_processes(history)
 
     def listed(entries: list[ProcessHistory]) -> list[Record]:
         return [
@@ -230,7 +240,7 @@ def history_record(history: TopHistory, *, limit: int = TOP.summary_rank_limit) 
                 "first_seen": entry.first_seen,
                 "last_seen": entry.last_seen,
             }
-            for entry in entries[:limit]
+            for entry in entries
         ]
 
     return {
@@ -244,8 +254,8 @@ def history_record(history: TopHistory, *, limit: int = TOP.summary_rank_limit) 
         "mean_host_cpu_percent": history.mean_host_cpu_percent,
         "peak_host_mem_used_bytes": history.peak_host_mem_used_bytes,
         "event_counts": history.event_counts,
-        "top_by_cpu": listed(sorted(processes, key=lambda entry: entry.cpu_seconds, reverse=True)),
-        "top_by_memory": listed(sorted(processes, key=lambda entry: entry.peak_rss_bytes, reverse=True)),
+        "top_by_cpu": listed(by_cpu),
+        "top_by_memory": listed(by_memory),
         "cpu_spikes": largest_spikes(history.events, resource=Resource.CPU),
         "memory_spikes": largest_spikes(history.events, resource=Resource.MEMORY),
         "leak_suspects": leak_suspects(history.events),

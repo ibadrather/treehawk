@@ -24,8 +24,6 @@ def parse_interval(text: str) -> tuple[Pacing, float | None]:
         seconds = float(text)
     except ValueError:
         raise ConfigError(f"interval must be seconds or 'auto', not {text!r}") from None
-    if seconds <= 0:
-        raise ConfigError("interval must be greater than 0")
     return Pacing.FIXED, seconds
 
 

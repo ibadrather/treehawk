@@ -34,23 +34,22 @@ class Timeline(Generic[K]):
         return self._width
 
     def add(self, *, key: K, t: float, value: float) -> None:
-        if self._origin is None:
-            self._origin = t
-        bucket = int((t - self._origin) // self._width)
-        self._buckets.add(bucket)
+        bucket = self.mark(t)
         points = self._series.setdefault(key, {})
         previous = points.get(bucket)
         points[bucket] = value if previous is None else max(previous, value)
+
+    def mark(self, t: float) -> int:
+        """Put ``t`` on the axis even if no series has a value there; return its bucket."""
+        self._buckets.add(self._bucket(t))
         if len(self._buckets) > self._limit:
             self._coarsen()
+        return self._bucket(t)  # again: coarsening may have just widened the buckets
 
-    def mark(self, t: float) -> None:
-        """Put ``t`` on the axis even if no series has a value there."""
+    def _bucket(self, t: float) -> int:
         if self._origin is None:
             self._origin = t
-        self._buckets.add(int((t - self._origin) // self._width))
-        if len(self._buckets) > self._limit:
-            self._coarsen()
+        return int((t - self._origin) // self._width)
 
     def _coarsen(self) -> None:
         self._width *= 2

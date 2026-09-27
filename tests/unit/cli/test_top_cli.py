@@ -127,6 +127,9 @@ def test_top_rejects_a_bad_interval(tmp_path: pathlib.Path) -> None:
     result = runner.invoke(app, ["top", "--dir", str(tmp_path), "--interval", "fast"], obj=runtime())
     assert result.exit_code == 1
     assert "auto" in result.output
+    zero = runner.invoke(app, ["top", "--dir", str(tmp_path), "--interval", "0"], obj=runtime())
+    assert zero.exit_code == 1
+    assert "greater than 0" in zero.output
 
 
 def test_service_install_writes_the_unit_and_starts_it(tmp_path: pathlib.Path) -> None:
@@ -197,7 +200,7 @@ def test_parsing() -> None:
     assert parse_span("2d") == pytest.approx(172800.0)
     assert parse_moment("1h", now=10000.0) == pytest.approx(6400.0)
     assert parse_moment("2026-01-01T00:00:00+00:00", now=0.0) == pytest.approx(1767225600.0)
-    for bad in ("-1", "0"):
+    for bad in ("fast", "1s"):
         with pytest.raises(ConfigError):
             parse_interval(bad)
     with pytest.raises(ConfigError):

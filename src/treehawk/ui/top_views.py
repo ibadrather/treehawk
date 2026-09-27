@@ -20,7 +20,7 @@ from treehawk.core.interfaces import Record
 from treehawk.core.models import Identity
 from treehawk.core.values import as_float, as_int, as_mapping, as_sequence
 from treehawk.top.constants import TOP
-from treehawk.top.history import largest_spikes, leak_suspects
+from treehawk.top.history import largest_spikes, leak_suspects, ranked_processes
 from treehawk.top.models import EventKind, ProcessHistory, Resource, TopHistory
 from treehawk.ui.constants import UI
 from treehawk.ui.models import Palette
@@ -133,9 +133,7 @@ class TopBoard:
 def render_top_report(*, history: TopHistory, palette: Palette, title: str = "top") -> RenderableType:
     """What happened on the machine, and who was responsible."""
     parts: list[RenderableType] = [_facts(history=history, palette=palette)]
-    processes = list(history.processes.values())
-    by_cpu = sorted(processes, key=lambda entry: entry.cpu_seconds, reverse=True)[: TOP.summary_rank_limit]
-    by_memory = sorted(processes, key=lambda entry: entry.peak_rss_bytes, reverse=True)[: TOP.summary_rank_limit]
+    by_cpu, by_memory = ranked_processes(history)
     parts.extend(
         (
             _consumers(title="top by cpu time while ranked", rows=by_cpu, palette=palette, cpu=True),

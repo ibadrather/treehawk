@@ -88,7 +88,6 @@ def build_top_monitor(
     notes: tuple[str, ...] = (),
 ) -> TopMonitor:
     """Whole-machine tracking, wired to ``platform``."""
-    config.validate()
     notes_out = list(notes)
     if platform.system_source is None:
         notes_out.append(f"no machine-wide cpu and memory figures on {platform.name} yet; processes only")

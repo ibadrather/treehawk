@@ -12,7 +12,6 @@ from typing import Protocol, TypeAlias, runtime_checkable
 
 from treehawk.core.config import MemoryDetail, WorkloadOutput
 from treehawk.core.models import (
-    GpuUsage,
     GroupMetrics,
     HostInfo,
     Identity,
@@ -110,21 +109,6 @@ class SystemSource(Protocol):
     def boot_id(self) -> str | None:
         """An identifier unique to this boot of the machine, if there is one."""
         ...
-
-
-@runtime_checkable
-class ProcessGpuSource(Protocol):
-    """Reads per-process GPU usage.
-
-    No implementation ships yet; ``top`` ranks by GPU memory as soon as one is
-    registered, without any change to the ranking itself.
-    """
-
-    def read(self) -> Mapping[int, GpuUsage]:
-        """``{pid: usage}`` for every process using a GPU right now."""
-        ...
-
-    def close(self) -> None: ...
 
 
 @runtime_checkable

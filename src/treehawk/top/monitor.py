@@ -19,21 +19,22 @@ sink can compress and prune closed ones.
 
 from __future__ import annotations
 
-import contextlib
 from collections.abc import Iterable, Mapping
 
 from treehawk.core.config import TopConfig
-from treehawk.core.interfaces import Clock, ProcessGpuSource, ProcessSource, Sink, SystemSource
-from treehawk.core.models import GpuUsage, HostInfo, Identity, ProcInfo, SystemSample
+from treehawk.core.interfaces import Clock, ProcessSource, Sink, SystemSource
+from treehawk.core.models import HostInfo, Identity, ProcInfo, SystemSample
 from treehawk.core.records import PSS
 from treehawk.top.constants import TOP
 from treehawk.top.detectors import CreepDetector, SpikeDetector
 from treehawk.top.models import (
-    HOST_PID,
+    HOST,
+    Creep,
     EventKind,
     HostReading,
     RankedProc,
     Resource,
+    Spike,
     Thresholds,
     TopEvent,
     TopSummary,
@@ -60,7 +61,6 @@ class TopMonitor:
         config: TopConfig,
         host: HostInfo,
         system: SystemSource | None = None,
-        gpu: ProcessGpuSource | None = None,
         pacing: IntervalPolicy | None = None,
         thresholds: Thresholds = TOP.thresholds,
         memory_kind: str = PSS.key,
@@ -72,7 +72,6 @@ class TopMonitor:
         self._config = config
         self._host = host
         self._system = system
-        self._gpu = gpu
         self._pacing = pacing if pacing is not None else FixedInterval(config.interval)
         self._memory_kind = memory_kind
         self._notes = list(notes)
@@ -81,19 +80,19 @@ class TopMonitor:
         self._cpu = CpuRates(clk_tck=host.clk_tck)
         self._host_cpu = HostCpuRate()
         self._ranker = Ranker(n=config.top_n)
-        self._cpu_spikes: SpikeDetector[Identity] = SpikeDetector(thresholds.cpu_spike)
-        self._memory_spikes: SpikeDetector[Identity] = SpikeDetector(thresholds.memory_spike)
-        self._creep: CreepDetector[Identity] = CreepDetector(thresholds.creep)
-        self._host_cpu_spikes: SpikeDetector[str] = SpikeDetector(thresholds.host_cpu_spike)
-        self._host_memory_spikes: SpikeDetector[str] = SpikeDetector(thresholds.host_memory_spike)
-        self._host_creep: CreepDetector[str] = CreepDetector(thresholds.host_creep)
+        self._cpu_spikes = SpikeDetector(thresholds.cpu_spike)
+        self._memory_spikes = SpikeDetector(thresholds.memory_spike)
+        self._creep = CreepDetector(thresholds.creep)
+        self._host_cpu_spikes = SpikeDetector(thresholds.host_cpu_spike)
+        self._host_memory_spikes = SpikeDetector(thresholds.host_memory_spike)
+        self._host_creep = CreepDetector(thresholds.host_creep)
 
         self._boot_id = system.boot_id() if system is not None else None
         self._segment = 0
         self._segment_started = 0.0
         self._summary = TopAccumulator()
-        self._described: dict[Identity, str] = {}
-        """Processes this segment already has a ``proc`` record for, and their command line."""
+        self._described: set[Identity] = set()
+        """Processes this segment already has a ``proc`` record for."""
         self._names: dict[Identity, str] = {}
         """Names of the current top N, for the ``leave`` of one that has exited."""
 
@@ -132,7 +131,6 @@ class TopMonitor:
                 if self._finished(samples_taken=seq, elapsed=elapsed):
                     break
         finally:
-            self._close_gpu()
             summary = self._summary.finish()
             self._sink.close(summary_record(summary))
         return summary
@@ -146,7 +144,7 @@ class TopMonitor:
     def _open_segment(self, *, elapsed: float) -> None:
         self._segment_started = elapsed
         self._summary = TopAccumulator()
-        self._described = {}
+        self._described = set()
         self._sink.open(
             header_record(
                 host=self._host,
@@ -182,21 +180,31 @@ class TopMonitor:
         self._forget(exited)
 
         events = self._detect(procs=procs, rates=rates, host=host, t=elapsed, ts=timestamp)
-        gpu = self._read_gpu()
-        selection = self._ranker.rank(procs=procs, cpu=rates, gpu=gpu)
+        selection = self._ranker.rank(procs=procs, cpu=rates)
         by_identity = {info.identity: info for info in procs.values()}
         ranked = [
-            self._enrich(info=by_identity[identity], reasons=reasons, cpu=rates, gpu=gpu)
+            self._enrich(info=by_identity[identity], reasons=reasons, cpu=rates)
             for identity, reasons in selection.chosen.items()
         ]
-        events += self._membership(
-            entered=selection.entered,
-            left=selection.left,
-            exited=set(exited),
-            procs=by_identity,
-            t=elapsed,
-            ts=timestamp,
-        )
+        for identity in selection.entered:
+            info = by_identity[identity]
+            events.append(
+                _event(EventKind.ENTER, pid=info.pid, starttime=info.starttime, name=info.comm, t=elapsed, ts=timestamp)
+            )
+        gone = set(exited)
+        for identity in selection.left:
+            pid, starttime = identity
+            events.append(
+                _event(
+                    EventKind.LEAVE,
+                    pid=pid,
+                    starttime=starttime,
+                    name=self._names.get(identity, "?"),
+                    t=elapsed,
+                    ts=timestamp,
+                    reason="exit" if identity in gone else "rank",
+                )
+            )
         self._names = {entry.identity: entry.sample.info.comm for entry in ranked}
 
         for entry in ranked:
@@ -217,15 +225,7 @@ class TopMonitor:
         for event in events:
             self._sink.sample(event_record(event))
             self._summary.event(event.kind)
-        self._summary.add(
-            t=elapsed - self._segment_started,
-            dt=dt,
-            overrun=overrun,
-            host=host,
-            n_procs=len(procs),
-            ranked=ranked,
-            cmdlines=self._described,
-        )
+        self._summary.add(t=elapsed - self._segment_started, dt=dt, overrun=overrun, host=host, n_procs=len(procs))
 
     def _host_reading(self, system: SystemSample | None) -> HostReading | None:
         cpu = self._host_cpu.update(system)
@@ -238,25 +238,18 @@ class TopMonitor:
             swap_used_bytes=system.swap_used_bytes,
         )
 
-    def _enrich(
-        self,
-        *,
-        info: ProcInfo,
-        reasons: frozenset[Resource],
-        cpu: Mapping[Identity, float],
-        gpu: Mapping[int, GpuUsage] | None,
-    ) -> RankedProc:
+    def _enrich(self, *, info: ProcInfo, reasons: frozenset[Resource], cpu: Mapping[Identity, float]) -> RankedProc:
         sample = self._source.enrich(info=info, memory=self._config.memory)
         sample.cpu_percent = cpu.get(info.identity)
         sample.via = "top"
-        return RankedProc(sample=sample, reasons=reasons, gpu=gpu.get(info.pid) if gpu else None)
+        return RankedProc(sample=sample, reasons=reasons)
 
     def _describe(self, info: ProcInfo, *, cmdline: str | None = None) -> None:
         """Write a ``proc`` record the first time this segment mentions ``info``."""
         if info.identity in self._described:
             return
+        self._described.add(info.identity)
         text = cmdline if cmdline is not None else (self._source.read_cmdline(info.pid) or info.comm)
-        self._described[info.identity] = text
         self._sink.sample(proc_record(pid=info.pid, starttime=info.starttime, name=info.comm, cmdline=text))
 
     def _forget(self, exited: Iterable[Identity]) -> None:
@@ -282,155 +275,128 @@ class TopMonitor:
         for info in procs.values():
             if info.is_zombie:
                 continue
-            identity = info.identity
-            cpu = rates.get(identity)
-            if cpu is not None:
-                spike = self._cpu_spikes.observe(key=identity, value=cpu, t=t)
-                if spike is not None:
-                    events.append(
-                        self._process_event(info, EventKind.SPIKE, Resource.CPU, spike.value, spike.baseline, t, ts)
-                    )
-            rss = info.rss_bytes
-            if rss is None:
-                continue
-            spike = self._memory_spikes.observe(key=identity, value=float(rss), t=t)
-            if spike is not None:
-                events.append(
-                    self._process_event(info, EventKind.SPIKE, Resource.MEMORY, spike.value, spike.baseline, t, ts)
-                )
-            creep = self._creep.observe(key=identity, value=float(rss), t=t)
-            if creep is not None:
-                self._describe(info)
-                events.append(
-                    TopEvent(
-                        kind=EventKind.CREEP,
-                        t=round(t, 3),
-                        ts=ts,
-                        pid=info.pid,
-                        starttime=info.starttime,
-                        name=info.comm,
-                        resource=Resource.MEMORY,
-                        value=creep.last,
-                        baseline=creep.first,
-                        slope_per_hour=round(creep.slope_per_hour, 1),
-                        r2=round(creep.r2, 3),
-                    )
-                )
-        if host is not None:
-            events += self._detect_host(host=host, t=t, ts=ts)
-        return events
-
-    def _detect_host(self, *, host: HostReading, t: float, ts: str) -> list[TopEvent]:
-        events: list[TopEvent] = []
-        if host.cpu_percent is not None:
-            spike = self._host_cpu_spikes.observe(key=HOST_NAME, value=host.cpu_percent, t=t)
-            if spike is not None:
-                events.append(self._host_event(EventKind.SPIKE, Resource.CPU, spike.value, spike.baseline, t, ts))
-        used = host.mem_used_bytes
-        if used is not None:
-            spike = self._host_memory_spikes.observe(key=HOST_NAME, value=float(used), t=t)
-            if spike is not None:
-                events.append(self._host_event(EventKind.SPIKE, Resource.MEMORY, spike.value, spike.baseline, t, ts))
-            creep = self._host_creep.observe(key=HOST_NAME, value=float(used), t=t)
-            if creep is not None:
-                events.append(
-                    TopEvent(
-                        kind=EventKind.CREEP,
-                        t=round(t, 3),
-                        ts=ts,
-                        pid=HOST_PID,
-                        starttime=0,
-                        name=HOST_NAME,
-                        resource=Resource.MEMORY,
-                        value=creep.last,
-                        baseline=creep.first,
-                        slope_per_hour=round(creep.slope_per_hour, 1),
-                        r2=round(creep.r2, 3),
-                    )
-                )
-        return events
-
-    def _process_event(
-        self,
-        info: ProcInfo,
-        kind: EventKind,
-        resource: Resource,
-        value: float,
-        baseline: float,
-        t: float,
-        ts: str,
-    ) -> TopEvent:
-        self._describe(info)
-        return TopEvent(
-            kind=kind,
-            t=round(t, 3),
-            ts=ts,
-            pid=info.pid,
-            starttime=info.starttime,
-            name=info.comm,
-            resource=resource,
-            value=round(value, 2),
-            baseline=round(baseline, 2),
-        )
-
-    @staticmethod
-    def _host_event(kind: EventKind, resource: Resource, value: float, baseline: float, t: float, ts: str) -> TopEvent:
-        return TopEvent(
-            kind=kind,
-            t=round(t, 3),
-            ts=ts,
-            pid=HOST_PID,
-            starttime=0,
-            name=HOST_NAME,
-            resource=resource,
-            value=round(value, 2),
-            baseline=round(baseline, 2),
-        )
-
-    def _membership(
-        self,
-        *,
-        entered: Iterable[Identity],
-        left: Iterable[Identity],
-        exited: set[Identity],
-        procs: Mapping[Identity, ProcInfo],
-        t: float,
-        ts: str,
-    ) -> list[TopEvent]:
-        events: list[TopEvent] = []
-        for identity in entered:
-            info = procs[identity]
-            events.append(
-                TopEvent(
-                    kind=EventKind.ENTER, t=round(t, 3), ts=ts, pid=info.pid, starttime=info.starttime, name=info.comm
-                )
+            found = _check(
+                key=info.identity,
+                name=info.comm,
+                cpu=rates.get(info.identity),
+                memory=info.rss_bytes,
+                cpu_spikes=self._cpu_spikes,
+                memory_spikes=self._memory_spikes,
+                creep=self._creep,
+                t=t,
+                ts=ts,
             )
-        for identity in left:
-            pid, starttime = identity
+            if found:
+                self._describe(info)
+                events += found
+        if host is not None:
+            events += _check(
+                key=HOST,
+                name=HOST_NAME,
+                cpu=host.cpu_percent,
+                memory=host.mem_used_bytes,
+                cpu_spikes=self._host_cpu_spikes,
+                memory_spikes=self._host_memory_spikes,
+                creep=self._host_creep,
+                t=t,
+                ts=ts,
+            )
+        return events
+
+
+def _check(
+    *,
+    key: Identity,
+    name: str,
+    cpu: float | None,
+    memory: int | None,
+    cpu_spikes: SpikeDetector,
+    memory_spikes: SpikeDetector,
+    creep: CreepDetector,
+    t: float,
+    ts: str,
+) -> list[TopEvent]:
+    """Run one process, or the machine, through its detectors."""
+    pid, starttime = key
+    events: list[TopEvent] = []
+    if cpu is not None:
+        spike = cpu_spikes.observe(key=key, value=cpu, t=t)
+        if spike is not None:
             events.append(
-                TopEvent(
-                    kind=EventKind.LEAVE,
-                    t=round(t, 3),
-                    ts=ts,
+                _event(
+                    EventKind.SPIKE,
                     pid=pid,
                     starttime=starttime,
-                    name=self._names.get(identity, "?"),
-                    reason="exit" if identity in exited else "rank",
+                    name=name,
+                    t=t,
+                    ts=ts,
+                    resource=Resource.CPU,
+                    spike=spike,
                 )
             )
-        return events
+    if memory is not None:
+        spike = memory_spikes.observe(key=key, value=float(memory), t=t)
+        if spike is not None:
+            events.append(
+                _event(
+                    EventKind.SPIKE,
+                    pid=pid,
+                    starttime=starttime,
+                    name=name,
+                    t=t,
+                    ts=ts,
+                    resource=Resource.MEMORY,
+                    spike=spike,
+                )
+            )
+        rising = creep.observe(key=key, value=float(memory), t=t)
+        if rising is not None:
+            events.append(
+                _event(
+                    EventKind.CREEP,
+                    pid=pid,
+                    starttime=starttime,
+                    name=name,
+                    t=t,
+                    ts=ts,
+                    resource=Resource.MEMORY,
+                    creep=rising,
+                )
+            )
+    return events
 
-    # -- gpu --------------------------------------------------------------
 
-    def _read_gpu(self) -> Mapping[int, GpuUsage] | None:
-        if self._gpu is None:
-            return None
-        try:
-            return self._gpu.read()
-        except Exception:  # a broken GPU reader must not cost us the sample
-            return None
-
-    def _close_gpu(self) -> None:
-        if self._gpu is not None:
-            with contextlib.suppress(Exception):
-                self._gpu.close()
+def _event(
+    kind: EventKind,
+    *,
+    pid: int,
+    starttime: int,
+    name: str,
+    t: float,
+    ts: str,
+    resource: Resource | None = None,
+    spike: Spike | None = None,
+    creep: Creep | None = None,
+    reason: str | None = None,
+) -> TopEvent:
+    """One event; a spike carries its reading and baseline, a creep the growth of its floor."""
+    value = baseline = slope_per_hour = r2 = None
+    if spike is not None:
+        value, baseline = round(spike.value, 2), round(spike.baseline, 2)
+    if creep is not None:
+        value, baseline = creep.last, creep.first
+        slope_per_hour, r2 = round(creep.slope_per_hour, 1), round(creep.r2, 3)
+    return TopEvent(
+        kind=kind,
+        t=round(t, 3),
+        ts=ts,
+        pid=pid,
+        starttime=starttime,
+        name=name,
+        resource=resource,
+        value=value,
+        baseline=baseline,
+        slope_per_hour=slope_per_hour,
+        r2=r2,
+        reason=reason,
+    )
