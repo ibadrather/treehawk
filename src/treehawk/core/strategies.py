@@ -68,8 +68,9 @@ class GroupExpansion:
         return set(self._accepted)
 
     def expand(self, context: ExpansionContext) -> Mapping[int, str]:
+        found: dict[int, str] = {}
         if context.groups is None:
-            return {}
+            return found
         if context.pinned_group:
             self._accepted.add(context.pinned_group)
 
@@ -81,7 +82,6 @@ class GroupExpansion:
                 else:
                     self._rejected.add(path)
 
-        found: dict[int, str] = {}
         for path in list(self._accepted):
             for pid in context.groups.pids_in(path) or ():
                 if pid not in context.tracked_pids and pid != context.self_pid:
@@ -113,6 +113,7 @@ class SessionExpansion:
         return "session"
 
     def expand(self, context: ExpansionContext) -> Mapping[int, str]:
+        found: dict[int, str] = {}
         for pid in context.tracked_pids:
             info = context.procs.get(pid)
             if info is None or info.sid == context.self_sid or info.sid <= 0:
@@ -121,8 +122,7 @@ class SessionExpansion:
                 self._accepted.add(info.sid)
 
         if not self._accepted:
-            return {}
-        found: dict[int, str] = {}
+            return found
         for pid, info in context.procs.items():
             if info.sid in self._accepted and pid not in context.tracked_pids and pid != context.self_pid:
                 found[pid] = self.name
@@ -162,12 +162,12 @@ class OrphanExpansion:
         return "orphan"
 
     def expand(self, context: ExpansionContext) -> Mapping[int, str]:
+        found: dict[int, str] = {}
         self._groups |= {group for group in (context.group_of(pid) for pid in context.tracked_pids) if group}
         if not context.new_pids or not self._groups:
-            return {}
+            return found
         tracked_groups = self._groups
 
-        found: dict[int, str] = {}
         for pid in context.new_pids:
             info = context.procs.get(pid)
             if info is None or pid in context.tracked_pids or pid == context.self_pid:

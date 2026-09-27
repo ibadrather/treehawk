@@ -37,6 +37,8 @@ select = [
     "SIM",    # Suggest simpler code
     "RET",    # Remove unnecessary return statements
     "ANN",    # Require function type annotations
+    "PGH",    # No blanket `type: ignore` / `noqa`
+    "TID",    # Banned APIs (see flake8-tidy-imports below)
     "single-line-implicit-string-concatenation", # flake8-implicit-str-concat.
 
 
@@ -88,7 +90,6 @@ select = [
 # ------------------------------------------------------------
 ignore = [
     "error-suffix-on-exception-name",   # Custom exceptions don't need “Error” suffix
-    "forward-annotation-syntax-error",   # Forward annotations allowed for jaxtyping
     "raise-vanilla-args", # Long exception messages allowed
     "raw-string-in-exception",  # Allow f-strings in raised exceptions
     "f-string-in-exception",  # Same for multiple f-string cases
@@ -97,6 +98,16 @@ ignore = [
 
 flake8-annotations.mypy-init-return = true
 flake8-annotations.suppress-none-returning = true
+
+# Typing escape hatches. ty cannot forbid these itself, so ruff does: fix the
+# types instead of opting out of them (see AGENTS.md).
+[lint.flake8-tidy-imports.banned-api]
+"typing.Any".msg = "Do not write `Any`; use `object` and narrow it."
+"typing_extensions.Any".msg = "Do not write `Any`; use `object` and narrow it."
+"typing.cast".msg = "Do not `cast()` past an error; narrow the type."
+"typing_extensions.cast".msg = "Do not `cast()` past an error; narrow the type."
+"typing.no_type_check".msg = "Do not switch off type checking."
+"typing_extensions.no_type_check".msg = "Do not switch off type checking."
 
 
 # ============================================================

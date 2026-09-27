@@ -20,7 +20,7 @@ from typing import Final, TypedDict
 from treehawk.core.aggregate import cpu_seconds_of, peak_rss_of
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
-from treehawk.core.values import as_float, as_int, as_records, peak_of
+from treehawk.core.values import as_float, as_int, as_record, as_records, peak_of
 
 __all__ = ["Report", "ReportError", "build_report", "log_files", "peek_header", "read_records"]
 
@@ -75,10 +75,10 @@ def _read_file(path: pathlib.Path) -> Iterator[Record]:
             if not line:
                 continue
             try:
-                record = json.loads(line)
+                record = as_record(json.loads(line))
             except json.JSONDecodeError:
                 continue  # a truncated final line from a killed run
-            if isinstance(record, dict):
+            if record is not None:
                 yield record
     except OSError as exc:
         raise ReportError(f"cannot read {path}: {exc}") from exc

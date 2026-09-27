@@ -1,0 +1,21 @@
+# ty - the type checker. Every rule is an error, including the ones ty leaves
+# off by default (the unsound-* family keeps `Any` from leaking through a typed
+# boundary). Never lower a rule, add per-file overrides or silence an error with
+# a suppression comment: fix the code instead. See AGENTS.md.
+
+[src]
+include = ["src", "tests", ".github/scripts"]
+
+[environment]
+# tests/ holds conftest.py and helpers imported by name.
+extra-paths = ["tests"]
+
+[analysis]
+# Only `ty: ignore` would count, and that is not allowed either.
+respect-type-ignore-comments = false
+
+[rules]
+all = "error"
+
+[terminal]
+error-on-warning = true

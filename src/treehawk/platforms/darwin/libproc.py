@@ -12,7 +12,7 @@ structure layouts in :mod:`treehawk.platforms.darwin.constants` are the
 contract, checked by ``test_the_documented_layouts_match_the_kernel_structs``.
 
 The library is bound inside :meth:`LibProc.__init__`, never at import time, for
-two reasons: the module then imports cleanly on any platform, and mypy
+two reasons: the module then imports cleanly on any platform, and ty
 therefore checks it on the Linux CI runner too - which it would skip entirely
 if the code sat behind a ``sys.platform`` guard.
 

@@ -67,7 +67,7 @@ Metrics come from the kernel directly (`/proc` and cgroup v2 on Linux,
 
 ```bash
 uv sync
-uv run ruff format && uv run ruff check && uv run mypy && uv run pytest
+uv run ruff format && uv run ruff check && make typecheck && uv run pytest
 ```
 
 Read [`AGENTS.md`](AGENTS.md) before changing anything, and

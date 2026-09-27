@@ -86,7 +86,7 @@ def _add_footer(figure: Figure, *, number: int, palette: Palette) -> None:
 
 def _describe_pdf(pdf: PdfPages, *, series: RunSeries, pages: int) -> None:
     """Fill in the document metadata a reader sees in their PDF viewer."""
-    info = pdf.infodict()  # type: ignore[no-untyped-call]
+    info = pdf.infodict()
     info["Title"] = f"treehawk report - {series.target}"
     info["Author"] = f"treehawk {__version__}"
     info["Subject"] = f"CPU and memory of {len(series.tracks)} process(es) over {series.duration:.1f}s, {pages} pages"

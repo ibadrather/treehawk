@@ -16,7 +16,6 @@ stepped over rather than raised.
 from __future__ import annotations
 
 import contextlib
-import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -25,9 +24,10 @@ from typing import IO
 from treehawk.core.constants import CORE
 from treehawk.core.interfaces import Sink
 
-_BREAK = re.compile(rb"\r\n|\r|\n")
-"""What ends a line. ``\\r`` counts: a progress bar that only ever writes
-carriage returns must not sit in the buffer until the run is over."""
+_BREAK = b"\n"
+"""What ends a line, once ``\\r\\n`` and a lone ``\\r`` are folded into it.
+``\\r`` counts: a progress bar that only ever writes carriage returns must not
+sit in the buffer until the run is over."""
 
 
 def split_lines(buffer: bytes, *, final: bool = False) -> tuple[list[bytes], bytes]:
@@ -38,15 +38,20 @@ def split_lines(buffer: bytes, *, final: bool = False) -> tuple[list[bytes], byt
     one ``\\r\\n`` into a line break and a spurious empty line.
     """
     if final:
-        lines = _BREAK.split(buffer)
+        lines = _split(buffer)
         if lines and not lines[-1]:
             lines.pop()  # the buffer ended on a line break, not a bare line
         return lines, b""
     held = b""
     if buffer.endswith(b"\r"):
         buffer, held = buffer[:-1], b"\r"
-    lines = _BREAK.split(buffer)
+    lines = _split(buffer)
     return lines, lines.pop() + held
+
+
+def _split(buffer: bytes) -> list[bytes]:
+    # ``\r\n`` is folded first so it stays one break rather than two.
+    return buffer.replace(b"\r\n", _BREAK).replace(b"\r", _BREAK).split(_BREAK)
 
 
 class OutputReader:

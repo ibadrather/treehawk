@@ -2,26 +2,36 @@
 
 Rules for anyone - human or AI agent - changing this repository.
 
-## Type checking: mypy, at maximum strictness
+## Type checking: ty
 
-mypy is the type checker. Its settings live in `[tool.mypy]` in `pyproject.toml`
-and are as strict as mypy allows: `strict`, every optional error code, and every
-`disallow_any_*` flag except `disallow_any_expr`. It checks `src/`, `tests/` and
-`.github/scripts/`.
+ty (from the makers of uv and ruff) is the type checker. Its settings live in
+`ty.toml` - not `pyproject.toml` - and are as strict as ty allows: every rule is
+an error, including the `unsound-*` rules that stop an `Any` from leaking
+through a typed boundary. It checks `src/`, `tests/` and `.github/scripts/`.
 
-**Never overwrite or ignore mypy rules.** In particular:
+**Never loosen or bypass the type checker.** In particular:
 
-- Do not loosen, remove or override any `[tool.mypy]` setting, and do not add
-  per-module overrides or exclusions.
-- Do not add `# type: ignore` (with or without an error code), `# mypy:` file
-  comments, or `@no_type_check`.
-- Do not write `Any`, and do not use `cast()` to get past an error.
+- Do not lower, remove or override any rule in `ty.toml`, and do not add
+  per-file overrides or exclusions.
+- Do not add `# ty: ignore` or `# type: ignore` comments (ty is set not to
+  honour the latter anyway), or `@no_type_check`.
+- Do not write `Any`, and do not use `cast()` to get past an error. ruff bans
+  all three (`banned-api` in `ruff.toml`).
 
-When mypy reports an error, fix the code: annotate it, narrow the type, or
+When ty reports an error, fix the code: annotate it, narrow the type, or
 restructure it. Values read from a log record are `object` until narrowed - use
-the helpers in `src/treehawk/core/values.py`. Every function, tests included, is
-fully annotated, and a method that overrides another carries `@override` (import
-it from `treehawk.core.compat`).
+the helpers in `src/treehawk/core/values.py` (`as_record` turns parsed JSON into
+a `Record`). Every function, tests included, is fully annotated, and a method
+that overrides another carries `@override` (import it from
+`treehawk.core.compat`).
+
+If a suppression is ever truly unavoidable - a wrong third-party stub, say -
+use `# ty: ignore[<rule>]` with the rule named, on that one line, and a comment
+saying why. ty rejects blanket and unused ones.
+
+ty assumes the oldest Python in `requires-python` unless told otherwise, so run
+it through `make typecheck`, which passes the venv's version. CI passes each
+version in its matrix.
 
 ## Lint and format: ruff
 
@@ -33,7 +43,7 @@ Configuration is in `ruff.toml`. Code must pass `ruff format --check` and
 ```bash
 uv run ruff format
 uv run ruff check
-uv run mypy
+make typecheck
 uv run pytest
 ```
 
