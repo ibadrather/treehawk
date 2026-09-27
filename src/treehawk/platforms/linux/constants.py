@@ -13,6 +13,9 @@ class LinuxConstants:
     proc_root: str = "/proc"
     cgroup_root: str = "/sys/fs/cgroup"
 
+    boot_id_path: str = "sys/kernel/random/boot_id"
+    """Relative to the proc root: a UUID the kernel draws fresh at every boot."""
+
     cmdline_cache_limit: int = 4096
     """Command lines cached before the cache is cleared and refilled."""
 

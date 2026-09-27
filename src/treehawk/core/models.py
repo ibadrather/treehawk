@@ -90,6 +90,42 @@ class HostInfo:
     mem_total_bytes: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class SystemSample:
+    """Machine-wide counters at one instant, for the host line of ``top``.
+
+    CPU is a pair of monotonically rising tick counters, so a rate needs two
+    readings; memory is a level and stands on its own.
+    """
+
+    cpu_busy_ticks: int
+    cpu_total_ticks: int
+    mem_total_bytes: int | None = None
+    mem_available_bytes: int | None = None
+    swap_total_bytes: int | None = None
+    swap_free_bytes: int | None = None
+
+    @property
+    def mem_used_bytes(self) -> int | None:
+        if self.mem_total_bytes is None or self.mem_available_bytes is None:
+            return None
+        return self.mem_total_bytes - self.mem_available_bytes
+
+    @property
+    def swap_used_bytes(self) -> int | None:
+        if self.swap_total_bytes is None or self.swap_free_bytes is None:
+            return None
+        return self.swap_total_bytes - self.swap_free_bytes
+
+
+@dataclass(frozen=True, slots=True)
+class GpuUsage:
+    """One process' share of the GPUs, as a GPU backend reports it."""
+
+    memory_bytes: int | None = None
+    percent: float | None = None
+
+
 @dataclass(slots=True)
 class Snapshot:
     """One fully computed sample: the aggregate plus its per-process detail."""

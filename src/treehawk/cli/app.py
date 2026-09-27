@@ -20,6 +20,8 @@ from __future__ import annotations
 import functools
 import json
 import signal
+import sys
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -43,7 +45,12 @@ from treehawk.cli.options import (
     Output,
     Quiet,
 )
-from treehawk.cli.wiring import build_session
+from treehawk.cli.parsing import parse_interval, parse_moment, parse_size, parse_span
+from treehawk.cli.service import install as install_service
+from treehawk.cli.service import status as service_status
+from treehawk.cli.service import uninstall as uninstall_service
+from treehawk.cli.service import unit_text
+from treehawk.cli.wiring import build_session, build_top_monitor
 from treehawk.core.capture import OutputReader
 from treehawk.core.config import (
     DEFAULT_EXPANSIONS,
@@ -53,6 +60,7 @@ from treehawk.core.config import (
     LogFormat,
     MemoryDetail,
     MissingWorkload,
+    TopConfig,
     WatchConfig,
     WorkloadOutput,
 )
@@ -62,10 +70,17 @@ from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
 from treehawk.platforms.models import Platform
-from treehawk.report import Report, build_report
+from treehawk.report import Report, build_report, peek_header
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
 from treehawk.sinks.constants import SINKS
+from treehawk.sinks.segmented import SegmentedJsonlSink
+from treehawk.sinks.top_screen import TopLiveSink, build_top_screen_sink
+from treehawk.top.constants import TOP
+from treehawk.top.history import history_record, load_history
+from treehawk.top.monitor import TopMonitor
+from treehawk.top.records import MODE as TOP_MODE
 from treehawk.ui.theme import PALETTE
+from treehawk.ui.top_views import render_top_report
 from treehawk.ui.views import render_header_facts, render_summary
 
 app = typer.Typer(
@@ -75,6 +90,13 @@ app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
+
+service_app = typer.Typer(
+    help="Run [bold]treehawk top[/bold] as a systemd service, from boot to shutdown (Linux, as root).",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+app.add_typer(service_app, name="service")
 
 stderr_console = Console(stderr=True)
 stdout_console = Console()
@@ -287,14 +309,35 @@ def run(
         raise typer.Exit(code)
 
 
+Since = Annotated[
+    str | None,
+    typer.Option("--since", help="For a top log: start here. A time ('2026-09-27 14:00') or a span ago ('2h')."),
+]
+Until = Annotated[
+    str | None,
+    typer.Option("--until", help="For a top log: stop here. A time, or a span ago."),
+]
+
+
 @app.command()
 @_guard
 def report(
-    path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
+    path: Annotated[Path, typer.Argument(help="A log written by a previous run, or a top log directory.")],
     *,
     as_json: Annotated[bool, typer.Option("--json", help="Print the summary as JSON.")] = False,
+    since: Since = None,
+    until: Until = None,
 ) -> None:
-    """Summarise a finished run."""
+    """Summarise a finished run, or what a machine did under [bold]top[/bold]."""
+    if _is_top_log(path):
+        start, end = _window(since=since, until=until)
+        history = load_history(str(path), since=start, until=end)
+        if as_json:
+            stdout_console.print_json(json.dumps(history_record(history), default=str))
+            return
+        stdout_console.print(render_top_report(history=history, palette=PALETTE, title=path.name))
+        return
+    _no_window(since=since, until=until)
     data: Report = build_report(str(path))
     if as_json:
         stdout_console.print_json(json.dumps(data, default=str))
@@ -307,18 +350,194 @@ def report(
 @app.command()
 @_guard
 def pdf(
-    path: Annotated[Path, typer.Argument(help="A log written by a previous run.")],
+    path: Annotated[Path, typer.Argument(help="A log written by a previous run, or a top log directory.")],
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Where to write the PDF. Default: alongside the log."),
     ] = None,
+    since: Since = None,
+    until: Until = None,
 ) -> None:
-    """Render a finished run as a multi-page PDF report."""
-    from treehawk.charts.report import write_pdf_report
+    """Render a finished run, or a [bold]top[/bold] log, as a multi-page PDF report."""
+    if _is_top_log(path):
+        from treehawk.charts.report import write_top_pdf_report
 
-    destination = output or path.with_suffix(".pdf")
-    pages = write_pdf_report(log_path=str(path), destination=str(destination))
+        destination = output or (path.with_suffix(".pdf") if path.is_file() else path.parent / f"{path.name}.pdf")
+        start, end = _window(since=since, until=until)
+        pages = write_top_pdf_report(log_path=str(path), destination=str(destination), since=start, until=end)
+    else:
+        from treehawk.charts.report import write_pdf_report
+
+        _no_window(since=since, until=until)
+        destination = output or path.with_suffix(".pdf")
+        pages = write_pdf_report(log_path=str(path), destination=str(destination))
     stdout_console.print(f"wrote [bold]{destination}[/bold] ({pages} pages)")
+
+
+# --------------------------------------------------------------------------
+# top and its service
+# --------------------------------------------------------------------------
+
+TopN = Annotated[
+    int,
+    typer.Option("--top", "-n", min=1, help="How many processes to follow, by cpu and by memory each."),
+]
+TopInterval = Annotated[
+    str,
+    typer.Option(
+        "--interval",
+        "-i",
+        metavar="SECONDS|auto",
+        help="Seconds between samples, or 'auto' to sample as often as the machine allows.",
+    ),
+]
+Keep = Annotated[
+    str,
+    typer.Option(
+        "--keep",
+        metavar="SIZE",
+        rich_help_panel=CLI.top_panel,
+        help="Disk the log directory may use; the oldest files go first. 500M, 2G, ...",
+    ),
+]
+Segment = Annotated[
+    str,
+    typer.Option(
+        "--segment",
+        metavar="SPAN",
+        rich_help_panel=CLI.top_panel,
+        help="Time one log file covers before the next is started and this one compressed. 30m, 1h, 1d, ...",
+    ),
+]
+
+
+@app.command()
+@_guard
+def top(
+    ctx: typer.Context,
+    *,
+    top_n: TopN = TOP.default_top_n,
+    interval: TopInterval = str(TOP.default_interval),
+    directory: Annotated[
+        Path | None,
+        typer.Option(
+            "--dir",
+            metavar="PATH",
+            help=f"Where the logs go, one directory per boot. Default: ./{CLI.default_top_dir}",
+        ),
+    ] = None,
+    keep: Keep = "1G",
+    segment: Segment = "1h",
+    quiet: Quiet = False,
+    no_pss: NoPss = False,
+    duration: Duration = None,
+) -> None:
+    """Follow the top processes of the whole machine until stopped.
+
+    Every process is looked at on every sample; the top N by cpu and the top
+    N by memory are logged in full. A jump far above a process' own baseline
+    is logged as a [bold]spike[/bold], and memory that keeps rising for half
+    an hour as a [bold]creep[/bold] - a leak suspect.
+
+    [dim]treehawk top
+    treehawk top --interval auto --top 20
+    sudo treehawk service install[/dim]
+    """
+    runtime = _runtime(ctx)
+    config = _top_config(interval=interval, top_n=top_n, segment=segment, no_pss=no_pss, duration=duration)
+    platform = runtime.platform()
+    log_dir = str(directory or CLI.default_top_dir)
+    log = SegmentedJsonlSink(log_dir, keep_bytes=parse_size(keep))
+    sinks = CompositeSink([log])
+    screen = None if quiet else build_top_screen_sink(console=stderr_console)
+    if screen is not None:
+        sinks.add_sink(screen)
+    monitor = build_top_monitor(
+        platform=platform,
+        config=config,
+        sink=sinks,
+        clock=runtime.clock,
+        notes=tuple(platform.notes),
+    )
+    _install_top_signal_handlers(monitor)
+    if not quiet:
+        stderr_console.print(f"[dim]logging to[/dim] {log_dir}")
+    try:
+        monitor.run()
+    finally:
+        if isinstance(screen, TopLiveSink):
+            screen.stop()
+        log.wait()
+    if not quiet:
+        stderr_console.print(f"[dim]read it back with[/dim] treehawk report {log_dir}")
+    _report_errors(sinks.errors + log.errors)
+
+
+@service_app.command("install")
+@_guard
+def service_install(
+    ctx: typer.Context,
+    *,
+    top_n: TopN = TOP.default_top_n,
+    interval: TopInterval = str(TOP.default_interval),
+    directory: Annotated[
+        Path,
+        typer.Option("--dir", metavar="PATH", help="Where the service logs."),
+    ] = Path(CLI.service_state_dir),
+    keep: Keep = "1G",
+    segment: Segment = "1h",
+    no_pss: NoPss = False,
+) -> None:
+    """Install and start the service; it starts again at every boot.
+
+    [dim]sudo "$(command -v treehawk)" service install --interval auto[/dim]
+    """
+    runtime = _runtime(ctx)
+    _top_config(interval=interval, top_n=top_n, segment=segment, no_pss=no_pss, duration=None)  # fail now, not at boot
+    parse_size(keep)
+    _require_root(runtime)
+    command = [
+        sys.executable,
+        "-m",
+        "treehawk",
+        "top",
+        "--dir",
+        str(directory.absolute()),
+        "--top",
+        str(top_n),
+        "--interval",
+        interval,
+        "--keep",
+        keep,
+        "--segment",
+        segment,
+    ]
+    if no_pss:
+        command.append("--no-pss")
+    text = unit_text(command=command, log_dir=str(directory.absolute()))
+    path = install_service(text=text, unit_dir=runtime.unit_dir, manager=runtime.systemctl)
+    stdout_console.print(f"installed [bold]{path}[/bold]; logging to {directory.absolute()}")
+    stdout_console.print(f"[dim]follow it with[/dim] journalctl -u {CLI.service_name} -f")
+    stdout_console.print(f"[dim]read it back with[/dim] treehawk report {directory.absolute()}")
+
+
+@service_app.command("uninstall")
+@_guard
+def service_uninstall(ctx: typer.Context) -> None:
+    """Stop the service and remove it. The logs it wrote are kept."""
+    runtime = _runtime(ctx)
+    _require_root(runtime)
+    path = uninstall_service(unit_dir=runtime.unit_dir, manager=runtime.systemctl)
+    stdout_console.print(f"removed [bold]{path}[/bold]")
+
+
+@service_app.command("status")
+@_guard
+def service_status_command(ctx: typer.Context) -> None:
+    """Show whether the service is running."""
+    code = service_status(manager=_runtime(ctx).systemctl)
+    if code:
+        raise typer.Exit(code)
 
 
 # --------------------------------------------------------------------------
@@ -329,6 +548,51 @@ def pdf(
 def _runtime(ctx: typer.Context) -> Runtime:
     """The machine this invocation runs on: the real one, unless a test passed its own."""
     return ctx.obj if isinstance(ctx.obj, Runtime) else Runtime()
+
+
+def _is_top_log(path: Path) -> bool:
+    return peek_header(str(path)).get("mode") == TOP_MODE
+
+
+def _window(*, since: str | None, until: str | None) -> tuple[float | None, float | None]:
+    """``--since`` and ``--until`` as Unix times."""
+    now = time.time()
+    return (
+        parse_moment(since, now=now) if since is not None else None,
+        parse_moment(until, now=now) if until is not None else None,
+    )
+
+
+def _no_window(*, since: str | None, until: str | None) -> None:
+    if since is not None or until is not None:
+        raise ConfigError("--since and --until apply to top logs only")
+
+
+def _top_config(*, interval: str, top_n: int, segment: str, no_pss: bool, duration: float | None) -> TopConfig:
+    pacing, seconds = parse_interval(interval)
+    config = TopConfig(
+        top_n=top_n,
+        interval=seconds if seconds is not None else TOP.default_interval,
+        pacing=pacing,
+        memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
+        duration=duration,
+        segment_seconds=parse_span(segment),
+    )
+    config.validate()
+    return config
+
+
+def _require_root(runtime: Runtime) -> None:
+    if not runtime.is_root():
+        raise ConfigError('installing a system service needs root: sudo "$(command -v treehawk)" service ...')
+
+
+def _install_top_signal_handlers(monitor: TopMonitor) -> None:
+    def handler(_signum: int, _frame: FrameType | None) -> None:
+        monitor.request_stop()
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handler)
 
 
 def _select_matcher(*, target: str | None, pid: int | None, exact: str | None, regex: str | None) -> ProcessMatcher:

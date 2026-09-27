@@ -86,6 +86,47 @@ def parse_meminfo_total(text: str) -> int | None:
     return None
 
 
+def parse_meminfo(text: str) -> dict[str, int]:
+    """Pull the machine-wide memory figures ``top`` reports out of ``/proc/meminfo``."""
+    wanted = {
+        "MemTotal:": "mem_total_bytes",
+        "MemAvailable:": "mem_available_bytes",
+        "SwapTotal:": "swap_total_bytes",
+        "SwapFree:": "swap_free_bytes",
+    }
+    out: dict[str, int] = {}
+    for line in text.splitlines():
+        name, _, _ = line.partition(":")
+        key = wanted.get(name + ":")
+        if key is not None:
+            try:
+                out[key] = _bytes_from_kb(line)
+            except (IndexError, ValueError):
+                continue
+    return out
+
+
+def parse_cpu_totals(text: str) -> tuple[int, int] | None:
+    """``(busy, total)`` clock ticks from the aggregate ``cpu`` line of ``/proc/stat``.
+
+    Idle and iowait count as not busy. ``guest`` time is already included in
+    ``user``, so only the first eight columns are summed.
+    """
+    for line in text.splitlines():
+        if not line.startswith("cpu "):
+            continue
+        try:
+            ticks = [int(value) for value in line.split()[1:9]]
+        except ValueError:
+            return None
+        if len(ticks) < 4:
+            return None
+        total = sum(ticks)
+        idle = ticks[3] + (ticks[4] if len(ticks) > 4 else 0)
+        return total - idle, total
+    return None
+
+
 def _bytes_from_kb(line: str) -> int:
     """``VmRSS:\t2048 kB`` -> bytes."""
     return int(line.split()[1]) * 1024

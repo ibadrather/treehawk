@@ -101,6 +101,17 @@ class LogFormat(StrEnum):
     CSV = "csv"
 
 
+class Pacing(StrEnum):
+    """How ``top`` chooses the time between samples."""
+
+    FIXED = "fixed"
+    """Every ``interval`` seconds, as ``watch`` and ``run`` do."""
+
+    AUTO = "auto"
+    """As often as the machine allows: the interval follows what a sample
+    costs, so a busy process table is sampled less often than a quiet one."""
+
+
 DEFAULT_EXPANSIONS: tuple[ExpansionName, ...] = (
     ExpansionName.TREE,
     ExpansionName.CGROUP,
@@ -133,3 +144,31 @@ class WatchConfig:
             raise ConfigError("max-samples must be greater than 0")
         if self.top_n < 0:
             raise ConfigError("top must not be negative")
+
+
+@dataclass(slots=True)
+class TopConfig:
+    """Everything ``top`` needs to know about how to watch the whole machine."""
+
+    top_n: int = 10
+    interval: float = 0.5
+    """Seconds between samples; with :attr:`Pacing.AUTO`, the starting point."""
+    pacing: Pacing = Pacing.FIXED
+    memory: MemoryDetail = MemoryDetail.PROPORTIONAL
+    duration: float | None = None
+    max_samples: int | None = None
+    segment_seconds: float | None = 3600.0
+    """How long one log file covers before the next one is started. None means
+    one file for the whole run."""
+
+    def validate(self) -> None:
+        if self.top_n <= 0:
+            raise ConfigError("top must be greater than 0")
+        if self.interval <= 0:
+            raise ConfigError("interval must be greater than 0")
+        if self.duration is not None and self.duration <= 0:
+            raise ConfigError("duration must be greater than 0")
+        if self.max_samples is not None and self.max_samples <= 0:
+            raise ConfigError("max-samples must be greater than 0")
+        if self.segment_seconds is not None and self.segment_seconds <= 0:
+            raise ConfigError("segment length must be greater than 0")

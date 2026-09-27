@@ -5,10 +5,12 @@ from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 from treehawk.platforms.linux.host import LinuxHostInfoSource
 from treehawk.platforms.linux.launcher import ScopeLauncher
 from treehawk.platforms.linux.source import LinuxProcessSource
+from treehawk.platforms.linux.system import LinuxSystemSource
 
 __all__ = [
     "CgroupV2Source",
     "LinuxHostInfoSource",
     "LinuxProcessSource",
+    "LinuxSystemSource",
     "ScopeLauncher",
 ]

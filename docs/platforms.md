@@ -28,6 +28,8 @@ good on macOS.
 | fair memory measure (`memory_kind`) | `pss` | `phys_footprint` |
 | per-process CPU resolution | `CLK_TCK`, usually 10 ms | nanoseconds |
 | other users' processes | visible, without `pss_bytes` | not visible |
+| `top`: machine-wide cpu and memory line | yes | **no**, processes only |
+| `top` as a service | yes, systemd | **no** |
 
 Anything treehawk cannot measure on your machine is stated in the log header's
 `notes` and printed when the run starts, rather than quietly omitted.

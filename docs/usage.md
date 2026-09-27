@@ -72,6 +72,12 @@ is drawn while it runs and no `.out` file is written. `--quiet` has the same
 effect on the command's output, since it draws no dashboard to protect, and so
 does redirecting treehawk's own output to a pipe or a file.
 
+## top: the whole machine
+
+`treehawk top` follows the top processes of the whole machine rather than one
+workload, and logs spikes and leak suspects. It can run as a systemd service
+from boot to shutdown (**Linux only**). See [Whole machine](top.md).
+
 ## Options
 
 Shared by `watch` and `run`:

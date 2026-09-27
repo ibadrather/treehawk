@@ -34,6 +34,8 @@ from treehawk.charts.pages import (
     SamplingPage,
 )
 from treehawk.charts.series import load_series
+from treehawk.charts.top_pages import TOP_PAGES, TopPage
+from treehawk.charts.top_series import load_top_series
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import PRINT
 
@@ -89,3 +91,30 @@ def _describe_pdf(pdf: PdfPages, *, series: RunSeries, pages: int) -> None:
     info["Author"] = f"treehawk {__version__}"
     info["Subject"] = f"CPU and memory of {len(series.tracks)} process(es) over {series.duration:.1f}s, {pages} pages"
     info["CreationDate"] = datetime.now().astimezone()
+
+
+def write_top_pdf_report(
+    *,
+    log_path: str,
+    destination: str,
+    since: float | None = None,
+    until: float | None = None,
+    pages: Sequence[TopPage] = TOP_PAGES,
+    palette: Palette = PRINT,
+) -> int:
+    """Render a ``top`` log (a file or a directory) as a PDF. Returns the pages written."""
+    series = load_top_series(log_path, since=since, until=until)
+    written = 0
+    metadata = {"Title": "treehawk top report", "Author": f"treehawk {__version__}"}
+    with plt.rc_context(style.rc_params(palette)), PdfPages(destination, metadata=metadata) as pdf:
+        for page in pages:
+            figure = plt.figure(figsize=CHARTS.page_size)
+            try:
+                if not page.draw(figure, series=series, palette=palette):
+                    continue
+                written += 1
+                _add_footer(figure, number=written, palette=palette)
+                pdf.savefig(figure)
+            finally:
+                plt.close(figure)
+    return written

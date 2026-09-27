@@ -19,17 +19,17 @@ from __future__ import annotations
 
 import pathlib
 import signal
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import IO
 
 import pytest
 
 from treehawk.core.compat import override
-from treehawk.core.config import WorkloadOutput
+from treehawk.core.config import MemoryDetail, WorkloadOutput
 from treehawk.core.errors import LaunchFailed
 from treehawk.core.interfaces import ProcessLauncher, Record
-from treehawk.core.models import HostInfo, LaunchedWorkload
+from treehawk.core.models import HostInfo, Identity, LaunchedWorkload, ProcInfo, ProcSample, SystemSample
 from treehawk.platforms.darwin.models import TaskInfo, Timebase
 from treehawk.platforms.linux.cgroup2 import CgroupV2Source
 from treehawk.platforms.linux.source import LinuxProcessSource
@@ -513,3 +513,142 @@ def fake_platform(
         launcher=launcher,
         direct_launcher=direct_launcher,
     )
+
+
+# -- a whole machine, for ``top`` ------------------------------------------
+
+
+class FakeProcessSource:
+    """A ``ProcessSource`` over an in-memory process table.
+
+    ``script`` holds one edit per scan, so a test says what the machine does
+    between two samples; once it runs out the table stays as it is.
+    """
+
+    def __init__(self, script: Iterable[Callable[[FakeProcessSource], object]] = ()) -> None:
+        self.procs: dict[int, ProcInfo] = {}
+        self.cmdlines: dict[int, str] = {}
+        self.script = list(script)
+        self.enriched: list[int] = []
+        self.forgotten: list[Identity] = []
+
+    def put(
+        self,
+        pid: int,
+        *,
+        comm: str = "worker",
+        cpu_ticks: int = 0,
+        rss_bytes: int | None = 64 * 1024 * 1024,
+        starttime: int = 1000,
+        state: str = "S",
+        cmdline: str | None = None,
+    ) -> None:
+        self.procs[pid] = ProcInfo(
+            pid=pid,
+            ppid=1,
+            pgid=pid,
+            sid=pid,
+            starttime=starttime,
+            state=state,
+            threads=1,
+            comm=comm,
+            cpu_ticks=cpu_ticks,
+            rss_bytes=rss_bytes,
+        )
+        self.cmdlines[pid] = cmdline if cmdline is not None else f"/usr/bin/{comm} --serve"
+
+    def bump(self, pid: int, *, ticks: int = 0, rss: int = 0) -> None:
+        """Add CPU ticks and resident bytes to a process that already exists."""
+        info = self.procs[pid]
+        self.put(
+            pid,
+            comm=info.comm,
+            cpu_ticks=info.cpu_ticks + ticks,
+            rss_bytes=(info.rss_bytes or 0) + rss,
+            starttime=info.starttime,
+            state=info.state,
+            cmdline=self.cmdlines[pid],
+        )
+
+    def remove(self, pid: int) -> None:
+        self.procs.pop(pid, None)
+
+    # -- the ProcessSource protocol ---------------------------------------
+
+    def scan(self) -> Mapping[int, ProcInfo]:
+        if self.script:
+            self.script.pop(0)(self)
+        return dict(self.procs)
+
+    def read_info(self, pid: int) -> ProcInfo | None:
+        return self.procs.get(pid)
+
+    def read_cmdline(self, pid: int) -> str:
+        return self.cmdlines.get(pid, "")
+
+    def read_group_path(self, pid: int) -> str | None:
+        del pid
+        return None
+
+    def enrich(self, *, info: ProcInfo, memory: MemoryDetail) -> ProcSample:
+        self.enriched.append(info.pid)
+        pss = (info.rss_bytes or 0) // 2 if memory is MemoryDetail.PROPORTIONAL else None
+        return ProcSample(info=info, cmdline=self.cmdlines.get(info.pid, info.comm), pss_bytes=pss, swap_bytes=0)
+
+    def forget(self, identity: Identity) -> None:
+        self.forgotten.append(identity)
+
+
+@dataclass
+class FakeSystemSource:
+    """A ``SystemSource`` whose counters a test moves by hand."""
+
+    busy: int = 0
+    total: int = 0
+    mem_total: int = 8 * 1024**3
+    mem_available: int = 6 * 1024**3
+    boot: str | None = "0123abcd-4567-89ef-0123-456789abcdef"
+    step_busy: int = 25
+    step_total: int = 100
+    """Ticks added on every read, so the host line always has a rate."""
+
+    def read(self) -> SystemSample:
+        self.busy += self.step_busy
+        self.total += self.step_total
+        return SystemSample(
+            cpu_busy_ticks=self.busy,
+            cpu_total_ticks=self.total,
+            mem_total_bytes=self.mem_total,
+            mem_available_bytes=self.mem_available,
+            swap_total_bytes=0,
+            swap_free_bytes=0,
+        )
+
+    def boot_id(self) -> str | None:
+        return self.boot
+
+
+class TranscriptSink(BaseSink):
+    """Keeps every call, in order, for a test that cares about the sequence."""
+
+    def __init__(self) -> None:
+        self.records: list[Record] = []
+        self.opens = 0
+        self.closes = 0
+
+    @override
+    def open(self, header: Record) -> None:
+        self.opens += 1
+        self.records.append(header)
+
+    @override
+    def sample(self, record: Record) -> None:
+        self.records.append(record)
+
+    @override
+    def close(self, summary: Record) -> None:
+        self.closes += 1
+        self.records.append(summary)
+
+    def of(self, kind: str) -> list[Record]:
+        return [record for record in self.records if record.get("type") == kind]

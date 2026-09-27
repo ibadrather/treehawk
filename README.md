@@ -98,6 +98,24 @@ The install is editable, so a source change takes effect the next time you run
 `treehawk`. A change to dependencies or entry points in `pyproject.toml` needs
 the command run again. To go back to a release build, rerun the install script.
 
+## Whole machine, as a service (Linux)
+
+`treehawk top` follows the top N processes of the whole machine by CPU and
+by memory. It logs **spikes** (a jump far above a process' own baseline) and
+**leak suspects** (memory that keeps rising). On Linux with systemd it can run
+from boot to shutdown:
+
+```bash
+sudo "$(command -v treehawk)" service install     # --interval auto, --top 20, ...
+treehawk report /var/lib/treehawk --since 2h
+treehawk pdf    /var/lib/treehawk -o machine.pdf
+```
+
+Logs rotate hourly and are compressed, with one directory per boot and a disk
+budget. A unit file to copy by hand is in
+[`packaging/treehawk.service`](packaging/treehawk.service). See
+[Whole machine](https://ibadrather.github.io/treehawk/top/) for details.
+
 ## The problem it solves
 
 Monitoring "a process and its children" by walking parent-child links works
@@ -271,6 +289,8 @@ you — so `run` is exact on Linux and merely very good on macOS.
 | fair memory measure (`memory_kind`) | `pss` | `phys_footprint` |
 | per-process CPU resolution | `CLK_TCK`, usually 10 ms | nanoseconds |
 | other users' processes | visible, without `pss` | not visible |
+| `top`: machine-wide cpu and memory line | yes | **no**, processes only |
+| `top` as a service | yes, systemd | **no** |
 
 Anything treehawk cannot measure on your machine is stated in the log header's
 `notes` and shown on screen when the run starts, rather than silently omitted.

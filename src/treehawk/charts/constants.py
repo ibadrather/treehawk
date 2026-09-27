@@ -36,5 +36,12 @@ class ChartConstants:
     ranking_rows: int = 10
     """Processes in each league table on the "biggest consumers" page."""
 
+    top_points: int = 2000
+    """Time buckets a ``top`` chart is reduced to, however long the log."""
+
+    top_gap_buckets: float = 3.0
+    """A hole this many buckets wide in a ``top`` series is drawn as a break
+    - the machine was off, or treehawk was - rather than joined up."""
+
 
 CHARTS: Final = ChartConstants()

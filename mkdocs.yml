@@ -48,6 +48,7 @@ exclude_docs: |
 nav:
   - Introduction: index.md
   - Usage: usage.md
+  - Whole machine (Linux service): top.md
   - How it works: how-it-works.md
   - Output: output.md
   - Platforms: platforms.md

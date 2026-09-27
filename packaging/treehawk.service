@@ -1,0 +1,22 @@
+[Unit]
+Description=treehawk: track the top processes on this machine
+Documentation=https://ibadrather.github.io/treehawk/
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/treehawk top --dir /var/lib/treehawk
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Nice=10
+IOSchedulingClass=idle
+StateDirectory=treehawk
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
