@@ -1,3 +1,13 @@
+---
+title: Develop treehawk
+description: >-
+  Build, test and extend treehawk, the open-source Python process CPU and memory monitor: checks, project layout, and where to add metrics like GPU.
+keywords:
+  - python process monitor
+  - open source resource monitor
+  - track gpu usage
+---
+
 # Development
 
 ```bash

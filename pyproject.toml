@@ -1,13 +1,34 @@
 [project]
 name = "treehawk"
-version = "0.8.0"
-description = "Log CPU and RAM usage of a process and every process it spawns, detached or not."
+version = "0.8.1"
+description = "Track CPU and RAM usage of a process and every process it spawns, detached or not. A resource usage monitor for Linux and macOS."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ibad Rather", email = "ibad.rather.ir@gmail.com" }]
 requires-python = ">=3.10"
-keywords = ["monitoring", "cpu", "memory", "process", "cgroup", "procfs", "macos", "libproc"]
+keywords = [
+    "cpu-usage",
+    "memory-usage",
+    "ram-usage",
+    "resource-usage",
+    "resource-monitor",
+    "process-monitor",
+    "system-monitor",
+    "cpu-monitor",
+    "memory-monitor",
+    "memory-leak",
+    "monitoring",
+    "cpu",
+    "memory",
+    "ram",
+    "process",
+    "linux",
+    "macos",
+    "cgroup",
+    "procfs",
+    "libproc",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -33,7 +54,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ibadrather/treehawk"
+Homepage = "https://ibadrather.github.io/treehawk/"
+Documentation = "https://ibadrather.github.io/treehawk/"
 Repository = "https://github.com/ibadrather/treehawk"
 Issues = "https://github.com/ibadrather/treehawk/issues"
 Releases = "https://github.com/ibadrather/treehawk/releases"

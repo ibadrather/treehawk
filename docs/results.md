@@ -1,7 +1,19 @@
+---
+title: CPU and memory usage report in the terminal or PDF
+description: >-
+  Turn a treehawk log into a CPU and memory usage report: a terminal summary, JSON, or a PDF with charts of CPU and RAM usage over time.
+keywords:
+  - cpu usage report pdf
+  - memory usage report
+  - log cpu usage over time
+  - peak memory usage
+  - resource usage charts
+---
+
 # Read the results
 
-Every run leaves a log. `report` summarises it in the terminal, and `pdf` turns
-it into a report. Both work on either kind of log (a `watch`/`run` log or a
+Every run leaves a log of CPU and memory usage over time. `report` summarises it
+in the terminal, and `pdf` turns it into a report with charts. Both work on either kind of log (a `watch`/`run` log or a
 `top` directory) and tell them apart by the log's header. They also work on the
 log of an interrupted run, because the summary is recomputed from the samples
 that were written.
@@ -52,9 +64,9 @@ A workload log becomes eight pages, each answering one question.
 Pages that need per-process detail are left out of an `--aggregate-only` log
 rather than printed blank.
 
-![Overview page](assets/output/pdf-page-1.png)
+![Overview page of the CPU and memory usage PDF report](assets/output/pdf-page-1.png)
 
-![CPU over time page](assets/output/pdf-page-2.png)
+![CPU usage over time page](assets/output/pdf-page-2.png)
 
 ![Process lifetimes page](assets/output/pdf-page-4.png)
 

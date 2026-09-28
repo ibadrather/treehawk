@@ -1,7 +1,18 @@
+---
+title: Install treehawk on Linux and macOS
+description: >-
+  Install treehawk, the CPU and memory usage monitor, on Linux and macOS (including Apple Silicon) with one command. Upgrade and uninstall steps too.
+keywords:
+  - install cpu monitor linux
+  - install memory monitor macos
+  - track cpu usage
+  - track ram usage
+---
+
 # Install
 
-treehawk runs on Linux and macOS, including Apple Silicon, with Python 3.10 or
-newer.
+treehawk, the CPU and RAM usage tracker, runs on Linux and macOS, including
+Apple Silicon, with Python 3.10 or newer.
 
 ```bash
 curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/install.sh | sh
