@@ -1,3 +1,14 @@
+---
+title: How treehawk tracks process CPU and memory
+description: >-
+  How treehawk finds every process in a workload, even daemons that detach, and measures CPU and memory with RSS, PSS and cgroups. Limits included.
+keywords:
+  - monitor detached processes
+  - process memory rss pss
+  - cgroup memory usage
+  - monitor child processes
+---
+
 # How it works
 
 The first four sections cover `watch` and `run`; [Whole-machine
@@ -121,4 +132,5 @@ named again only after growing another 25%.
   treehawk keeps on screen and for the summary is capped.
 - A spike needs 15 s of history for that process, and a leak suspect needs 30
   minutes of steady growth.
-- GPU usage is not collected yet. The `top` log already has a column for it.
+- Tracking GPU usage is planned but not collected yet. The `top` log already
+  has a column for it.

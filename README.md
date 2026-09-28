@@ -19,9 +19,18 @@
   </tr>
 </table>
 
-Log the CPU and RAM a process uses — **and every process it spawns**, including
-children that daemonize and detach themselves. Or follow the busiest processes
-of the whole machine, as a service from boot to shutdown.
+Track the CPU and RAM usage of a process — **and every process it spawns**,
+including children that daemonize and detach themselves. Or follow the busiest
+processes of the whole machine, as a service from boot to shutdown.
+
+treehawk is a free, open-source resource usage monitor for Linux and macOS:
+
+- **Track CPU usage** and **track RAM usage** of any command, script or running
+  process, including its child processes.
+- **Log resource usage over time** and get peak and average memory and CPU.
+- **Find memory leaks** and CPU spikes across the whole machine.
+- **Get a PDF report** with charts of CPU and memory usage.
+- Tracking GPU usage is planned.
 
 **Documentation: <https://ibadrather.github.io/treehawk/>**
 

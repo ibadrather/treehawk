@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{#- Search and social metadata. The title and description come from each
+    page's front matter, falling back to the site's; keywords likewise. -#}
+{% block extrahead %}
+  {%- set seo_title = (page.meta.title ~ " - " ~ config.site_name) if page.meta and page.meta.title else config.site_name -%}
+  {%- set seo_description = page.meta.description if page.meta and page.meta.description else config.site_description -%}
+  {%- set seo_keywords = page.meta.keywords if page.meta and page.meta.keywords else config.extra.keywords -%}
+  {%- set seo_image = config.site_url ~ config.extra.social_image -%}
+  {%- if seo_keywords %}
+  <meta name="keywords" content="{{ seo_keywords if seo_keywords is string else seo_keywords | join(', ') }}">
+  {%- endif %}
+  {%- if config.extra.google_site_verification %}
+  <meta name="google-site-verification" content="{{ config.extra.google_site_verification }}">
+  {%- endif %}
+  {%- if config.extra.bing_site_verification %}
+  <meta name="msvalidate.01" content="{{ config.extra.bing_site_verification }}">
+  {%- endif %}
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="{{ 'website' if page.is_homepage else 'article' }}">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ seo_title }}">
+  <meta property="og:description" content="{{ seo_description }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  <meta property="og:image" content="{{ seo_image }}">
+  <meta property="og:image:alt" content="{{ config.extra.social_image_alt }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ seo_title }}">
+  <meta name="twitter:description" content="{{ seo_description }}">
+  <meta name="twitter:image" content="{{ seo_image }}">
+  {%- if page.is_homepage %}
+  <script type="application/ld+json">
+  {{ {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": config.site_name,
+    "alternateName": "treehawk process monitor",
+    "description": config.site_description,
+    "url": config.site_url,
+    "downloadUrl": config.repo_url ~ "/releases/latest",
+    "codeRepository": config.repo_url,
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "System monitoring",
+    "operatingSystem": "Linux, macOS",
+    "programmingLanguage": "Python",
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true,
+    "keywords": config.extra.keywords | join(", "),
+    "image": seo_image,
+    "author": {"@type": "Person", "name": config.extra.author, "url": "https://github.com/ibadrather"},
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+  } | tojson }}
+  </script>
+  {%- endif %}
+{% endblock %}

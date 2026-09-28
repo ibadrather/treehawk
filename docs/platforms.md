@@ -1,5 +1,12 @@
 ---
-title: Platforms
+title: Monitor CPU and memory on Linux and macOS
+description: >-
+  How treehawk tracks CPU and memory usage on Linux (procfs, cgroups) and macOS including Apple Silicon (libproc), and what differs between them.
+keywords:
+  - monitor cpu usage macos
+  - process memory monitor linux
+  - apple silicon cpu monitor
+  - cgroup memory usage
 ---
 
 # Platforms

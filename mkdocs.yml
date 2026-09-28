@@ -1,5 +1,9 @@
 site_name: treehawk
-site_description: Log the CPU and RAM of a process and every process it spawns, including ones that detach.
+site_description: >-
+  Track CPU and RAM usage of a process and every process it spawns, even
+  detached daemons. A free command-line resource usage monitor for Linux and
+  macOS, with a live dashboard, logs and PDF reports.
+site_author: Ibad Rather
 site_url: https://ibadrather.github.io/treehawk/
 repo_url: https://github.com/ibadrather/treehawk
 repo_name: ibadrather/treehawk
@@ -7,6 +11,7 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/brand/logo.svg
   favicon: assets/brand/logo.svg
   font: false # brand fonts are loaded by stylesheets/extra.css
@@ -28,6 +33,27 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+
+extra:
+  author: Ibad Rather
+  # Paste the codes from Google Search Console / Bing Webmaster Tools here.
+  google_site_verification: ""
+  bing_site_verification: ""
+  social_image: assets/output/pdf-page-1.png
+  social_image_alt: A treehawk PDF report of CPU and memory usage over time
+  keywords:
+    - track cpu usage
+    - track ram usage
+    - track memory usage
+    - track resource usage
+    - monitor process cpu and memory
+    - log cpu usage over time
+    - monitor child processes
+    - process memory monitor linux
+    - monitor cpu usage macos
+    - find memory leaks
+    - peak memory usage
+    - python process monitor
 
 extra_css:
   - stylesheets/extra.css

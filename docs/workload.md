@@ -1,7 +1,20 @@
+---
+title: Track CPU and memory usage of a command
+description: >-
+  Track CPU and RAM usage of a command or a running process, including every child process it spawns. Log resource usage over time until it exits.
+keywords:
+  - track cpu usage of a process
+  - track memory usage of a command
+  - monitor child processes
+  - monitor detached processes
+  - ml training resource usage
+  - peak memory usage
+---
+
 # Track a workload
 
-`watch` and `run` follow one workload, meaning a process and everything it
-spawns, and write a log you read back with [`report` and `pdf`](results.md).
+`watch` and `run` track the CPU and memory usage of one workload, meaning a
+process and everything it spawns, and write a log you read back with [`report` and `pdf`](results.md).
 Both sample until the workload ends. `Ctrl-C` or a `SIGTERM` stops them early,
 and the log still ends with a complete summary.
 

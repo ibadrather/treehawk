@@ -1,14 +1,25 @@
 ---
-title: Introduction
+title: Track CPU and RAM usage of a process and its children
+description: >-
+  treehawk tracks CPU and RAM usage of a process and every child it spawns, even detached daemons. Free resource usage monitor for Linux and macOS.
+keywords:
+  - track cpu usage
+  - track ram usage
+  - track memory usage
+  - track resource usage
+  - monitor process cpu and memory
+  - monitor child processes
+  - log cpu usage over time
+  - python process monitor
 ---
 
 <div class="hero" markdown>
 
-<img src="assets/brand/logo.svg" alt="">
+<img src="assets/brand/logo.svg" alt="treehawk logo">
 
 <h1>tree<span>hawk</span></h1>
 
-Log the CPU and RAM a process uses, and every process it spawns,
+Track the CPU and RAM usage of a process and every process it spawns,
 **including children that daemonize and detach themselves**.
 
 [Get started](#quick-tour){ .md-button .md-button--primary }
@@ -16,7 +27,8 @@ Log the CPU and RAM a process uses, and every process it spawns,
 
 </div>
 
-Point treehawk at something already running, or let it start the command. It
+treehawk is a free, open-source resource usage monitor for the command line.
+Point it at something already running, or let it start the command. It
 samples until the workload ends, then leaves a log you can summarise in the
 terminal or turn into a PDF report. It can also follow the busiest processes of
 the whole machine, as a service from boot to shutdown.
@@ -25,7 +37,7 @@ It runs on Linux and macOS, including Apple Silicon, and reads the kernel
 directly. The two platforms differ in what the kernel will total up for you: see
 [Platforms](platforms.md).
 
-![The treehawk live dashboard](assets/output/dashboard.svg)
+![The treehawk live dashboard tracking CPU and memory usage](assets/output/dashboard.svg)
 
 ## Why
 

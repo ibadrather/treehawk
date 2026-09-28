@@ -1,7 +1,20 @@
+---
+title: Monitor top processes and memory leaks
+description: >-
+  Monitor the top processes by CPU and memory on the whole machine, catch CPU spikes and find memory leaks. Runs as a systemd service from boot.
+keywords:
+  - monitor top processes
+  - find memory leaks
+  - track resource usage
+  - systemd resource monitoring
+  - top processes logger
+  - cpu spike detection
+---
+
 # Track the whole machine
 
-`treehawk top` looks at **every** process on the machine and logs the top N by
-CPU and the top N by memory. It runs until it is stopped. It also logs two kinds
+`treehawk top` monitors **every** process on the machine and logs the top N by
+CPU and the top N by memory (RAM). It runs until it is stopped. It also logs two kinds
 of trouble for any process, whether or not it ranks:
 
 - **spike**: a reading far above that process' own recent baseline, such as
