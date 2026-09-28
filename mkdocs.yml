@@ -37,7 +37,7 @@ theme:
 extra:
   author: Ibad Rather
   # Paste the codes from Google Search Console / Bing Webmaster Tools here.
-  google_site_verification: ""
+  google_site_verification: JkfuegkSLUhW38gSVwIT5CEx_XYqQ8nlFz2GwIH0WH4
   bing_site_verification: ""
   social_image: assets/output/pdf-page-1.png
   social_image_alt: A treehawk PDF report of CPU and memory usage over time
