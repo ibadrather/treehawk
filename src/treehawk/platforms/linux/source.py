@@ -24,6 +24,7 @@ from treehawk.platforms.linux.procfs import (
     ProcStatParseError,
     parse_cgroup,
     parse_cmdline,
+    parse_environ_has,
     parse_smaps_rollup,
     parse_stat,
     parse_status_memory,
@@ -80,6 +81,10 @@ class LinuxProcessSource:
         if text is None:
             return None
         return parse_cgroup(text)
+
+    def has_env(self, pid: int, entry: str) -> bool:
+        raw = self._read_bytes(pid=pid, name="environ")
+        return raw is not None and parse_environ_has(raw, entry.encode())
 
     def enrich(self, *, info: ProcInfo, memory: MemoryDetail = MemoryDetail.PROPORTIONAL) -> ProcSample:
         sample = ProcSample(info=info)

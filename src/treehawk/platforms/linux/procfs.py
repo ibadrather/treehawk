@@ -41,6 +41,15 @@ def parse_cmdline(raw: bytes) -> str:
     return raw.replace(b"\x00", b" ").strip().decode("utf-8", "replace")
 
 
+def parse_environ_has(raw: bytes, entry: bytes) -> bool:
+    """True if ``/proc/<pid>/environ`` holds exactly ``entry`` (``NAME=value``).
+
+    A yes or a no about one variable treehawk set itself. Nothing else in the
+    environment is returned, kept or logged: it holds secrets.
+    """
+    return bool(entry) and entry in raw.split(b"\x00")
+
+
 def parse_status_memory(text: str) -> dict[str, int]:
     """Pull VmRSS / VmSwap (kB) out of ``/proc/<pid>/status``."""
     out: dict[str, int] = {}

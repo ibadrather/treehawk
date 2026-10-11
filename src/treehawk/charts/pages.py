@@ -11,6 +11,7 @@ out rather than emitting a blank sheet.
 
 from __future__ import annotations
 
+import textwrap
 from collections.abc import Callable, Sequence
 from operator import itemgetter
 
@@ -22,14 +23,16 @@ from matplotlib.patches import Patch
 from treehawk.charts import style
 from treehawk.charts.constants import CHARTS
 from treehawk.charts.models import Metric, ProcessTrack, RunSeries
-from treehawk.charts.series import stack_for
+from treehawk.charts.series import stack_for, thin_stack
 from treehawk.core.compat import override
 from treehawk.core.humanize import (
     format_bytes,
+    format_duration_compact,
     format_percent,
     format_seconds,
     truncate,
 )
+from treehawk.core.models import MemoryMeasure
 from treehawk.core.records import memory_measure, peak_memory_reading
 from treehawk.core.values import as_float, as_mapping, as_sequence
 from treehawk.ui.models import Palette
@@ -78,9 +81,12 @@ class OverviewPage(Page):
 
         headline = [
             ("peak cpu", format_percent(as_float(summary.get("peak_cpu_percent")))),
-            ("cpu time", format_seconds(as_float(summary.get("cpu_seconds_used")))),
+            # Compact, because a headline has a column to fit in: a long run's
+            # full "2h20m01.0s" runs into its neighbour. The exact values are
+            # in the facts below.
+            ("cpu time", format_duration_compact(as_float(summary.get("cpu_seconds_used")))),
             ("peak memory", format_bytes(peak_memory_reading(summary=summary, header=series.header).value)),
-            ("duration", format_seconds(series.duration)),
+            ("duration", format_duration_compact(series.duration)),
             ("processes", str(summary.get("total_procs_seen") or len(series.tracks))),
         ]
         for index, (label, value) in enumerate(headline):
@@ -101,6 +107,7 @@ class OverviewPage(Page):
         rows = [
             ("mode", str(header.get("mode", "?"))),
             ("started", str(header.get("started_at", "?"))),
+            ("duration", format_seconds(series.duration)),
             ("interval", f"{series.interval}s requested"),
             (
                 "samples",
@@ -116,7 +123,13 @@ class OverviewPage(Page):
             ),
             ("boundary", str(boundary).rsplit("/", 1)[-1] if boundary else "none - membership inferred"),
             ("peak concurrent", str(summary.get("peak_n_procs", "?"))),
-            ("mean cpu", format_percent(as_float(summary.get("mean_cpu_percent")))),
+            (
+                "cpu",
+                (
+                    f"{format_percent(as_float(summary.get('mean_cpu_percent')))} mean · "
+                    f"{format_seconds(as_float(summary.get('cpu_seconds_used')))} of cpu time"
+                ),
+            ),
             (
                 f"peak rss / {measure.short}",
                 (
@@ -130,14 +143,19 @@ class OverviewPage(Page):
             rows.append(("exit code", str(exit_code)))
 
         for index, (label, value) in enumerate(rows):
-            y = 0.66 - index * 0.045
+            y = 0.66 - index * 0.042
             fig.text(0.06, y, label, fontsize=9, color=palette.text_muted)
             fig.text(0.20, y, truncate(value, width=70), fontsize=9, color=palette.text_primary)
 
-        for index, note in enumerate(as_sequence(header.get("notes"))):
-            fig.text(
-                0.06, 0.16 - index * 0.035, f"note  {truncate(str(note), width=100)}", fontsize=8, color=palette.warning
-            )
+        # Wrapped to the page, never cut: a note is there because something
+        # could not be measured, and half of one says the opposite of nothing.
+        y = 0.66 - len(rows) * 0.042 - 0.02
+        for note in as_sequence(header.get("notes")):
+            lines = textwrap.wrap(f"note  {note}", width=CHARTS.note_width, subsequent_indent="      ")
+            for line in lines:
+                fig.text(0.06, y, line, fontsize=8, color=palette.warning)
+                y -= 0.022
+            y -= 0.008
 
     def _discovery(self, fig: Figure, *, series: RunSeries, palette: Palette) -> None:
         ax = fig.add_axes((0.58, 0.42, 0.36, 0.20))
@@ -267,21 +285,20 @@ class MemoryPage(Page):
 
     @override
     def draw(self, fig: Figure, *, series: RunSeries, palette: Palette = PRINT) -> bool:
-        # The middle measure differs by platform, so the subtitle is built from
-        # the log rather than fixed on the class.
+        # Which measures a log carries differs by platform - macOS has no
+        # cgroup figure at all - so the subtitle is built from the series that
+        # are actually drawn rather than fixed on the class.
         measure = memory_measure(series.header)
-        subtitle = (
-            f"rss double-counts pages shared between children; {measure.blurb}; cgroup is the kernel's own figure"
-        )
+        candidates = (("rss (summed)", series.rss), (measure.long, series.pss), ("cgroup", series.group_memory))
+        present_in = [any(value is not None for value in values) for _label, values in candidates]
+        subtitle = memory_subtitle(measure=measure, rss=present_in[0], fair=present_in[1], group=present_in[2])
         style.draw_heading(fig, title=self.title, subtitle=subtitle, palette=palette)
         ax = fig.subplots()
         fig.subplots_adjust(left=0.10, right=0.95, top=0.84, bottom=0.12)
 
         drawn = 0
-        for index, (label, values) in enumerate(
-            (("rss (summed)", series.rss), (measure.long, series.pss), ("cgroup", series.group_memory)),
-        ):
-            if not any(value is not None for value in values):
+        for index, (label, values) in enumerate(candidates):
+            if not present_in[index]:
                 continue
             color = palette.slot(index * 2)  # 0, 2, 4 - keeps them far apart
             ax.plot(series.t, _with_gaps(values), color=color, label=label)
@@ -325,7 +342,10 @@ class LifetimePage(Page):
         tracks = sorted(series.tracks, key=lambda track: (track.first_t, track.pid))
         shown = tracks[: CHARTS.max_gantt_rows]
         gantt, count = _timeline_axes(fig, rows=len(shown))
-        minimum = max(series.interval * 0.35, series.duration * 0.002)
+        # No outline in the surface colour here: rows do not touch, so there
+        # is nothing for it to separate, and on a long run it is wider than a
+        # short-lived process' whole bar and erases it.
+        minimum = max(series.interval * 0.35, series.duration * CHARTS.min_bar_fraction)
         for row, track in enumerate(shown):
             gantt.barh(
                 row,
@@ -333,8 +353,7 @@ class LifetimePage(Page):
                 left=track.first_t,
                 height=0.62,
                 color=palette.slot(DISCOVERY_ORDER.index(track.group)),
-                edgecolor=palette.surface,
-                linewidth=CHARTS.surface_gap,
+                linewidth=0,
             )
         gantt.set_ylim(len(shown) - 0.5, -0.5)
         gantt.set_yticks(range(len(shown)))
@@ -392,10 +411,22 @@ class _StackedPage(Page):
             labels.append("other")
             colors.append(palette.other)
 
-        ax.stackplot(
-            series.t, *rows, colors=colors, labels=labels, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
-        )
-        _label_bands(ax, t=series.t, rows=rows, labels=labels, palette=palette)
+        # The gap between bands is drawn in the surface colour, which only
+        # works while a sample is wider than the gap. On a long run it is not:
+        # the outline of each sliver covers the sliver, and the page comes out
+        # blank. And without the outline a spike one sample wide is a sliver
+        # too thin to print at all.
+        if len(series.t) > CHARTS.dense_points:
+            # No gap, and stepped columns: see the comment above. Thinned to
+            # about a column per point of page width, busiest sample kept.
+            t, rows = thin_stack(t=series.t, rows=rows, limit=CHARTS.stack_points)
+            ax.stackplot(t, *rows, colors=colors, labels=labels, linewidth=0, step="post")
+        else:
+            t = series.t
+            ax.stackplot(
+                t, *rows, colors=colors, labels=labels, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
+            )
+        _label_bands(ax, t=t, rows=rows, labels=labels, palette=palette)
         ax.set_ylabel(self.ylabel)
         ax.set_ylim(bottom=0)
         style.format_time_axis(ax, duration=series.duration)
@@ -452,6 +483,7 @@ class RankingPage(Page):
             title="cpu time (s)",
             formatter=format_seconds,
             palette=palette,
+            bytes_axis=False,
         )
         self._bars(
             right,
@@ -460,6 +492,7 @@ class RankingPage(Page):
             title="peak rss",
             formatter=format_bytes,
             palette=palette,
+            bytes_axis=True,
         )
         return True
 
@@ -472,6 +505,7 @@ class RankingPage(Page):
         title: str,
         formatter: Callable[[float], str],
         palette: Palette,
+        bytes_axis: bool,
     ) -> None:
         if not tracks:
             style.draw_placeholder(ax, message="nothing recorded", palette=palette)
@@ -482,6 +516,9 @@ class RankingPage(Page):
         ax.barh(
             list(positions), values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
         )
+        if bytes_axis:
+            # Otherwise matplotlib labels it 0.2 ... 1.0 with a stray "1e8".
+            style.format_bytes_axis(ax, horizontal=True)
         ax.set_ylim(len(tracks) - 0.5, -0.5)
         ax.set_yticks(list(positions))
         ax.set_yticklabels([truncate(track.label, width=24) for track in tracks], fontsize=8)
@@ -525,7 +562,9 @@ class SamplingPage(Page):
             left.axvline(0, color=palette.text_muted, linewidth=1.2, linestyle=(0, (4, 4)))
             worst = max(errors, key=abs)
             left.set_title(f"sampling error · worst {worst:+.1f} ms")
-            left.set_xlabel(f"milliseconds late (requested every {series.interval}s)")
+            # "Late" would be wrong for half of them: a sample that follows a
+            # slow one arrives early, and that is what a negative value is.
+            left.set_xlabel(f"error against the requested {series.interval}s interval (ms; negative is early)")
             left.set_ylabel("samples")
             left.yaxis.get_major_locator().set_params(integer=True)
             span = max(abs(worst), 1.0) * 1.3
@@ -571,20 +610,22 @@ def _label_bands(
 ) -> None:
     """Name each band on the band itself, so identity is never colour alone.
 
-    Only bands thick enough to hold a word are labelled - a label that needs a
-    leader line is worse than the legend it duplicates.
+    Only bands with room for a word are labelled - a label that needs a leader
+    line is worse than the legend it duplicates. Room means both ways: thick
+    enough, and for long enough. A band that is tall for a single sample is a
+    spike, and a white label centred on it lands on the white page beside it.
     """
     ceiling = max((sum(column) for column in zip(*rows, strict=True)), default=0.0)
-    if ceiling <= 0:
+    if ceiling <= 0 or not t:
         return
     bottoms = [0.0] * len(t)
     for values, label in zip(rows, labels, strict=True):
-        thickest = max(range(len(t)), key=lambda index: values[index])
-        thickness = values[thickest]
-        if thickness >= ceiling * 0.12:
+        span = _widest_run(values, threshold=ceiling * CHARTS.band_label_share)
+        if span is not None and t[span[1]] - t[span[0]] >= (t[-1] - t[0]) * CHARTS.band_label_span:
+            middle = (span[0] + span[1]) // 2
             ax.text(
-                t[thickest],
-                bottoms[thickest] + thickness / 2,
+                t[middle],
+                bottoms[middle] + values[middle] / 2,
                 label,
                 ha="center",
                 va="center",
@@ -593,6 +634,38 @@ def _label_bands(
                 color=palette.surface,
             )
         bottoms = [base + value for base, value in zip(bottoms, values, strict=True)]
+
+
+def _widest_run(values: Sequence[float], *, threshold: float) -> tuple[int, int] | None:
+    """First and last index of the longest stretch at or above ``threshold``."""
+    best: tuple[int, int] | None = None
+    start: int | None = None
+    for index, value in enumerate([*values, float("-inf")]):
+        if value >= threshold and threshold > 0:
+            start = index if start is None else start
+            continue
+        if start is not None and (best is None or index - 1 - start > best[1] - best[0]):
+            best = (start, index - 1)
+        start = None
+    return best
+
+
+def memory_subtitle(*, measure: MemoryMeasure, rss: bool, fair: bool, group: bool) -> str:
+    """Explain the memory series a chart shows - those, and no others.
+
+    A subtitle that describes a cgroup line on a macOS log, where there is no
+    cgroup, explains something the reader cannot find on the page.
+    """
+    parts: list[str] = []
+    if rss and (fair or group):
+        parts.append("rss counts shared pages once per process")
+    elif rss:
+        parts.append("summed rss counts shared pages once per process, so it reads high")
+    if fair:
+        parts.append(measure.blurb)
+    if group:
+        parts.append("cgroup is the kernel's own figure")
+    return "; ".join(parts)
 
 
 def _timeline_axes(fig: Figure, *, rows: int) -> tuple[Axes, Axes]:

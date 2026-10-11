@@ -35,6 +35,7 @@ def build_session(
     self_pid: int,
     argv: list[str] | None = None,
     pinned_group: str | None = None,
+    marker: str | None = None,
     notes: tuple[str, ...] = (),
 ) -> Session:
     host = platform.host_info()
@@ -54,6 +55,8 @@ def build_session(
         self_group=source.read_group_path(self_pid),
         self_sid=session_id_of(source=source, pid=self_pid),
         pinned_group=pinned_group,
+        marker=marker,
+        boundary_name=platform.boundary_name,
         exclude_from_seed=(frozenset() if matcher.names_one_process else unrelated),
         exclude_from_expansion=unrelated,
     )
@@ -74,6 +77,7 @@ def build_session(
         matcher=matcher.describe(),
         argv=argv,
         memory_kind=platform.memory_kind,
+        metric_source=platform.metric_source,
         notes=notes,
     )
     return Session(monitor=monitor, tracker=tracker, platform=platform)

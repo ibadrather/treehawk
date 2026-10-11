@@ -22,6 +22,10 @@ class UiConstants:
     region stays a fixed height whatever the workload prints; the full stream
     is in the file beside the log."""
 
+    metric_source: str = "the process table"
+    """What the live panel says it is reading when the header does not name a
+    source - a log replayed from before the field existed."""
+
     top_events: int = 6
     """Recent events kept under the live ``top`` table."""
 

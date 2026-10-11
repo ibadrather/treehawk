@@ -18,9 +18,10 @@ from typing import Final
 
 from treehawk import SCHEMA_VERSION, __version__
 from treehawk.core.config import LogDetail, WatchConfig
+from treehawk.core.constants import CORE
 from treehawk.core.interfaces import Record
 from treehawk.core.models import HostInfo, MemoryMeasure, MemoryReading, RunSummary, Snapshot
-from treehawk.core.values import as_int, as_sequence
+from treehawk.core.values import as_int, as_records, as_sequence
 
 PSS: Final = MemoryMeasure(
     key="pss",
@@ -31,7 +32,7 @@ PSS: Final = MemoryMeasure(
 
 PHYS_FOOTPRINT: Final = MemoryMeasure(
     key="phys_footprint",
-    short="foot",
+    short="footprint",
     long="phys footprint",
     blurb="phys footprint is the kernel's own charge for what a process costs the machine",
 )
@@ -96,6 +97,7 @@ def header_record(
     group_path: str | None,
     argv: list[str] | None = None,
     memory_kind: str = PSS.key,
+    metric_source: str | None = None,
     notes: Iterable[str] = (),
 ) -> Record:
     return {
@@ -111,6 +113,7 @@ def header_record(
         "per_process": config.detail is LogDetail.PER_PROCESS,
         "group_path": group_path,
         "memory_kind": memory_kind,
+        "metric_source": metric_source,
         "host": asdict(host),
         "notes": list(notes),
     }
@@ -184,3 +187,24 @@ def target_of(header: Record) -> str:
     if isinstance(matcher, dict):
         return str(matcher.get("value", "?"))
     return "?"
+
+
+def container_client_of(*, header: Record, summary: Record) -> str | None:
+    """The container client this run was watching, if it was one.
+
+    ``docker compose up`` is a client: it asks an engine to start containers
+    and then mostly waits. The containers are the engine's children - inside a
+    virtual machine, on macOS - so a run that tracked the client holds none of
+    their CPU or memory, and every view that shows its figures should say so.
+
+    Looked for in the command that was started and in the processes the
+    summary names, since the client is as often behind ``make`` or a script.
+    """
+    candidates = [str(argument) for argument in as_sequence(header.get("argv"))[:1]]
+    for key in ("top_by_cpu", "top_by_memory"):
+        candidates.extend(str(row.get("name") or "") for row in as_records(summary.get(key)))
+    for candidate in candidates:
+        name = candidate.rsplit("/", 1)[-1]
+        if name in CORE.container_clients:
+            return name
+    return None

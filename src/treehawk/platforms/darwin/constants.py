@@ -44,6 +44,12 @@ class DarwinConstants:
     cmdline_cache_limit: int = 4096
     """Command lines cached before the cache is cleared and refilled."""
 
+    metric_source: str = "libproc"
+    """Where the readings come from, as the live panel names it."""
+
+    boundary_name: str = "coalition"
+    """What macOS calls the group a process cannot fork its way out of."""
+
     coalition_prefix: str = "coalition:"
     """Marks a group path as a coalition id, so nothing reads it as a cgroup."""
 

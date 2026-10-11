@@ -30,6 +30,7 @@ import signal
 import struct
 import subprocess
 import termios
+import uuid
 from typing import IO
 
 from treehawk.core.compat import override
@@ -38,6 +39,7 @@ from treehawk.core.errors import LaunchFailed
 from treehawk.core.interfaces import ProcessLauncher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.platforms.constants import POSIX
+from treehawk.platforms.models import StartedProcess
 
 
 class SubprocessWorkload(LaunchedWorkload):
@@ -50,12 +52,14 @@ class SubprocessWorkload(LaunchedWorkload):
         argv: list[str],
         group_path: str | None = None,
         output_stream: IO[bytes] | None = None,
+        marker: str | None = None,
     ) -> None:
         super().__init__(
             pid=process.pid,
             argv=list(argv),
             group_path=group_path,
             output_stream=output_stream,
+            marker=marker,
         )
         self._process = process
 
@@ -84,8 +88,10 @@ class DirectLauncher:
         return True
 
     def launch(self, argv: list[str], *, output: WorkloadOutput = WorkloadOutput.INHERIT) -> LaunchedWorkload:
-        process, stream = start_process(argv, output=output)
-        return SubprocessWorkload(process=process, argv=argv, output_stream=stream)
+        started = start_process(argv, output=output)
+        return SubprocessWorkload(
+            process=started.process, argv=argv, output_stream=started.stream, marker=started.marker
+        )
 
 
 class FallbackLauncher:
@@ -137,8 +143,14 @@ def start_process(
     argv: list[str],
     *,
     output: WorkloadOutput,
-) -> tuple[subprocess.Popen[bytes], IO[bytes] | None]:
+) -> StartedProcess:
     """Start ``argv`` in a session of its own, and say where its output went.
+
+    The workload's environment is treehawk's own plus one variable,
+    ``TREEHAWK_RUN_ID``, set to a value drawn fresh for this run. Every process
+    the workload forks inherits it - through ``setsid``, a double fork and
+    re-parenting to PID 1 - and nothing else on the machine has it, so it
+    identifies a detached child where the process table alone cannot.
 
     With :attr:`~treehawk.core.config.WorkloadOutput.INHERIT` the workload gets
     treehawk's own stdout and stderr and there is nothing to read. With
@@ -148,18 +160,23 @@ def start_process(
     The slave is closed here either way: once the child holds it, treehawk
     keeping a copy would mean the read end never reports end of file.
     """
+    run_id = uuid.uuid4().hex
+    marker = f"{POSIX.run_id_variable}={run_id}"
+    env = {**os.environ, POSIX.run_id_variable: run_id}
     if output is WorkloadOutput.INHERIT:
-        return subprocess.Popen(argv, start_new_session=True), None
+        return StartedProcess(
+            process=subprocess.Popen(argv, start_new_session=True, env=env), stream=None, marker=marker
+        )
     master, slave = pty.openpty()
     _set_window_size(slave)
     try:
-        process = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+        process = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave, start_new_session=True, env=env)
     except BaseException:
         os.close(master)
         raise
     finally:
         os.close(slave)
-    return process, os.fdopen(master, "rb", 0)
+    return StartedProcess(process=process, stream=os.fdopen(master, "rb", 0), marker=marker)
 
 
 def _set_window_size(fd: int) -> None:

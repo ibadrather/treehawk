@@ -21,7 +21,7 @@ from treehawk.core.humanize import (
     truncate,
 )
 from treehawk.core.interfaces import Record
-from treehawk.core.records import memory_measure, target_of
+from treehawk.core.records import container_client_of, memory_measure, target_of
 from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import discovery_color
@@ -154,6 +154,16 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
     if exit_code is not None:
         style = palette.good if exit_code == 0 else palette.critical
         table.add_row("exit", Text(str(exit_code), style=f"bold {style}"))
+    client = container_client_of(header=header, summary=summary)
+    if client is not None:
+        table.add_row(
+            "hint",
+            Text(
+                f"{client} is a client: its containers run under the container engine, not in the "
+                "tracked tree, and are not in these figures",
+                style=palette.text_muted,
+            ),
+        )
     return table
 
 

@@ -19,6 +19,39 @@ class ChartConstants:
     """Gap drawn between stacked bands, in the surface colour, so adjacent fills
     read as separate shapes rather than one blob."""
 
+    dense_points: int = 200
+    """Samples beyond which one sample is narrower on the page than
+    ``surface_gap``. Past this the gap is no longer a hairline between bands:
+    it is wider than the bands, and paints over them."""
+
+    stack_points: int = 600
+    """Columns a stacked chart is reduced to, about one per point of page
+    width. Each keeps the busiest sample it covers, so a spike one sample wide
+    in a two-hour run is still a column wide enough to print."""
+
+    min_bar_fraction: float = 0.004
+    """Shortest a lifetime bar is drawn, as a share of the run, so a process
+    that lived for one sample of a long run is still a visible mark."""
+
+    band_label_share: float = 0.12
+    """How much of the chart's height a band needs before its name fits on it."""
+
+    band_label_span: float = 0.10
+    """And how much of the chart's width it must hold that height for. A band
+    that is tall for one sample has nowhere to put a word."""
+
+    note_width: int = 150
+    """Characters of a header note that fit across the overview page."""
+
+    time_ticks: int = 8
+    """Most labelled ticks a time axis is given."""
+
+    minute_steps: tuple[float, ...] = (60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0)
+    """Tick spacings, in seconds, for an axis read in minutes."""
+
+    hour_steps: tuple[float, ...] = (1800.0, 3600.0, 7200.0, 10800.0, 21600.0, 43200.0, 86400.0)
+    """Tick spacings, in seconds, for an axis read in hours."""
+
     footer_band: float = 0.05
     """Anything a page has already drawn below this is its own footer, and the
     writer must not draw a second one over it."""

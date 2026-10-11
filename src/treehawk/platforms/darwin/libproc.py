@@ -71,6 +71,10 @@ class ProcessTable(Protocol):
         """The full command line, or ``""`` if another user owns it."""
         ...
 
+    def has_env(self, pid: int, entry: str) -> bool:
+        """True if ``pid`` was started with ``entry`` in its environment."""
+        ...
+
     def footprint(self, pid: int) -> int | None:
         """``ri_phys_footprint`` in bytes, or None if it is unreadable."""
         ...
@@ -150,6 +154,24 @@ def parse_procargs2(raw: bytes) -> str:
     # drop the padding NULs that align the start of argv.
     arguments = [chunk for chunk in chunks[1:] if chunk][:argc]
     return b" ".join(arguments).decode("utf-8", "replace")
+
+
+def parse_procargs2_env_has(raw: bytes, needle: bytes) -> bool:
+    """True if the environment in a ``KERN_PROCARGS2`` blob holds exactly ``needle``.
+
+    Same blob as :func:`parse_procargs2`, the part after the ``argc``
+    arguments. It answers about one ``NAME=value`` entry treehawk set itself
+    and returns nothing else: the environment is never copied out, kept or
+    logged.
+    """
+    header = struct.calcsize("i")
+    if not needle or len(raw) < header:
+        return False
+    argc = int(struct.unpack_from("i", raw)[0])
+    if argc <= 0:
+        return False
+    strings = [chunk for chunk in raw[header:].split(b"\x00")[1:] if chunk]
+    return needle in strings[argc:]
 
 
 def nanoseconds_from_mach(units: int, timebase: Timebase) -> int:
@@ -233,14 +255,12 @@ class LibProc:
         return None if raw is None else parse_coalition_id(raw)
 
     def argv(self, pid: int) -> str:
-        if self._argmax <= 0:
-            return ""
-        mib = (ctypes.c_int * 3)(LIBPROC.ctl_kern, LIBPROC.kern_procargs2, pid)
-        buffer = ctypes.create_string_buffer(self._argmax)
-        size = ctypes.c_size_t(self._argmax)
-        if int(self._libc.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0)) != 0:
-            return ""  # another user's process, or it exited
-        return parse_procargs2(buffer.raw[: size.value])
+        raw = self._procargs(pid)
+        return "" if raw is None else parse_procargs2(raw)
+
+    def has_env(self, pid: int, entry: str) -> bool:
+        raw = self._procargs(pid)
+        return raw is not None and parse_procargs2_env_has(raw, entry.encode())
 
     def footprint(self, pid: int) -> int | None:
         buffer = ctypes.create_string_buffer(LIBPROC.rusage_info_v4_size)
@@ -257,6 +277,17 @@ class LibProc:
             return os.getsid(pid)
         except OSError:
             return 0
+
+    def _procargs(self, pid: int) -> bytes | None:
+        """The raw ``KERN_PROCARGS2`` blob, or None if it cannot be read."""
+        if self._argmax <= 0:
+            return None
+        mib = (ctypes.c_int * 3)(LIBPROC.ctl_kern, LIBPROC.kern_procargs2, pid)
+        buffer = ctypes.create_string_buffer(self._argmax)
+        size = ctypes.c_size_t(self._argmax)
+        if int(self._libc.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0)) != 0:
+            return None  # another user's process, or it exited
+        return buffer.raw[: size.value]
 
     def _pidinfo(self, *, pid: int, flavor: int, size: int) -> bytes | None:
         buffer = ctypes.create_string_buffer(size)

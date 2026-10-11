@@ -271,6 +271,48 @@ def test_a_workload_that_ignores_sigterm_is_killed_after_the_grace_period(
     assert result.exit_code == -signal.SIGKILL
 
 
+def test_an_interrupted_run_records_how_the_workload_ended(
+    tmp_path: pathlib.Path, proc_root: pathlib.Path, cgroup_root: pathlib.Path
+) -> None:
+    """The summary used to be written before the workload was reaped: null.
+
+    Monitoring ends first here - the duration runs out, as Ctrl-C would end it
+    - with the workload still alive. It is stopped, and *then* the summary is
+    written, so the log says what the exit status was.
+    """
+    write_proc(proc_root, 100, cmdline="python job.py")
+    launcher = FakeLauncher(exit_code=None)
+    log = tmp_path / "run.jsonl"
+
+    result = runner.invoke(
+        app,
+        ["run", "-q", "-o", str(log), "-d", "1", "--", "python", "job.py"],
+        obj=on(fake_platform(proc_root, cgroup_root, launcher=launcher)),
+    )
+
+    (workload,) = launcher.workloads
+    assert workload.signals == [signal.SIGTERM]
+    _, _, summary = read_log(log)
+    assert summary["exit_code"] == -signal.SIGTERM
+    assert result.exit_code == -signal.SIGTERM
+
+
+def test_the_header_names_where_the_readings_come_from(
+    tmp_path: pathlib.Path, proc_root: pathlib.Path, cgroup_root: pathlib.Path
+) -> None:
+    write_proc(proc_root, 100, cmdline="python job.py")
+    log = tmp_path / "run.jsonl"
+
+    runner.invoke(
+        app,
+        ["run", "-q", "-o", str(log), "-d", "1", "--", "python", "job.py"],
+        obj=on(fake_platform(proc_root, cgroup_root, launcher=FakeLauncher())),
+    )
+
+    header, _, _ = read_log(log)
+    assert header["metric_source"] == "/proc"
+
+
 def test_an_impossible_interval_is_refused() -> None:
     result = runner.invoke(app, ["watch", "x", "-i", "0"])
     assert result.exit_code != 0

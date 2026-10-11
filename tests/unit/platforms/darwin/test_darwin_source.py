@@ -5,6 +5,10 @@ from __future__ import annotations
 from conftest import APPLE_SILICON_TIMEBASE, FakeProcess, FakeProcessTable
 
 from treehawk.core.config import MemoryDetail
+from treehawk.core.matchers import build_matcher
+from treehawk.core.strategies import build_strategies
+from treehawk.core.tracker import Tracker
+from treehawk.platforms.darwin.coalition import CoalitionSource
 from treehawk.platforms.darwin.source import DarwinProcessSource
 
 SZOMB = 5
@@ -155,3 +159,87 @@ def test_forgetting_a_process_drops_its_cached_command_line(table: FakeProcessTa
     source.enrich(info=info)
 
     assert table.argv_reads == 2
+
+
+# -- membership in a coalition that is the whole terminal app ---------------
+
+TERMINAL = 1779
+"""One coalition for the terminal app, the shell, treehawk and the workload."""
+RUN_ID = "TREEHAWK_RUN_ID=7097c761417f4a599f3a36538f7055e0"
+
+
+def tracker_in_a_terminal(table: FakeProcessTable, *, marker: str | None) -> Tracker:
+    """treehawk (pid 9) watching pid 100, both in the terminal's coalition."""
+    table.add(FakeProcess(pid=1, ppid=0, comm="launchd", coalition=1))
+    table.add(FakeProcess(pid=9, comm="treehawk", coalition=TERMINAL))
+    table.add(FakeProcess(pid=100, sid=100, comm="make", coalition=TERMINAL, environ=(RUN_ID,)))
+    source = DarwinProcessSource(table)
+    tracker = Tracker(
+        matcher=build_matcher(kind="pid", value=100),
+        strategies=build_strategies(("tree", "cgroup", "session", "orphan")),
+        source=source,
+        groups=CoalitionSource(table, ttl=0.0),
+        self_pid=9,
+        self_group=source.read_group_path(9),
+        self_sid=9,
+        marker=marker,
+        boundary_name="coalition",
+        exclude_from_seed=frozenset({9}),
+        exclude_from_expansion=frozenset({9}),
+    )
+    tracker.seed(source.scan())
+    tracker.refresh(source.scan())
+    return tracker
+
+
+def test_helpers_launchd_starts_for_the_terminal_are_not_the_workload(table: FakeProcessTable) -> None:
+    """What a real two-hour run adopted: 35 processes that were never its own."""
+    tracker = tracker_in_a_terminal(table, marker=RUN_ID)
+    source = DarwinProcessSource(table)
+
+    table.add(FakeProcess(pid=200, ppid=100, comm="docker", coalition=TERMINAL, environ=(RUN_ID,)))
+    for pid, comm in ((300, "MTLCompilerServ"), (301, "chrome_crashpad"), (302, "GoogleUpdater")):
+        table.add(FakeProcess(pid=pid, ppid=1, sid=pid, comm=comm, coalition=TERMINAL))
+
+    result = tracker.refresh(source.scan())
+
+    assert {info.pid for info in result.alive} == {100, 200}
+    assert result.via[200] == "tree"
+
+
+def test_a_daemonized_child_is_still_adopted_by_the_run_id_it_inherited(table: FakeProcessTable) -> None:
+    tracker = tracker_in_a_terminal(table, marker=RUN_ID)
+    source = DarwinProcessSource(table)
+
+    table.add(FakeProcess(pid=400, ppid=1, sid=400, coalition=TERMINAL, environ=("HOME=/tmp", RUN_ID)))
+    table.add(FakeProcess(pid=300, ppid=1, sid=300, comm="GoogleUpdater", coalition=TERMINAL))
+
+    result = tracker.refresh(source.scan())
+
+    assert {info.pid for info in result.alive} == {100, 400}
+    assert result.via[400] == "orphan"
+
+
+def test_the_environment_is_read_only_for_a_candidate_never_for_every_process(table: FakeProcessTable) -> None:
+    tracker = tracker_in_a_terminal(table, marker=RUN_ID)
+    source = DarwinProcessSource(table)
+    table.add(FakeProcess(pid=300, ppid=1, sid=300, comm="GoogleUpdater", coalition=TERMINAL))
+    table.add(FakeProcess(pid=500, ppid=1, sid=500, comm="Safari", coalition=656))  # another app entirely
+    table.env_reads = 0
+
+    tracker.refresh(source.scan())
+    tracker.refresh(source.scan())  # no longer new: not asked about again
+
+    assert table.env_reads == 1
+
+
+def test_watch_has_no_run_id_so_it_adopts_no_orphan_and_says_so(table: FakeProcessTable) -> None:
+    tracker = tracker_in_a_terminal(table, marker=None)
+    source = DarwinProcessSource(table)
+
+    table.add(FakeProcess(pid=400, ppid=1, sid=400, coalition=TERMINAL, environ=(RUN_ID,)))
+
+    assert {info.pid for info in tracker.refresh(source.scan()).alive} == {100}
+    (note,) = tracker.notes
+    assert "orphan rule inactive" in note
+    assert "coalition" in note

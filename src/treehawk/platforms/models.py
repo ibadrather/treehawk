@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
+from typing import IO
 
+from treehawk.core.constants import CORE
 from treehawk.core.interfaces import (
     GroupMetricSource,
     HostInfoSource,
@@ -13,6 +16,17 @@ from treehawk.core.interfaces import (
 )
 from treehawk.core.models import HostInfo
 from treehawk.core.records import PSS
+
+
+@dataclass(frozen=True, slots=True)
+class StartedProcess:
+    """A workload process just started, and what treehawk gave it."""
+
+    process: subprocess.Popen[bytes]
+    stream: IO[bytes] | None
+    """The read end of the workload's pty when its output is captured, else None."""
+    marker: str
+    """The ``NAME=value`` entry exported to it, unique to this run."""
 
 
 @dataclass(frozen=True)
@@ -35,6 +49,10 @@ class Platform:
     Every platform fills ``ProcSample.pss_bytes``, but not with the same
     measure, so the name travels with the value into the log header.
     """
+    metric_source: str = "/proc"
+    """Where the readings come from, as the live panel names it."""
+    boundary_name: str = CORE.boundary_name
+    """What this platform calls a group boundary, for messages about one."""
     notes: list[str] = field(default_factory=list)
 
     def host_info(self) -> HostInfo:

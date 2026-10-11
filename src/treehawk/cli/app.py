@@ -290,6 +290,7 @@ def run(
         self_pid=runtime.self_pid(),
         argv=argv,
         pinned_group=workload.group_path,
+        marker=workload.marker,
         notes=tuple(platform.notes) + tuple(workload.notes),
     )
     # The workload already exists, so seed now rather than searching for it.
@@ -297,7 +298,11 @@ def run(
     _install_signal_handlers(monitor=session.monitor, workload=workload)
 
     try:
-        session.monitor.run(read_exit_code=workload.poll)
+        # The summary wants the exit code, and a run that was interrupted has
+        # none until the signal we forwarded has landed and the workload is
+        # reaped. So the monitor asks for it by stopping the workload, rather
+        # than by glancing at a process that is still on its way out.
+        session.monitor.run(read_exit_code=lambda: _stop_workload(workload, clock=runtime.clock))
     finally:
         code = _stop_workload(workload, clock=runtime.clock)
         # After the workload, so the last thing it printed is drained rather
@@ -720,19 +725,32 @@ def _install_signal_handlers(*, monitor: Monitor, workload: LaunchedWorkload | N
 
 
 def _stop_workload(workload: LaunchedWorkload, *, clock: Clock) -> int | None:
-    """Stop the workload if monitoring ended first, and report its exit code."""
+    """Stop the workload if monitoring ended first, and report its exit code.
+
+    A workload ended by a signal reports the negative signal number, as
+    :mod:`subprocess` does. Safe to call again once it has returned a code.
+    """
     code = workload.poll()
     if code is not None:
         return code
     workload.signal(signal.SIGTERM)
-    deadline = clock.monotonic() + CLI.terminate_grace
-    while clock.monotonic() < deadline:
+    code = _await_exit(workload, clock=clock, grace=CLI.terminate_grace)
+    if code is not None:
+        return code
+    workload.signal(signal.SIGKILL)
+    # SIGKILL cannot be refused, but it is not instant either: the process
+    # still has to be reaped before it has an exit code to report.
+    return _await_exit(workload, clock=clock, grace=CLI.kill_grace)
+
+
+def _await_exit(workload: LaunchedWorkload, *, clock: Clock, grace: float) -> int | None:
+    """Poll for up to ``grace`` seconds; the exit code, or None if still running."""
+    deadline = clock.monotonic() + grace
+    while True:
         code = workload.poll()
-        if code is not None:
+        if code is not None or clock.monotonic() >= deadline:
             return code
         clock.sleep_until(clock.monotonic() + CLI.stop_poll_interval)
-    workload.signal(signal.SIGKILL)
-    return workload.poll()
 
 
 def main() -> None:

@@ -15,6 +15,11 @@ class PosixConstants:
     cannot be read. Only reachable when there is no terminal at all, which is
     also when treehawk does not capture."""
 
+    run_id_variable: str = "TREEHAWK_RUN_ID"
+    """Exported to every workload treehawk starts, with a value unique to the
+    run. Whatever the workload forks inherits it, which is what tells a
+    detached child from a process that only shares the workload's boundary."""
+
     pty_rows: int = 24
     """Height for the same case. Nothing reads it back, but a pty left at 0x0
     makes a workload that asks its terminal's size draw nothing."""
