@@ -48,6 +48,7 @@ class Monitor:
         matcher: Record | None = None,
         argv: list[str] | None = None,
         memory_kind: str = PSS.key,
+        metric_source: str | None = None,
         notes: Iterable[str] = (),
     ) -> None:
         self._source = source
@@ -63,6 +64,7 @@ class Monitor:
         self._matcher = matcher
         self._argv = argv
         self._memory_kind = memory_kind
+        self._metric_source = metric_source
         self._notes = list(notes)
         self._stop = False
         self._summaries = SummaryAccumulator(clk_tck=host.clk_tck, top_n=config.top_n)
@@ -87,7 +89,10 @@ class Monitor:
                 group_path=self._tracker.pinned_group,
                 argv=self._argv,
                 memory_kind=self._memory_kind,
-                notes=self._notes,
+                metric_source=self._metric_source,
+                # The tracker's own notes are read here, not at construction:
+                # they depend on which processes were seeded.
+                notes=[*self._notes, *self._tracker.notes],
             )
         )
 

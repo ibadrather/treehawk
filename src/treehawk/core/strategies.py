@@ -89,8 +89,7 @@ class GroupExpansion:
         return found
 
     def _is_ours(self, *, context: ExpansionContext, path: str) -> bool:
-        inside = context.self_group
-        if inside and (inside == path or inside.startswith(path.rstrip("/") + "/")):
+        if context.shares_boundary(path):
             return False  # we are inside it, so it is broader than the workload
         members = context.groups.pids_in(path) if context.groups else None
         if not members:
@@ -149,6 +148,15 @@ class OrphanExpansion:
     *different* cgroup - whereas a process that was simply spawned normally
     always starts in its parent's. That single comparison separates a detached
     grandchild from an unrelated sibling started in the same terminal.
+
+    None of that holds in a boundary treehawk shares with the workload. On
+    macOS that is the usual case: a coalition is the whole terminal *app*, and
+    every XPC service and helper launchd starts on the app's behalf is new,
+    parented to PID 1 and in that coalition - exactly what a daemonized child
+    looks like. There the rule asks for the one thing only a real descendant
+    has: the run id treehawk exported to the workload (see
+    :meth:`ExpansionContext.carries_marker`). With no marker to look for, it
+    adopts nothing from a shared boundary.
     """
 
     def __init__(self) -> None:
@@ -175,8 +183,12 @@ class OrphanExpansion:
             group = context.group_of(pid)
             if group is None or group not in tracked_groups:
                 continue
-            if self._was_reparented(context=context, info=info, group=group):
-                found[pid] = self.name
+            if not self._was_reparented(context=context, info=info, group=group):
+                continue
+            # Last, because it is the one check that costs a read of its own.
+            if context.shares_boundary(group) and not context.carries_marker(pid):
+                continue
+            found[pid] = self.name
         return found
 
     @staticmethod

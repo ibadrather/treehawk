@@ -62,8 +62,17 @@ The command goes after `--`.
   `--no-isolate` chooses that mode on purpose.
 - On macOS there is no boundary to create, so `run` starts the command in its
   own session and infers membership. See [Platforms](platforms.md).
+- The command is started with one extra environment variable,
+  `TREEHAWK_RUN_ID`, unique to the run. Where there is no cgroup to rely on,
+  that is how a child that detaches is told apart from an unrelated process;
+  see [the run id](platforms.md#the-run-id).
 - `Ctrl-C` and `SIGTERM` are forwarded to the command. If the command fails,
-  `treehawk run` exits with its status.
+  `treehawk run` exits with its status. The summary records that status as
+  `exit_code` once the command has actually exited: a command ended by a
+  signal has the negative signal number, so `-2` after `Ctrl-C`.
+- A container client such as `docker compose up` is only a client: the
+  containers run under the container engine and are not part of what `run`
+  measures. See [Platforms](platforms.md#containers-run-somewhere-else).
 
 ### What the command prints
 

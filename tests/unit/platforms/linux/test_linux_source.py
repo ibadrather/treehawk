@@ -76,3 +76,13 @@ def test_cmdline_is_cached_per_identity_and_dropped_on_exit(proc_root: pathlib.P
 
     source.forget(info.identity)
     assert source.enrich(info=info, memory=MemoryDetail.RESIDENT).cmdline == "second"
+
+
+def test_the_run_id_is_read_from_the_process_environment(proc_root: pathlib.Path) -> None:
+    write_proc(proc_root, 100, environ=["HOME=/root", "TREEHAWK_RUN_ID=abc123"])
+    write_proc(proc_root, 101)
+    source = LinuxProcessSource(str(proc_root), page_size=4096)
+
+    assert source.has_env(100, "TREEHAWK_RUN_ID=abc123")
+    assert not source.has_env(101, "TREEHAWK_RUN_ID=abc123")
+    assert not source.has_env(999, "TREEHAWK_RUN_ID=abc123")  # gone, or not ours to read

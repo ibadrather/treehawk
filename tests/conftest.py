@@ -66,6 +66,7 @@ def write_proc(
     cgroup: str = "/user.slice/app.scope",
     pss_kb: int | None = None,
     swap_kb: int = 0,
+    environ: Iterable[str] = (),
 ) -> pathlib.Path:
     """Materialise one process inside a fake /proc."""
     directory = root / str(pid)
@@ -86,6 +87,7 @@ def write_proc(
     _write(directory, "stat", stat + "\n")
     _write(directory, "cmdline", cmdline.replace(" ", "\x00") + "\x00")
     _write(directory, "cgroup", f"0::{cgroup}\n")
+    _write(directory, "environ", "".join(f"{entry}\x00" for entry in environ))
     _write(
         directory,
         "status",
@@ -136,6 +138,8 @@ class FakeProcess:
     argv: str = "python worker.py"
     footprint: int | None = None
     """None stands for the EPERM another user's process returns."""
+    environ: tuple[str, ...] = ()
+    """``NAME=value`` entries the process was started with."""
 
 
 @dataclass
@@ -149,6 +153,7 @@ class FakeProcessTable:
     processes: list[FakeProcess] = field(default_factory=list)
     timebase_fraction: Timebase = APPLE_SILICON_TIMEBASE
     argv_reads: int = 0
+    env_reads: int = 0
 
     def add(self, process: FakeProcess) -> None:
         self.processes.append(process)
@@ -192,6 +197,11 @@ class FakeProcessTable:
         self.argv_reads += 1
         process = self._find(pid)
         return "" if process is None else process.argv
+
+    def has_env(self, pid: int, entry: str) -> bool:
+        self.env_reads += 1
+        process = self._find(pid)
+        return process is not None and entry in process.environ
 
     def footprint(self, pid: int) -> int | None:
         process = self._find(pid)
@@ -589,6 +599,10 @@ class FakeProcessSource:
     def read_group_path(self, pid: int) -> str | None:
         del pid
         return None
+
+    def has_env(self, pid: int, entry: str) -> bool:
+        del pid, entry
+        return False
 
     def enrich(self, *, info: ProcInfo, memory: MemoryDetail) -> ProcSample:
         self.enriched.append(info.pid)

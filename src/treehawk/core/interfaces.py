@@ -53,6 +53,15 @@ class ProcessSource(Protocol):
         """
         ...
 
+    def has_env(self, pid: int, entry: str) -> bool:
+        """True if ``pid`` was started with ``entry`` (``NAME=value``) in its environment.
+
+        Asked about one variable treehawk set itself, never to read what else is
+        there. False when the environment is unreadable - another user's
+        process, or one that is already gone.
+        """
+        ...
+
     def enrich(self, *, info: ProcInfo, memory: MemoryDetail) -> ProcSample:
         """Add the costlier fields (command line, fair memory, swap, group).
 
@@ -231,6 +240,11 @@ class Clock(Protocol):
     def sleep_until(self, deadline: float) -> None: ...
 
 
+def boundary_contains(path: str, *, member: str | None) -> bool:
+    """True when the group path ``member`` is ``path`` itself, or nested under it."""
+    return bool(member) and (member == path or member.startswith(path.rstrip("/") + "/"))
+
+
 class ExpansionContext:
     """Everything an :class:`ExpansionStrategy` may look at.
 
@@ -242,6 +256,7 @@ class ExpansionContext:
         "_group_cache",
         "children",
         "groups",
+        "marker",
         "new_pids",
         "pinned_group",
         "procs",
@@ -265,6 +280,7 @@ class ExpansionContext:
         self_group: str | None,
         self_sid: int,
         pinned_group: str | None,
+        marker: str | None = None,
     ) -> None:
         self.procs = procs
         self.tracked_pids = tracked_pids
@@ -276,6 +292,7 @@ class ExpansionContext:
         self.self_group = self_group
         self.self_sid = self_sid
         self.pinned_group = pinned_group
+        self.marker = marker
         self._group_cache: dict[int, str | None] = {}
 
     def group_of(self, pid: int) -> str | None:
@@ -283,3 +300,21 @@ class ExpansionContext:
         if pid not in self._group_cache:
             self._group_cache[pid] = self.source.read_group_path(pid)
         return self._group_cache[pid]
+
+    def shares_boundary(self, path: str) -> bool:
+        """True when treehawk itself lives in ``path``, or under it.
+
+        Such a boundary is broader than the workload - a login session's
+        cgroup, or on macOS the coalition of the whole terminal app - so being
+        in it says nothing about belonging to the workload.
+        """
+        return boundary_contains(path, member=self.self_group)
+
+    def carries_marker(self, pid: int) -> bool:
+        """True if ``pid`` inherited the variable treehawk gave the workload.
+
+        A process forked from the workload has it however far it detaches; one
+        the OS started on the terminal's behalf does not. With no marker - under
+        ``watch``, which started nothing - the answer is always False.
+        """
+        return self.marker is not None and self.source.has_env(pid, self.marker)

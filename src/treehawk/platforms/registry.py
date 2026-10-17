@@ -60,6 +60,11 @@ def build_darwin() -> Platform:
     than hiding: there is no cgroup, so no kernel-side totals and no isolating
     launcher; and the fair-memory measure is the kernel's phys_footprint
     instead of PSS, which is why ``memory_kind`` travels with it.
+
+    A coalition is not a stand-in for the cgroup either. It is the whole
+    terminal *app* - the shell, the workload, treehawk, and every helper
+    launchd starts for the app - so it never identifies the workload on its
+    own, and the note says what membership rests on instead.
     """
     from treehawk.platforms.darwin import (
         CoalitionSource,
@@ -67,15 +72,15 @@ def build_darwin() -> Platform:
         DarwinProcessSource,
         LibProc,
     )
-    from treehawk.platforms.posix import DirectLauncher, FallbackLauncher
+    from treehawk.platforms.darwin.constants import DARWIN
+    from treehawk.platforms.posix import DirectLauncher
 
     table = LibProc()
     coalitions = CoalitionSource(table)
     notes = [
         (
-            "macOS has no cgroup equivalent: group-level CPU and memory totals "
-            "are unavailable, and membership is inferred from coalitions, "
-            "sessions and the process tree"
+            "macOS has no cgroup: there are no kernel-side CPU or memory totals, and membership is "
+            "inferred from the process tree, the session and, under run, the run id a detached child inherits"
         )
     ]
     if not coalitions.available():
@@ -85,8 +90,9 @@ def build_darwin() -> Platform:
 
     # Placing a workload in a *new* coalition needs entitlements treehawk does
     # not have, so `run` gives it its own session and nothing more - with or
-    # without --no-isolate.
-    launcher = FallbackLauncher([DirectLauncher()])
+    # without --no-isolate. The launcher is used bare: there is nothing to
+    # fall back from, and the note above already says what that costs.
+    launcher = DirectLauncher()
     return Platform(
         name="darwin",
         process_source=DarwinProcessSource(table),
@@ -95,6 +101,8 @@ def build_darwin() -> Platform:
         launcher=launcher,
         direct_launcher=launcher,
         memory_kind=PHYS_FOOTPRINT.key,
+        metric_source=DARWIN.metric_source,
+        boundary_name=DARWIN.boundary_name,
         notes=notes,
     )
 

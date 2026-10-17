@@ -122,7 +122,9 @@ class Dashboard:
             style=self._muted,
         )
         detail.append(
-            str(boundary).rsplit("/", 1)[-1] if boundary else "via /proc",
+            # Named by the platform that wrote the header: /proc on Linux,
+            # libproc on macOS.
+            str(boundary).rsplit("/", 1)[-1] if boundary else f"via {header.get('metric_source') or UI.metric_source}",
             style=self._secondary,
         )
         detail.append("   every ", style=self._muted)

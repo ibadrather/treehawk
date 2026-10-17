@@ -98,7 +98,9 @@ The fields you will reach for most:
 | Field | |
 |---|---|
 | `memory_kind` | header: which fair measure `pss_bytes` carries, `pss` (Linux) or `phys_footprint` (macOS); a log without it is `pss` |
+| `metric_source` | header: where the readings come from, `/proc` (Linux) or `libproc` (macOS); `null` in a log written before 0.9.0 |
 | `notes` | header: anything treehawk could not measure on this machine, and why |
+| `exit_code` | summary, `run` only: the command's exit status; negative is the signal that ended it (`-2` after `Ctrl-C`), `null` under `watch` |
 | `cpu_percent` | CPU over the last interval, summed across processes; `100` is one core, `null` in the first sample |
 | `cpu_percent_norm` | the same, as a share of the whole machine |
 | `cpu_seconds_total` | lifetime CPU time, including exited children |

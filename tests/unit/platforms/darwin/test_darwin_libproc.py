@@ -23,6 +23,7 @@ from treehawk.platforms.darwin.libproc import (
     parse_coalition_id,
     parse_phys_footprint,
     parse_procargs2,
+    parse_procargs2_env_has,
     parse_task_all_info,
     parse_timebase,
 )
@@ -198,3 +199,49 @@ def test_procargs2_stops_at_argc_so_the_environment_never_reaches_the_log() -> N
 def test_an_unreadable_procargs2_blob_is_empty_not_an_error() -> None:
     assert parse_procargs2(b"") == ""
     assert parse_procargs2(struct.pack("i", 0)) == ""
+
+
+# Read off a real process on macOS 26 (arm64): `node -e ...`, started with a
+# four-variable environment. argc, the exec path, padding, argv, the
+# environment, an empty string, then the strings the kernel adds for dyld.
+CAPTURED_PROCARGS2 = (
+    b"\x03\x00\x00\x00/opt/homebrew/bin/node\x00\x00/opt/homebrew/bin/node\x00-e\x00setTimeout(()=>{},3000)\x00"
+    b"LANG=C\x00TREEHAWK_RUN_ID=7097c761417f4a599f3a36538f7055e0\x00HOME=/tmp\x00PATH=/usr/bin:/bin\x00\x00"
+    b"pfz=0xffff6c000\x00stack_guard=0x27cd56e3225b003c\x00ptr_munge=0x7e7a3b8eae6bc6c5\x00"
+    b"executable_file=0x1a01000010,0xbe3218\x00th_port=0x103\x00security_config=0x0\x00"
+)
+
+# The same read of /bin/sleep. With System Integrity Protection on, the kernel
+# withholds the environment of Apple's own binaries: the blob ends at argv.
+CAPTURED_PROCARGS2_OF_A_SYSTEM_BINARY = b"\x02\x00\x00\x00/bin/sleep\x00\x00\x00\x00\x00\x00/bin/sleep\x003"
+
+RUN_ID = b"TREEHAWK_RUN_ID=7097c761417f4a599f3a36538f7055e0"
+
+
+def test_the_run_id_is_found_in_a_captured_environment() -> None:
+    assert parse_procargs2(CAPTURED_PROCARGS2) == "/opt/homebrew/bin/node -e setTimeout(()=>{},3000)"
+    assert parse_procargs2_env_has(CAPTURED_PROCARGS2, RUN_ID)
+
+
+def test_only_the_whole_entry_counts_as_the_run_id() -> None:
+    # Another run's id, a prefix of this one, and the bare name are all misses.
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, RUN_ID[:-1])
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, RUN_ID + b"0")
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, b"TREEHAWK_RUN_ID")
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, b"")
+
+
+def test_an_argument_is_not_mistaken_for_the_environment() -> None:
+    # `-e` is argv, and so is anything else before the argc-th string.
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, b"-e")
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2, b"/opt/homebrew/bin/node")
+
+
+def test_a_system_binary_s_withheld_environment_reads_as_no_run_id() -> None:
+    assert parse_procargs2(CAPTURED_PROCARGS2_OF_A_SYSTEM_BINARY) == "/bin/sleep 3"
+    assert not parse_procargs2_env_has(CAPTURED_PROCARGS2_OF_A_SYSTEM_BINARY, RUN_ID)
+
+
+def test_an_unreadable_blob_has_no_run_id() -> None:
+    assert not parse_procargs2_env_has(b"", RUN_ID)
+    assert not parse_procargs2_env_has(struct.pack("i", 0), RUN_ID)

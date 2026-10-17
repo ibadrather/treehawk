@@ -77,6 +77,13 @@ A platform that can start processes sets both `Platform.launcher` (used by
 second, `--no-isolate` fails with "this platform cannot start processes". Where
 the OS cannot create a boundary, pass the same launcher to both, as macOS does.
 
+`ProcessSource.has_env` is the one method a new platform might be tempted to
+stub out. It answers whether a process was started with a given `NAME=value`
+entry, and it is what lets the `orphan` rule recognise a detached child where
+the platform has no per-workload boundary. A source that cannot read another
+process' environment returns `False`, and the rule then adopts nothing from a
+boundary treehawk shares — the safe direction to be wrong in.
+
 macOS was added exactly that way, without touching `core/`. Two things are
 worth copying from it. Make the syscall boundary an injectable protocol — as
 `platforms/darwin/libproc.py` does with `ProcessTable` — and require it in the

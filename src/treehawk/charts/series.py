@@ -112,3 +112,28 @@ def stack_for(
     # not compute yet, and charging those to "other" would invent a series.
     charted = [sum(column) for column in zip(*bands, strict=True)] if bands else [0.0] * len(series.t)
     return bands, [max(total - shown, 0.0) for total, shown in zip(series.charted_total(metric), charted, strict=True)]
+
+
+def thin_stack(
+    *, t: Sequence[float], rows: Sequence[Sequence[float]], limit: int
+) -> tuple[list[float], list[list[float]]]:
+    """Reduce a stack to at most ``limit`` columns without losing its peaks.
+
+    The samples are cut into equal runs, and each run is represented by the one
+    sample in it whose bands sum highest - a whole sample, never a mix of
+    several, so what is drawn is always a stack that really occurred. Averaging
+    would flatten a one-sample spike to nothing; taking each band's own maximum
+    would draw a total the workload never reached.
+    """
+    count = len(t)
+    if limit <= 0 or count <= limit:
+        return list(t), [list(row) for row in rows]
+    totals = [sum(column) for column in zip(*rows, strict=True)] if rows else [0.0] * count
+    kept: list[int] = []
+    for bucket in range(limit):
+        start, end = bucket * count // limit, (bucket + 1) * count // limit
+        kept.append(max(range(start, end), key=totals.__getitem__))
+    # Each column is drawn from its bucket's first instant, so the axis still
+    # starts where the run did however the busiest samples happen to fall.
+    starts = [t[bucket * count // limit] for bucket in range(limit)]
+    return starts, [[row[index] for index in kept] for row in rows]

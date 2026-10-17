@@ -39,6 +39,23 @@ def format_seconds(value: float | None) -> str:
     return f"{hours}h{minutes:02d}m{seconds:04.1f}s"
 
 
+def format_duration_compact(value: float | None) -> str:
+    """A duration short enough for a headline: ``41.2s``, ``12m05s``, ``2h20m``.
+
+    Drops the precision a long run does not need - nobody quotes the tenths of
+    a second on a two-hour job - where :func:`format_seconds` keeps all of it.
+    """
+    if value is None:
+        return "-"
+    if value < 60:
+        return f"{value:.1f}s"
+    minutes, seconds = divmod(int(value), 60)
+    if minutes < 60:
+        return f"{minutes}m{seconds:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
 def truncate(text: str, *, width: int) -> str:
     text = text.strip()
     if width <= 1 or len(text) <= width:

@@ -75,6 +75,9 @@ class DarwinProcessSource:
         identifier = self._table.coalition_id(pid)
         return None if identifier is None else coalition_path(identifier)
 
+    def has_env(self, pid: int, entry: str) -> bool:
+        return self._table.has_env(pid, entry)
+
     def enrich(self, *, info: ProcInfo, memory: MemoryDetail = MemoryDetail.PROPORTIONAL) -> ProcSample:
         sample = ProcSample(info=info)
         sample.cmdline = self._cached_cmdline(info)

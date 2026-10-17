@@ -13,6 +13,10 @@ class CliConstants:
     terminate_grace: float = 5.0
     """Seconds a workload is given to exit on SIGTERM before it is killed."""
 
+    kill_grace: float = 1.0
+    """Seconds a workload that has been sent SIGKILL is given to be reaped, so
+    that its exit code can be recorded."""
+
     stop_poll_interval: float = 0.05
     """Seconds between checks on a workload that has been asked to exit."""
 

@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.ticker import MultipleLocator
 
 from treehawk.charts import style
 from treehawk.charts.constants import CHARTS
@@ -283,10 +284,14 @@ def _mark_events(ax: Axes, *, series: TopSeries, resource: Resource, palette: Pa
 
 
 def _time_axis(ax: Axes, *, series: TopSeries) -> None:
-    style.format_time_axis(ax, duration=series.hours * 3600.0)
+    # This axis counts hours, not seconds, so the round spacing is asked for in
+    # seconds and converted - the labels then land on whole and half hours.
     hours = series.hours
+    step = style.time_tick_step(hours * 3600.0)
+    if step is not None:
+        ax.xaxis.set_major_locator(MultipleLocator(step / 3600.0))
     if hours >= 2:
-        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value:.1f}h")
+        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value:g}h")
     elif hours >= 180 / 3600:
         ax.xaxis.set_major_formatter(lambda value, _pos: f"{value * 60:.0f}m")
     else:

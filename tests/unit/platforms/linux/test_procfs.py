@@ -8,6 +8,7 @@ from treehawk.platforms.linux.procfs import (
     ProcStatParseError,
     parse_cgroup,
     parse_cmdline,
+    parse_environ_has,
     parse_meminfo_total,
     parse_smaps_rollup,
     parse_stat,
@@ -77,3 +78,13 @@ def test_parse_cgroup_returns_none_without_a_v2_hierarchy() -> None:
 
 def test_parse_meminfo_total() -> None:
     assert parse_meminfo_total("MemTotal:       32471504 kB\nMemFree: 1 kB\n") == (32471504 * 1024)
+
+
+def test_environ_is_asked_about_one_whole_entry() -> None:
+    raw = b"HOME=/root\x00TREEHAWK_RUN_ID=abc123\x00PATH=/usr/bin\x00"
+
+    assert parse_environ_has(raw, b"TREEHAWK_RUN_ID=abc123")
+    assert not parse_environ_has(raw, b"TREEHAWK_RUN_ID=abc12")  # a prefix is another run
+    assert not parse_environ_has(raw, b"TREEHAWK_RUN_ID")
+    assert not parse_environ_has(raw, b"")
+    assert not parse_environ_has(b"", b"TREEHAWK_RUN_ID=abc123")

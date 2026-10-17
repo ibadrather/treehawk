@@ -243,10 +243,16 @@ class LaunchedWorkload(ABC):
         group_path: str | None = None,
         notes: tuple[str, ...] = (),
         output_stream: IO[bytes] | None = None,
+        marker: str | None = None,
     ) -> None:
         self.pid = pid
         self.argv = argv
         self.group_path = group_path
+        self.marker = marker
+        """The ``NAME=value`` environment entry the workload was started with
+        and every process forked from it inherits, or None if it has none. It
+        is how a detached child is told apart from an unrelated process that
+        merely shares the workload's boundary."""
         self.notes: list[str] = list(notes)
         """How this workload came to be started the way it was, for the log header."""
         self.output_stream = output_stream

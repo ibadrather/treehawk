@@ -27,6 +27,15 @@ class CoreConstants:
     """Strategies feed each other (a cgroup adoption reveals a new subtree), so
     expansion repeats until it stabilises - bounded, to keep one sample bounded."""
 
+    boundary_name: str = "cgroup"
+    """What a group boundary is called where the platform does not say. macOS
+    calls its own a coalition."""
+
+    container_clients: tuple[str, ...] = ("docker", "docker-compose", "com.docker.cli", "podman", "nerdctl")
+    """Process names that only *ask* a container engine to run something. The
+    containers are children of the engine - on macOS, inside a virtual machine
+    - and never of the client that treehawk can see."""
+
     output_read_size: int = 65536
     """Bytes asked of the workload's output in one read."""
 

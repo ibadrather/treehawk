@@ -17,7 +17,7 @@ import sys
 import pytest
 
 from treehawk.core.interfaces import Record
-from treehawk.core.values import as_float, as_records
+from treehawk.core.values import as_float, as_records, as_sequence
 
 WORKLOAD = str(pathlib.Path(__file__).parent / "workload.py")
 pytestmark = pytest.mark.integration
@@ -111,6 +111,9 @@ def test_run_mode_captures_a_detached_grandchild(tmp_path: pathlib.Path) -> None
     tracked = tracked_processes(samples)
 
     assert len(tracked) >= 2, f"only found {tracked}"
+    # Through the cgroup where there is one, and by the run id it inherited
+    # where there is not - never by luck.
+    assert {"cgroup", "orphan"} & set(tracked.values()), tracked
     # The parent exits after ~0.3s; the detached child runs for ~2s. If the
     # child were lost, the run would have ended almost immediately.
     assert number(summary, "duration_s") > 1.5
@@ -150,8 +153,16 @@ def test_run_mode_uses_a_cgroup_boundary_when_systemd_is_available(tmp_path: pat
     assert tracked_processes(samples)  # and the children were found through it
 
 
-def test_watch_mode_adopts_a_child_that_detaches_after_we_attach(tmp_path: pathlib.Path) -> None:
-    """The hard case for attach mode: the fork happens while we are watching."""
+def test_watch_mode_adopts_a_detached_child_or_says_that_it_cannot(tmp_path: pathlib.Path) -> None:
+    """The hard case for attach mode: the fork happens while we are watching.
+
+    Which way it goes depends on where the test runs. With a boundary of its
+    own the workload's detached child is adopted. Sharing one with treehawk -
+    always on macOS, and on Linux whenever both were started in one cgroup -
+    there is no telling that child from a stranger, so it must be left alone
+    and the header must say so - unless a sample caught it mid-detach, when it
+    is followed by parentage. Either is correct; silence is not.
+    """
     log = tmp_path / "watch.jsonl"
     workload = subprocess.Popen(
         [
@@ -183,9 +194,17 @@ def test_watch_mode_adopts_a_child_that_detaches_after_we_attach(tmp_path: pathl
             "8",
         )
         assert result.returncode == 0, result.stderr
-        _, samples, summary = read_log(str(log))
+        header, samples, summary = read_log(str(log))
         tracked = tracked_processes(samples)
 
+        if any("orphan rule inactive" in str(note) for note in as_sequence(header.get("notes"))):
+            # A sample can still land inside the daemonizing fork and see the
+            # intermediate child; the tree and session rules then follow the
+            # detached one from it. Nothing may be adopted on a guess.
+            assert workload.pid in tracked
+            adopted = {via for pid, via in tracked.items() if pid != workload.pid}
+            assert adopted <= {"tree", "session"}, f"adopted from a shared boundary: {tracked}"
+            return
         assert len(tracked) >= 2, f"detached child was lost: {tracked}"
         assert "orphan" in tracked.values() or "session" in tracked.values()
         assert number(summary, "duration_s") > 2.0

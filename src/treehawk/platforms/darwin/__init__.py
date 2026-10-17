@@ -2,8 +2,9 @@
 libraries and no shelling out to ps or top for metrics.
 
 The shapes differ from Linux but the seams are the same: ``/proc`` becomes
-libproc, and the cgroup becomes the coalition - the boundary a forked child
-cannot leave, which is what makes the orphan rule work here too."""
+libproc, and the cgroup becomes the coalition. The likeness stops at the name:
+a coalition is the whole terminal app rather than the workload, so the orphan
+rule here rests on the run id a workload's descendants inherit instead."""
 
 from treehawk.platforms.darwin.coalition import CoalitionSource
 from treehawk.platforms.darwin.host import DarwinHostInfoSource

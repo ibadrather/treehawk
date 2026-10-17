@@ -14,9 +14,13 @@ from conftest import write_log
 from pypdf import PdfReader
 
 from treehawk.charts.models import Metric
+from treehawk.charts.pages import memory_subtitle
 from treehawk.charts.report import PAGES, write_pdf_report
-from treehawk.charts.series import load_series, stack_for
+from treehawk.charts.series import load_series, stack_for, thin_stack
+from treehawk.charts.style import time_tick_step
 from treehawk.core.errors import ReportError
+from treehawk.core.humanize import format_duration_compact, format_seconds
+from treehawk.core.records import PHYS_FOOTPRINT, PSS
 
 # -- reshaping ------------------------------------------------------------
 
@@ -141,3 +145,117 @@ def test_a_two_sample_log_still_renders(tmp_path: pathlib.Path) -> None:
     pages = write_pdf_report(log_path=short, destination=str(tmp_path / "short.pdf"))
 
     assert pages >= 5
+
+
+# -- what a long run needs --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [(None, "-"), (8.1, "8.1s"), (59.94, "59.9s"), (725.0, "12m05s"), (3599.9, "59m59s"), (8401.0, "2h20m")],
+)
+def test_a_headline_duration_is_short_enough_for_its_column(seconds: float | None, expected: str) -> None:
+    assert format_duration_compact(seconds) == expected
+
+
+def test_the_compact_duration_is_never_longer_than_the_full_one() -> None:
+    # The full "2h20m01.0s" is what ran into the next figure on the overview.
+    assert format_seconds(8401.0) == "2h20m01.0s"
+    assert len(format_duration_compact(8401.0)) < len(format_seconds(8401.0))
+    assert len(format_duration_compact(359_999.0)) <= 7
+
+
+@pytest.mark.parametrize(
+    ("duration", "step"),
+    [
+        (30.0, None),  # read in seconds; matplotlib's own ticks are round there
+        (200.0, 60.0),
+        (1800.0, 300.0),
+        (5400.0, 900.0),
+        (8401.0, 1800.0),  # was 0.6h 1.1h 1.7h; now 0.5h 1h 1.5h 2h
+        (36_000.0, 7200.0),
+        (86_400.0 * 3, 43_200.0),
+        (86_400.0 * 30, 86_400.0 * 4),
+    ],
+)
+def test_time_ticks_fall_on_round_minutes_and_hours(duration: float, step: float | None) -> None:
+    assert time_tick_step(duration) == step
+
+
+@pytest.mark.parametrize("duration", [180.0, 999.0, 7199.0, 7200.0, 8401.0, 50_000.0, 1e6, 1e8])
+def test_a_time_axis_is_never_crowded_or_bare(duration: float) -> None:
+    step = time_tick_step(duration)
+
+    assert step is not None
+    assert 2 <= duration / step <= 8
+    assert step % 60 == 0
+
+
+def test_the_memory_subtitle_explains_only_what_is_drawn() -> None:
+    on_macos = memory_subtitle(measure=PHYS_FOOTPRINT, rss=True, fair=True, group=False)
+    on_linux = memory_subtitle(measure=PSS, rss=True, fair=True, group=True)
+
+    assert "cgroup" not in on_macos  # there is no cgroup line on a macOS log
+    assert "phys footprint" in on_macos
+    assert "cgroup" in on_linux
+    assert "pss" in on_linux
+    # One line of a heading: this is what ran off the page.
+    assert max(len(on_macos), len(on_linux)) <= 140
+
+
+def test_the_memory_subtitle_for_resident_memory_alone() -> None:
+    alone = memory_subtitle(measure=PSS, rss=True, fair=False, group=False)
+
+    assert alone.startswith("summed rss")
+    assert "pss" not in alone
+
+
+def test_a_long_note_is_wrapped_onto_the_page_not_cut_off(tmp_path: pathlib.Path) -> None:
+    import json
+
+    path = tmp_path / "run.jsonl"
+    write_log(path)
+    note = "macOS has no cgroup: " + "membership is inferred from the process tree " * 5 + "and that is the end"
+    lines = path.read_text().splitlines()
+    header = json.loads(lines[0])
+    header["notes"] = [note]
+    path.write_text("\n".join([json.dumps(header), *lines[1:]]) + "\n")
+
+    write_pdf_report(log_path=str(path), destination=str(tmp_path / "run.pdf"))
+
+    overview = " ".join(PdfReader(str(tmp_path / "run.pdf")).pages[0].extract_text().split())
+    assert "and that is the end" in overview
+    assert "…" not in overview
+
+
+def test_a_run_of_thousands_of_samples_still_renders_every_page(tmp_path: pathlib.Path) -> None:
+    """Dense enough that one sample is thinner than the gap between bands."""
+    long_run = write_log(tmp_path / "long.jsonl", samples=3000, interval=1.0)
+
+    pages = write_pdf_report(log_path=long_run, destination=str(tmp_path / "long.pdf"))
+
+    assert pages == len(PAGES)
+    reader = PdfReader(str(tmp_path / "long.pdf"))
+    text = " ".join(page.extract_text() for page in reader.pages)
+    assert "elapsed (minutes)" in text
+    assert "50m" in text  # 3000 s: ticks every ten minutes
+
+
+def test_thinning_a_stack_keeps_the_spike_and_the_sample_it_came_from() -> None:
+    t = [float(index) for index in range(1000)]
+    quiet, busy = [1.0] * 1000, [2.0] * 1000
+    quiet[437], busy[437] = 90.0, 130.0  # one sample, as a compiler burst is
+
+    thinned_t, (thin_quiet, thin_busy) = thin_stack(t=t, rows=[quiet, busy], limit=100)
+
+    assert len(thinned_t) == len(thin_quiet) == len(thin_busy) == 100
+    assert thinned_t[0] == pytest.approx(0.0)
+    # Both bands at the spike come from the same instant: a stack that happened.
+    assert (thin_quiet[43], thin_busy[43]) == pytest.approx((90.0, 130.0))
+    assert max(thin_quiet) == pytest.approx(90.0)
+
+
+def test_a_stack_already_short_enough_is_left_alone() -> None:
+    t, rows = [0.0, 1.0, 2.0], [[1.0, 2.0, 3.0]]
+
+    assert thin_stack(t=t, rows=rows, limit=100) == (t, rows)
