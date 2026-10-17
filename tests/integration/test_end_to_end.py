@@ -160,7 +160,8 @@ def test_watch_mode_adopts_a_detached_child_or_says_that_it_cannot(tmp_path: pat
     own the workload's detached child is adopted. Sharing one with treehawk -
     always on macOS, and on Linux whenever both were started in one cgroup -
     there is no telling that child from a stranger, so it must be left alone
-    and the header must say so. Either is correct; silence is not.
+    and the header must say so - unless a sample caught it mid-detach, when it
+    is followed by parentage. Either is correct; silence is not.
     """
     log = tmp_path / "watch.jsonl"
     workload = subprocess.Popen(
@@ -197,7 +198,12 @@ def test_watch_mode_adopts_a_detached_child_or_says_that_it_cannot(tmp_path: pat
         tracked = tracked_processes(samples)
 
         if any("orphan rule inactive" in str(note) for note in as_sequence(header.get("notes"))):
-            assert set(tracked) == {workload.pid}
+            # A sample can still land inside the daemonizing fork and see the
+            # intermediate child; the tree and session rules then follow the
+            # detached one from it. Nothing may be adopted on a guess.
+            assert workload.pid in tracked
+            adopted = {via for pid, via in tracked.items() if pid != workload.pid}
+            assert adopted <= {"tree", "session"}, f"adopted from a shared boundary: {tracked}"
             return
         assert len(tracked) >= 2, f"detached child was lost: {tracked}"
         assert "orphan" in tracked.values() or "session" in tracked.values()
