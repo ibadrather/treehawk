@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.ticker import MultipleLocator
 
 if TYPE_CHECKING:
     # matplotlib 3.11 (Python 3.11+) types rc keys as a Literal; 3.10, the last
@@ -76,21 +77,48 @@ def draw_footer(fig: Figure, *, left: str, right: str, palette: Palette = PRINT)
     fig.text(0.94, 0.035, right, ha="right", fontsize=7.5, color=palette.text_muted)
 
 
-def format_bytes_axis(ax: Axes) -> None:
-    """Label a byte axis in KiB/MiB/GiB rather than scientific notation."""
-    ax.yaxis.set_major_formatter(lambda value, _pos: format_bytes(value))
+def format_bytes_axis(ax: Axes, *, horizontal: bool = False) -> None:
+    """Label a byte axis in KiB/MiB/GiB rather than scientific notation.
+
+    The vertical axis unless ``horizontal``, which is what a bar chart lying on
+    its side needs.
+    """
+    axis = ax.xaxis if horizontal else ax.yaxis
+    axis.set_major_formatter(lambda value, _pos: format_bytes(value))
+
+
+def time_tick_step(duration: float) -> float | None:
+    """Seconds between ticks on a time axis ``duration`` long.
+
+    Always a round number of minutes or hours, so the labels read ``30m`` and
+    ``1.5h`` rather than wherever matplotlib's own spacing happens to fall -
+    which, on an axis counted in seconds, is ``0.6h 1.1h 1.7h``. None for a run
+    short enough to be read in seconds, where the default is already round.
+    """
+    if duration < 180:
+        return None
+    steps = CHARTS.hour_steps if duration >= 7200 else CHARTS.minute_steps
+    for step in steps:
+        if duration / step <= CHARTS.time_ticks:
+            return step
+    # Longer than the table reaches: whole days, as many as it takes.
+    day = steps[-1]
+    return day * max(1, int(duration // (day * CHARTS.time_ticks)) + 1)
 
 
 def format_time_axis(ax: Axes, *, duration: float) -> None:
     """Label the time axis in the unit the run is actually read in."""
+    step = time_tick_step(duration)
+    if step is None:
+        ax.set_xlabel("elapsed (seconds)")
+        return
+    ax.xaxis.set_major_locator(MultipleLocator(step))
     if duration >= 7200:
-        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value / 3600:.1f}h")
+        ax.xaxis.set_major_formatter(lambda value, _pos: f"{value / 3600:g}h")
         ax.set_xlabel("elapsed (hours)")
-    elif duration >= 180:
+    else:
         ax.xaxis.set_major_formatter(lambda value, _pos: f"{value / 60:.0f}m")
         ax.set_xlabel("elapsed (minutes)")
-    else:
-        ax.set_xlabel("elapsed (seconds)")
 
 
 def annotate_peak(

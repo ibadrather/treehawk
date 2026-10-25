@@ -157,7 +157,7 @@ def test_the_console_names_the_measure_the_header_declared(tmp_path: pathlib.Pat
         sink.open({**HEADER, "memory_kind": "phys_footprint"})
         sink.sample({**SAMPLE, "rss_bytes": 100, "pss_bytes": 90, "group_memory_bytes": None})
 
-    assert "foot=" in path.read_text()
+    assert "footprint=" in path.read_text()
 
 
 def test_the_console_falls_back_to_rss_rather_than_mislabelling_it(tmp_path: pathlib.Path) -> None:

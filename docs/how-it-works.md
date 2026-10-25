@@ -37,6 +37,18 @@ tracked, so your login session is never swallowed. The `orphan` rule spots
 re-parenting by noticing that the adopting reaper lives in a *different*
 boundary.
 
+When treehawk is *inside* the workload's boundary, none of that is evidence any
+more: the boundary is broader than the workload, and other things are born into
+it. That is always so on macOS, where a coalition is the whole terminal app and
+`launchd` starts helpers into it, and it is so on Linux when treehawk and the
+workload share a cgroup — `run --no-isolate`, a host without systemd, or a
+`watch` started from the same session as its target. There the `orphan` rule
+adopts a process only if it carries the **run id**: `run` exports
+`TREEHAWK_RUN_ID` to the command, every process forked from it inherits the
+variable, and nothing else has it. `watch` started nothing, so it has no run id
+and adopts no orphan from a shared boundary; the log header says so. See
+[the run id](platforms.md#the-run-id).
+
 Each process in the log records the rule that found it in `via`. The dashboard and
 PDF colour processes by it: matched (blue), child (orange), detached (green).
 
@@ -53,9 +65,11 @@ process that lives and dies between two samples is lost. Use `run` when
 exactness matters.
 
 On macOS `run` cannot create a boundary — that needs entitlements treehawk does
-not have — so it behaves like a very well-informed `watch`: nothing is missed
-before the first sample, and membership is inferred from coalitions, sessions
-and the process tree. See [Platforms](platforms.md).
+not have — so membership is inferred there too: from the process tree, the
+session `run` gives the command, and the run id a detached child inherits.
+Nothing is missed before the first sample. `watch` on macOS has the tree and
+the session only, so a process that detaches from a watched workload is not
+followed. See [Platforms](platforms.md).
 
 ## Memory
 
@@ -121,7 +135,15 @@ named again only after growing another 25%.
   on macOS, it is lost. `top` never names such a process, although on Linux its
   CPU still shows in the machine line. Shorten `--interval`, or use `run`.
 - `watch` can miss a process that detaches *and* changes boundary between two
-  samples.
+  samples. Where treehawk shares the workload's boundary — always on macOS, and
+  on Linux when both are in one cgroup — `watch` does not follow a detached
+  process at all, and writes `orphan rule inactive` in the header's `notes`.
+- Under `run` in a shared boundary, a detached child is recognised by the run
+  id in its environment. One that was started with a scrubbed environment, or
+  on macOS runs one of Apple's own binaries, cannot be recognised and is missed.
+- A container client (`docker`, `docker compose`, `podman`, `nerdctl`) is
+  tracked; its containers are not. They belong to the container engine. See
+  [Platforms](platforms.md#containers-run-somewhere-else).
 - treehawk never adopts its own ancestors (your shell, `uv`, `timeout`), since
   they carry the keyword you typed.
 - Other users' processes have no `pss_bytes`, and on macOS are not visible at

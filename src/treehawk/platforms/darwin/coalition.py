@@ -1,23 +1,25 @@
-"""Coalitions: the closest thing macOS has to a cgroup.
+"""Coalitions: the closest thing macOS has to a cgroup - and not very close.
 
-A coalition is the boundary a fork cannot leave by accident. A process that
+A coalition is a boundary a fork cannot leave by accident. A process that
 daemonizes - fork, ``setsid``, fork again, original parent exits - is
 re-parented to launchd and has left its session, but it is *still in the
-coalition it started in*. That is precisely the property the orphan rule needs,
-and it is why membership tracking works on macOS for the same reason it works
-on Linux.
+coalition it started in*.
 
-What a coalition cannot do is account. macOS exposes no CPU or memory total for
-one without entitlements, so :meth:`metrics` returns ``None`` and a log written
-on macOS carries a null ``group_memory_bytes`` rather than a number treehawk
-invented. Membership alone is still worth having: it is what the orphan and
-cgroup rules follow.
+What a coalition is not is the workload. It is the whole application: the
+terminal, its shells, treehawk, the workload, and every helper and XPC service
+launchd starts on the app's behalf. So membership of it is necessary for being
+a detached child and nowhere near sufficient, and both rules that read it treat
+it that way. The group rule refuses a boundary treehawk is inside, because such
+a boundary is broader than the workload. The orphan rule, in that same case,
+asks for the run id the workload's descendants inherit (see
+:meth:`treehawk.core.interfaces.ExpansionContext.carries_marker`) rather than
+taking "new, parented to PID 1, same coalition" as proof - which describes
+every one of those helpers.
 
-Note that everything started from one terminal shares a coalition, so a
-workload's coalition is usually treehawk's own. The group rule already guards
-against that - it refuses a boundary treehawk is inside, because such a
-boundary is broader than the workload - so the coalition informs the orphan
-rule without dragging in the whole terminal.
+What a coalition cannot do at all is account. macOS exposes no CPU or memory
+total for one without entitlements, so :meth:`metrics` returns no readings and
+a log written on macOS carries a null ``group_memory_bytes`` rather than a
+number treehawk invented.
 """
 
 from __future__ import annotations

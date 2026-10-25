@@ -73,14 +73,21 @@ class ScopeLauncher:
             *argv,
         ]
         # systemd-run --scope execs in place, so the pty it is handed is the
-        # workload's pty; nothing about the boundary changes.
-        process, stream = start_process(wrapper, output=output)
-        group = self._resolve_group(process=process, unit=unit)
+        # workload's pty - and its environment the workload's environment;
+        # nothing about the boundary changes.
+        started = start_process(wrapper, output=output)
+        group = self._resolve_group(process=started.process, unit=unit)
         if group is None:
-            if stream is not None:
-                stream.close()  # the fallback launcher will make a pty of its own
+            if started.stream is not None:
+                started.stream.close()  # the fallback launcher will make a pty of its own
             raise ScopeUnavailable(f"could not place the workload in a cgroup (unit {unit})")
-        return SubprocessWorkload(process=process, argv=argv, group_path=group, output_stream=stream)
+        return SubprocessWorkload(
+            process=started.process,
+            argv=argv,
+            group_path=group,
+            output_stream=started.stream,
+            marker=started.marker,
+        )
 
     def _resolve_group(self, *, process: subprocess.Popen[bytes], unit: str) -> str | None:
         """Wait for the child to appear inside the new scope's cgroup."""

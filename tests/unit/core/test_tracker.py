@@ -47,6 +47,7 @@ class World:
         utime: int = 0,
         stime: int = 0,
         cgroup: str = WORKLOAD_CGROUP,
+        environ: Iterable[str] = (),
     ) -> None:
         write_proc(
             self.proc_root,
@@ -59,6 +60,7 @@ class World:
             utime=utime,
             stime=stime,
             cgroup=cgroup,
+            environ=environ,
             starttime=1000 + pid,
         )
 
@@ -73,6 +75,7 @@ class World:
         exclude: Iterable[int] = (),
         pinned: str | None = None,
         self_group: str | None = REAPER_CGROUP,
+        marker: str | None = None,
     ) -> Tracker:
         return Tracker(
             matcher=matcher,
@@ -83,6 +86,7 @@ class World:
             self_group=self_group,
             self_sid=9,
             pinned_group=pinned,
+            marker=marker,
             exclude_from_seed=frozenset(exclude),
             exclude_from_expansion=frozenset(exclude),
         )
@@ -311,6 +315,84 @@ def test_orphan_rule_still_fires_when_the_last_parent_just_exited(world: World) 
 
     result = world.refresh(tracker)
     assert {info.pid for info in result.alive} == {300}
+
+
+# -- the orphan rule, in a boundary treehawk shares -------------------------
+
+MARKER = "TREEHAWK_RUN_ID=7097c761417f4a599f3a36538f7055e0"
+
+
+def test_orphan_rule_adopts_nothing_from_a_shared_boundary_without_a_marker(world: World) -> None:
+    """The macOS bug: a coalition is the whole terminal app, helpers and all.
+
+    A helper the OS starts for the terminal is new, parented to PID 1 and in
+    the workload's boundary - everything a daemonized child is. With treehawk
+    in that boundary too, none of it is evidence.
+    """
+    world.spawn(100, cmdline="python train.py")
+    tracker = world.tracker(
+        build_matcher(kind="keyword", value="train.py"),
+        expand=("tree", "orphan"),
+        self_group=WORKLOAD_CGROUP,
+    )
+    world.seed(tracker)
+    world.refresh(tracker)
+
+    world.spawn(300, ppid=1, sid=300, comm="MTLCompilerServ")
+
+    assert {info.pid for info in world.refresh(tracker).alive} == {100}
+
+
+def test_orphan_rule_adopts_a_detached_child_that_carries_the_marker(world: World) -> None:
+    """Under ``run`` the workload's own descendants can still be told apart."""
+    world.spawn(100, cmdline="python train.py", environ=[MARKER])
+    tracker = world.tracker(
+        build_matcher(kind="keyword", value="train.py"),
+        expand=("tree", "orphan"),
+        self_group=WORKLOAD_CGROUP,
+        marker=MARKER,
+    )
+    world.seed(tracker)
+    world.refresh(tracker)
+
+    world.spawn(300, ppid=1, sid=300, environ=["HOME=/root", MARKER])  # daemonized
+    world.spawn(400, ppid=1, sid=400, comm="GoogleUpdater", environ=["HOME=/root"])  # a stranger
+    world.spawn(500, ppid=1, sid=500, environ=[MARKER + "0"])  # another run's child
+
+    result = world.refresh(tracker)
+    assert {info.pid for info in result.alive} == {100, 300}
+    assert result.via[300] == "orphan"
+
+
+def test_the_marker_is_not_asked_for_in_a_boundary_of_the_workload_s_own(world: World) -> None:
+    """Linux under ``run`` is unchanged: its scope is evidence enough."""
+    world.spawn(100, cmdline="python train.py")
+    world.spawn(9, comm="systemd", cgroup=REAPER_CGROUP)
+    tracker = world.tracker(build_matcher(kind="keyword", value="train.py"), expand=("orphan",), marker=MARKER)
+    world.seed(tracker)
+    world.refresh(tracker)
+
+    world.spawn(300, ppid=9, sid=300)  # no environ entry at all
+
+    assert {info.pid for info in world.refresh(tracker).alive} == {100, 300}
+
+
+def test_a_shared_boundary_with_no_marker_is_said_out_loud(world: World) -> None:
+    world.spawn(100, cmdline="python train.py")
+    matcher = build_matcher(kind="keyword", value="train.py")
+    shared = world.tracker(matcher, expand=("tree", "orphan"), self_group=WORKLOAD_CGROUP)
+    marked = world.tracker(matcher, expand=("tree", "orphan"), self_group=WORKLOAD_CGROUP, marker=MARKER)
+    apart = world.tracker(matcher, expand=("tree", "orphan"))
+    without_the_rule = world.tracker(matcher, expand=("tree",), self_group=WORKLOAD_CGROUP)
+    for tracker in (shared, marked, apart, without_the_rule):
+        world.seed(tracker)
+
+    (note,) = shared.notes
+    assert "orphan rule inactive" in note
+    assert "cgroup" in note
+    assert marked.notes == []
+    assert apart.notes == []
+    assert without_the_rule.notes == []
 
 
 # -- seeding --------------------------------------------------------------

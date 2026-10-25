@@ -250,7 +250,8 @@ def test_the_dashboard_names_the_measure_the_log_actually_carries() -> None:
     text = draw(board.render())
 
     # macOS has no PSS, so calling the column "pss" there would be a lie.
-    assert "foot" in text
+    assert "footprint" in text
+    assert "· foot " not in text  # the stats line names it in full too
     assert "pss" not in text
 
 
@@ -273,7 +274,7 @@ def test_the_summary_names_the_measure_too() -> None:
         )
     )
 
-    assert "peak foot" in rendered
+    assert "peak footprint" in rendered
 
 
 def test_the_summary_omits_a_group_figure_no_platform_could_supply() -> None:
@@ -377,3 +378,50 @@ def test_the_live_sink_takes_a_printed_line_at_any_point_in_the_run() -> None:
     sink.output("during the run")
     sink.close({"samples": 1})
     sink.output("after the summary")
+
+
+def test_the_dashboard_names_the_source_the_platform_reads() -> None:
+    board = Dashboard(palette=PALETTE)
+    board.start(header(group_path=None, metric_source="libproc"))
+
+    text = draw(board.render())
+
+    # "/proc" on a Mac was simply untrue.
+    assert "tracking via libproc" in text
+    assert "/proc" not in text
+
+
+def test_a_header_with_no_source_does_not_claim_one() -> None:
+    board = Dashboard(palette=PALETTE)
+    board.start(header(group_path=None))
+
+    assert "/proc" not in draw(board.render())
+
+
+def test_a_container_client_gets_a_hint_about_where_its_containers_ran() -> None:
+    rendered = draw(
+        render_summary(
+            summary={
+                "top_by_cpu": [{"pid": 7, "name": "docker-compose", "cmdline": "docker-compose up", "via": "tree"}]
+            },
+            header=header(argv=["make", "docker-up"]),
+            palette=PALETTE,
+        )
+    )
+
+    assert "docker-compose is a client" in rendered
+    assert "its containers run under the container engine" in rendered
+
+
+def test_the_hint_is_found_from_the_command_itself_too() -> None:
+    rendered = draw(
+        render_summary(summary={}, header=header(argv=["/usr/local/bin/podman", "run", "x"]), palette=PALETTE)
+    )
+
+    assert "podman is a client" in rendered
+
+
+def test_an_ordinary_workload_gets_no_container_hint() -> None:
+    rendered = draw(render_summary(summary={}, header=header(), palette=PALETTE))
+
+    assert "is a client" not in rendered

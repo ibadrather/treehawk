@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from treehawk.core.config import ExpansionName
 from treehawk.core.constants import CORE
 from treehawk.core.interfaces import (
     BoundaryStrategy,
@@ -22,6 +23,7 @@ from treehawk.core.interfaces import (
     GroupMetricSource,
     ProcessMatcher,
     ProcessSource,
+    boundary_contains,
 )
 from treehawk.core.models import Identity, ProcInfo, RefreshResult
 
@@ -49,6 +51,8 @@ class Tracker:
         self_group: str | None = None,
         self_sid: int = 0,
         pinned_group: str | None = None,
+        marker: str | None = None,
+        boundary_name: str = CORE.boundary_name,
         exclude_from_seed: frozenset[int] = frozenset(),
         exclude_from_expansion: frozenset[int] = frozenset(),
     ) -> None:
@@ -60,6 +64,8 @@ class Tracker:
         self._self_group = self_group
         self._self_sid = self_sid
         self._pinned_group = pinned_group
+        self._marker = marker
+        self._boundary_name = boundary_name
         self._exclude_from_seed = frozenset(exclude_from_seed)
         self._exclude_from_expansion = frozenset(exclude_from_expansion) | {self_pid}
 
@@ -76,6 +82,28 @@ class Tracker:
     @property
     def seeded(self) -> bool:
         return self._seeded
+
+    @property
+    def notes(self) -> list[str]:
+        """What the current members mean for how well they can be followed.
+
+        Read once the workload is seeded, for the log header. The one case
+        worth saying out loud: the workload sits in a boundary treehawk shares
+        and carries no run id, so the orphan rule has nothing to tell a
+        detached child from a stranger by, and adopts neither.
+        """
+        if self._marker is not None or not any(strategy.name == ExpansionName.ORPHAN for strategy in self._strategies):
+            return []
+        for pid, _starttime in self._members:
+            group = self._source.read_group_path(pid)
+            if group and boundary_contains(group, member=self._self_group):
+                return [
+                    (
+                        f"orphan rule inactive: the workload shares its {self._boundary_name} with the terminal, "
+                        "so a process that detaches between two samples is not followed; start it with run instead"
+                    )
+                ]
+        return []
 
     @property
     def group_paths(self) -> set[str]:
@@ -177,6 +205,7 @@ class Tracker:
             self_group=self._self_group,
             self_sid=self._self_sid,
             pinned_group=self._pinned_group,
+            marker=self._marker,
         )
         for _ in range(CORE.max_expansion_rounds):
             grew = False
