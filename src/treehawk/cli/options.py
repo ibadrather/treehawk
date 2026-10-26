@@ -100,3 +100,12 @@ AggregateOnly = Annotated[
         help="Log only the workload total, not a row per process. Much smaller logs for a run that lasts days.",
     ),
 ]
+
+NoGpu = Annotated[
+    bool,
+    typer.Option(
+        "--no-gpu",
+        rich_help_panel=CLI.advanced_panel,
+        help="Do not read NVIDIA GPU usage. By default it is logged whenever an NVIDIA driver is found.",
+    ),
+]

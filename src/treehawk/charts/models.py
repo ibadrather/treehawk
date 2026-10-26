@@ -79,6 +79,11 @@ class RunSeries:
     procs_rss_total: list[float] = field(default_factory=list)
     overrun_t: list[float] = field(default_factory=list)
     gaps: list[float] = field(default_factory=list)
+    """Awake seconds between consecutive samples."""
+    sleeps: list[tuple[float, float]] = field(default_factory=list)
+    """``(start, end)`` on ``t`` of each stretch the machine slept through."""
+    asleep_s: float = 0.0
+    """Of :attr:`duration`, the seconds the machine spent asleep."""
     tracks: list[ProcessTrack] = field(default_factory=list)
 
     @property

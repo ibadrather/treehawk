@@ -131,6 +131,7 @@ def sample_record(
         "seq": snapshot.seq,
         "t": snapshot.t,
         "ts": snapshot.timestamp,
+        "asleep_s": snapshot.asleep_s,
         "n_procs": snapshot.n_procs,
         "cpu_percent": snapshot.cpu_percent,
         "cpu_percent_norm": snapshot.cpu_percent_norm,

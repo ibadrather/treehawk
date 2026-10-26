@@ -9,6 +9,7 @@ does not grow its own private copy.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from typing import TypeVar
 
 from treehawk.core.compat import TypeIs
@@ -63,3 +64,17 @@ def peak_of(*, current: T | None, candidate: T | None) -> T | None:
     if candidate is None:
         return current
     return candidate if current is None else max(current, candidate)
+
+
+def epoch_of(ts: object) -> float | None:
+    """Unix seconds from an ISO-8601 timestamp, or None if it is not one."""
+    if not isinstance(ts, str) or not ts:
+        return None
+    text = ts[:-1] + "+00:00" if ts.endswith("Z") else ts
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.timestamp()

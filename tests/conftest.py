@@ -21,6 +21,7 @@ import pathlib
 import signal
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import IO
 
 import pytest
@@ -242,6 +243,10 @@ def cgroup_root(tmp_path: pathlib.Path) -> pathlib.Path:
     return root
 
 
+LOG_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+"""When the logs :func:`write_log` writes began, on the wall clock."""
+
+
 def write_log(path: pathlib.Path, *, samples: int = 6, per_process: bool = True, interval: float = 0.5) -> str:
     """A realistic JSONL log, for the readers, the views and the PDF report."""
     import json
@@ -313,7 +318,7 @@ def write_log(path: pathlib.Path, *, samples: int = 6, per_process: bool = True,
                 "type": "sample",
                 "seq": seq,
                 "t": round(seq * interval, 3),
-                "ts": f"2026-01-01T00:00:{seq:02d}Z",
+                "ts": (LOG_START + timedelta(seconds=seq * interval)).isoformat(timespec="milliseconds"),
                 "n_procs": len(procs) or 1,
                 "cpu_percent": None if seq == 0 else 90.0 + seq + (70.0 if seq >= 2 else 0),
                 "cpu_percent_norm": None if seq == 0 else 25.0,
@@ -366,10 +371,15 @@ class FakeClock:
 
     def __init__(self) -> None:
         self.t = 0.0
+        self.asleep = 0.0
+        """Seconds the "machine" has spent in system sleep: counted by :meth:`continuous` only."""
         self.sleeps: list[float] = []
 
     def monotonic(self) -> float:
         return self.t
+
+    def continuous(self) -> float:
+        return self.t + self.asleep
 
     def now_iso(self) -> str:
         return f"2026-01-01T00:00:{self.t:06.3f}Z"

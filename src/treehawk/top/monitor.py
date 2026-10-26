@@ -104,12 +104,14 @@ class TopMonitor:
     def run(self) -> TopSummary:
         """Sample until stopped, or a configured limit is reached. Always writes a summary."""
         self._config.validate()
-        origin = self._clock.monotonic()
+        # Pacing and rates run on awake time; ``elapsed`` - segments, the
+        # duration limit, ``t`` - on time that keeps counting through sleep.
+        origin = self._clock.continuous()
         self._open_segment(elapsed=0.0)
 
         seq = 0
         previous_at: float | None = None
-        deadline = origin
+        deadline = self._clock.monotonic()
         try:
             while not self._stop:
                 self._clock.sleep_until(deadline)
@@ -117,7 +119,7 @@ class TopMonitor:
                 interval = self._pacing.interval
                 dt = 0.0 if previous_at is None else sampled_at - previous_at
                 overrun = previous_at is not None and dt > interval * TOP.overrun_factor
-                elapsed = sampled_at - origin
+                elapsed = self._clock.continuous() - origin
                 if self._segment_due(elapsed):
                     self._roll_segment(elapsed)
 

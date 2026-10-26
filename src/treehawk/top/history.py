@@ -12,13 +12,12 @@ the wall clock orders them.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
 from typing import TypeAlias
 
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
 from treehawk.core.models import Identity
-from treehawk.core.values import as_float, as_int, as_mapping, as_sequence, peak_of
+from treehawk.core.values import as_float, as_int, as_mapping, as_sequence, epoch_of, peak_of
 from treehawk.report import read_records
 from treehawk.top.constants import TOP
 from treehawk.top.models import EventKind, ProcessHistory, Resource, TopHistory
@@ -32,20 +31,6 @@ HOST_CPU: SeriesKey = ("host-cpu", 0, 0)
 HOST_MEMORY: SeriesKey = ("host-mem", 0, 0)
 CPU = "cpu"
 RSS = "rss"
-
-
-def epoch_of(ts: object) -> float | None:
-    """Unix seconds from an ISO-8601 timestamp, or None if it is not one."""
-    if not isinstance(ts, str) or not ts:
-        return None
-    text = ts[:-1] + "+00:00" if ts.endswith("Z") else ts
-    try:
-        moment = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    return moment.timestamp()
 
 
 def load_history(

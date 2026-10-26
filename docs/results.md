@@ -84,12 +84,12 @@ so a killed run still leaves a readable log.
 ```jsonc
 {"type":"header","mode":"run","argv":["python3","train.py"],"interval":0.5,
  "memory_kind":"pss","host":{"ncpu":32},"notes":[]}
-{"type":"sample","seq":12,"t":6.0,"n_procs":4,
+{"type":"sample","seq":12,"t":6.0,"asleep_s":0.0,"n_procs":4,
  "cpu_percent":315.5, "cpu_percent_norm":9.9, "cpu_seconds_total":18.4,
  "rss_bytes":642269184, "pss_bytes":614628352, "group_memory_bytes":615354368,
  "overrun":false,
  "procs":[{"pid":65438,"ppid":1,"name":"python3","cpu_percent":34.0,"rss_bytes":68263936,"via":"cgroup"}]}
-{"type":"summary","samples":42,"duration_s":20.5,"peak_cpu_percent":319.64,"exit_code":0,
+{"type":"summary","samples":42,"duration_s":20.5,"asleep_s":0.0,"peak_cpu_percent":319.64,"exit_code":0,
  "top_by_cpu":[...],"top_by_memory":[...]}
 ```
 
@@ -101,12 +101,15 @@ The fields you will reach for most:
 | `metric_source` | header: where the readings come from, `/proc` (Linux) or `libproc` (macOS); `null` in a log written before 0.9.0 |
 | `notes` | header: anything treehawk could not measure on this machine, and why |
 | `exit_code` | summary, `run` only: the command's exit status; negative is the signal that ended it (`-2` after `Ctrl-C`), `null` under `watch` |
+| `t`, `duration_s` | seconds since the first sample, by the wall clock: time the machine slept counts |
+| `asleep_s` | of `t` (or, in the summary, of `duration_s`), the seconds the machine spent in system sleep |
 | `cpu_percent` | CPU over the last interval, summed across processes; `100` is one core, `null` in the first sample |
 | `cpu_percent_norm` | the same, as a share of the whole machine |
 | `cpu_seconds_total` | lifetime CPU time, including exited children |
 | `cpu_seconds_used` | CPU time since treehawk attached |
 | `rss_bytes`, `pss_bytes`, `swap_bytes` | memory; see [which one to trust](how-it-works.md#memory) |
 | `group_memory_bytes`, `group_memory_peak_bytes` | the kernel's own charge for the boundary; `null` without one, and always on macOS |
+| `gpu.memory_bytes`, `gpu.percent` | the workload's own NVIDIA GPU memory, and its share of GPU compute time (`100` is one GPU fully busy), summed across GPUs; other processes on the GPU are left out; absent without an NVIDIA driver or with `--no-gpu`, and not in CSV |
 | `overrun` | this sample arrived more than 1.5 intervals late |
 | `procs[].via` | which [membership rule](how-it-works.md#membership) found the process |
 

@@ -221,3 +221,28 @@ def test_automatic_pacing_writes_the_interval_it_chose() -> None:
     intervals = [record["interval"] for record in sink.of("sample")]
     assert intervals[0] == pytest.approx(1.0)
     assert intervals[-1] == pytest.approx(0.1)  # a fake sample costs nothing, so it goes as fast as allowed
+
+
+def test_the_machine_sleeping_is_part_of_the_timeline_but_not_an_overrun() -> None:
+    sink = TranscriptSink()
+    clock = FakeClock()
+
+    def lid_closed(source: FakeProcessSource) -> None:
+        del source
+        clock.asleep += 600.0
+
+    monitor = TopMonitor(
+        source=base_machine([idle, lid_closed, idle]),
+        sink=sink,
+        clock=clock,
+        config=TopConfig(top_n=2, interval=1.0, max_samples=3, segment_seconds=None),
+        host=TEST_HOST,
+        thresholds=QUICK,
+    )
+    monitor.run()
+
+    samples = sink.of("sample")
+    assert [record["t"] for record in samples] == [0.0, 1.0, 602.0]
+    assert [record["dt"] for record in samples] == [0.0, 1.0, 1.0]
+    assert not any(record["overrun"] for record in samples)
+    assert sink.of("summary")[0]["duration_s"] == pytest.approx(602.0)

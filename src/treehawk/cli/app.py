@@ -41,6 +41,7 @@ from treehawk.cli.options import (
     Expand,
     Interval,
     NoCapture,
+    NoGpu,
     NoPss,
     Output,
     Quiet,
@@ -69,6 +70,7 @@ from treehawk.core.interfaces import Clock, ProcessLauncher, ProcessMatcher, Sin
 from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
+from treehawk.gpu import Nvml, build_collectors
 from treehawk.platforms.models import Platform
 from treehawk.report import Report, build_report, peek_header
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
@@ -172,6 +174,7 @@ def watch(
     expand: Expand = None,
     no_pss: NoPss = False,
     aggregate_only: AggregateOnly = False,
+    no_gpu: NoGpu = False,
 ) -> None:
     """Watch a process that is already running, until it ends.
 
@@ -187,6 +190,7 @@ def watch(
         expand=expand,
         detail=LogDetail.AGGREGATE if aggregate_only else LogDetail.PER_PROCESS,
         memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
+        gpu=not no_gpu,
         missing_workload=MissingWorkload.WAIT if wait else MissingWorkload.FAIL,
     )
     platform = runtime.platform()
@@ -228,6 +232,7 @@ def run(
     expand: Expand = None,
     no_pss: NoPss = False,
     aggregate_only: AggregateOnly = False,
+    no_gpu: NoGpu = False,
     no_capture: NoCapture = False,
     no_isolate: Annotated[
         bool,
@@ -263,6 +268,7 @@ def run(
         expand=expand,
         detail=LogDetail.AGGREGATE if aggregate_only else LogDetail.PER_PROCESS,
         memory=MemoryDetail.RESIDENT if no_pss else MemoryDetail.PROPORTIONAL,
+        gpu=not no_gpu,
         missing_workload=MissingWorkload.FAIL,
     )
     platform = runtime.platform()
@@ -277,6 +283,9 @@ def run(
         _announce_log_path(path)
         if workload_log is not None:
             stderr_console.print(f"[dim]workload output to[/dim] {workload_log}")
+    # Opened before the launch: a GPU driver can take a second to wake, and the
+    # workload's first moments would otherwise go unsampled.
+    collectors = build_collectors(config.collectors)
     workload = launcher.launch(argv, output=destination)
     reader = _start_reader(workload=workload, sink=sinks, mirror=workload_log)
 
@@ -291,6 +300,7 @@ def run(
         argv=argv,
         pinned_group=workload.group_path,
         marker=workload.marker,
+        collectors=collectors,
         notes=tuple(platform.notes) + tuple(workload.notes),
     )
     # The workload already exists, so seed now rather than searching for it.
@@ -435,6 +445,7 @@ def top(
     segment: Segment = "1h",
     quiet: Quiet = False,
     no_pss: NoPss = False,
+    no_gpu: NoGpu = False,
     duration: Duration = None,
 ) -> None:
     """Follow the top processes of the whole machine until stopped.
@@ -462,6 +473,7 @@ def top(
         config=config,
         sink=sinks,
         clock=runtime.clock,
+        gpu=None if no_gpu else Nvml.open(),
         notes=tuple(platform.notes),
     )
     _install_top_signal_handlers(monitor)
@@ -629,6 +641,7 @@ def _build_config(
     expand: list[ExpansionName] | None,
     detail: LogDetail,
     memory: MemoryDetail,
+    gpu: bool,
     missing_workload: MissingWorkload,
 ) -> WatchConfig:
     config = WatchConfig(
@@ -638,6 +651,7 @@ def _build_config(
         memory=memory,
         expand=tuple(expand) if expand else DEFAULT_EXPANSIONS,
         missing_workload=missing_workload,
+        collectors=CLI.gpu_collectors if gpu else (),
     )
     config.validate()
     return config

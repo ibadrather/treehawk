@@ -34,6 +34,7 @@ class SinkConstants:
         "seq",
         "t",
         "ts",
+        "asleep_s",
         "n_procs",
         "cpu_percent",
         "cpu_percent_norm",

@@ -123,11 +123,7 @@ class SystemSource(Protocol):
 
 @runtime_checkable
 class ProcessGpuSource(Protocol):
-    """Reads per-process GPU usage.
-
-    No implementation ships yet; ``top`` ranks by GPU memory as soon as one is
-    registered, without any change to the ranking itself.
-    """
+    """Reads per-process GPU usage (NVIDIA: :class:`treehawk.gpu.Nvml`)."""
 
     def read(self) -> Mapping[int, GpuUsage]:
         """``{pid: usage}`` for every process using a GPU right now."""
@@ -233,7 +229,13 @@ class Sink(Protocol):
 class Clock(Protocol):
     """Time and sleeping, injected so the sampling loop is testable."""
 
-    def monotonic(self) -> float: ...
+    def monotonic(self) -> float:
+        """Seconds the machine has been awake: paces samples and divides CPU deltas."""
+        ...
+
+    def continuous(self) -> float:
+        """Like :meth:`monotonic`, but still counting while the machine sleeps: the run's timeline."""
+        ...
 
     def now_iso(self) -> str: ...
 

@@ -98,15 +98,22 @@ class Monitor:
 
         seq = 0
         previous_at: float | None = None
+        # Two clocks: pacing and CPU rates run on awake time, so a machine that
+        # slept is neither flagged as overrun nor followed by a burst of
+        # catch-up samples; the timeline runs on time that counts the sleep, so
+        # the duration matches the wall clock.
         origin = self._clock.monotonic()
+        continuous_origin = self._clock.continuous()
         try:
             while not self._stop:
                 self._clock.sleep_until(origin + seq * self._config.interval)
                 sampled_at = self._clock.monotonic()
+                elapsed = self._clock.continuous() - continuous_origin
                 dt = 0.0 if previous_at is None else sampled_at - previous_at
                 snapshot = self._sample(
                     seq=seq,
-                    elapsed=sampled_at - origin,
+                    elapsed=elapsed,
+                    asleep=max(0.0, elapsed - (sampled_at - origin)),
                     dt=dt,
                     overrun=(previous_at is not None and dt > self._config.interval * 1.5),
                 )
@@ -125,7 +132,7 @@ class Monitor:
                 if self._should_finish(
                     snapshot=snapshot,
                     samples_taken=seq,
-                    elapsed=sampled_at - origin,
+                    elapsed=elapsed,
                 ):
                     break
         finally:
@@ -140,7 +147,7 @@ class Monitor:
             with contextlib.suppress(Exception):  # a broken collector must not cost us the log
                 collector.close()
 
-    def _sample(self, *, seq: int, elapsed: float, dt: float, overrun: bool) -> Snapshot:
+    def _sample(self, *, seq: int, elapsed: float, asleep: float, dt: float, overrun: bool) -> Snapshot:
         procs = self._source.scan()
         refresh = self._tracker.refresh(procs)
         for identity in refresh.exited:
@@ -150,6 +157,7 @@ class Monitor:
         snapshot = self._aggregator.build(
             seq=seq,
             elapsed=elapsed,
+            asleep=asleep,
             dt=dt,
             timestamp=self._clock.now_iso(),
             refresh=refresh,
