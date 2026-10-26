@@ -31,10 +31,12 @@ def continuous_time() -> float:
     :func:`time.monotonic` stops during system sleep on both macOS
     (``mach_absolute_time``) and Linux (``CLOCK_MONOTONIC``), so a run that
     spans a closed lid would report hours less than the wall clock shows.
-    macOS's ``CLOCK_MONOTONIC`` and Linux's ``CLOCK_BOOTTIME`` count the sleep.
+    macOS's ``CLOCK_MONOTONIC_RAW`` (``mach_continuous_time``) and Linux's
+    ``CLOCK_BOOTTIME`` count the sleep. macOS's ``CLOCK_MONOTONIC`` counts it
+    too, but is derived from the wall clock, so it can lag the awake clock.
     """
     if sys.platform == "linux":
         return time.clock_gettime(time.CLOCK_BOOTTIME)
     if sys.platform == "darwin":
-        return time.clock_gettime(time.CLOCK_MONOTONIC)
+        return time.clock_gettime(time.CLOCK_MONOTONIC_RAW)
     return time.monotonic()
