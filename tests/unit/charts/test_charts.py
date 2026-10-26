@@ -138,6 +138,23 @@ def test_per_process_pages_are_skipped_when_the_log_has_no_detail(tmp_path: path
     assert "CPU over time" in titles
 
 
+def test_the_biggest_consumers_pages_carry_each_whole_command_line(tmp_path: pathlib.Path) -> None:
+    command = "/opt/deep/install/prefix/bin/worker " + " ".join(f"--option-{n}=value" for n in range(30))
+    path = tmp_path / "long.jsonl"
+    write_log(path)
+    path.write_text(path.read_text().replace("python worker.py", command))
+    destination = tmp_path / "long.pdf"
+
+    write_pdf_report(log_path=str(path), destination=str(destination))
+
+    pages = [page.extract_text() for page in PdfReader(str(destination)).pages]
+    consumers = [text for text in pages if "Biggest consumers" in text]
+    assert len(consumers) == 2
+    for text in consumers:
+        assert "/opt/deep/install/prefix/bin/worker" in text
+        assert "--option-29=value" in text  # wrapped onto later lines, not cut
+
+
 def test_a_two_sample_log_still_renders(tmp_path: pathlib.Path) -> None:
     """Short runs happen; the sampling page needs three points and bows out."""
     short = write_log(tmp_path / "short.jsonl", samples=2)

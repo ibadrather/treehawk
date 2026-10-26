@@ -18,6 +18,7 @@ from treehawk.core.errors import ReportError
 from treehawk.htmlreport import write_html_report
 from treehawk.htmlreport.models import Unit
 from treehawk.htmlreport.scale import elapsed_label, elapsed_ticks, thin, value_axis, with_breaks
+from treehawk.ui.theme import BRAND
 
 # -- axes -----------------------------------------------------------------
 
@@ -112,6 +113,25 @@ def test_the_page_stands_alone(log: str, tmp_path: pathlib.Path) -> None:
     assert "<script>" in page
     # Nothing to fetch: it opens offline, from an attachment, years later.
     assert not re.search(r"""(src|href)=["']https?://""", page)
+
+
+def test_the_brand_fonts_travel_inside_the_page(log: str, tmp_path: pathlib.Path) -> None:
+    page = _page(log, tmp_path)
+
+    assert page.count("@font-face") == len(BRAND.fonts)
+    assert page.count("url(data:font/woff2;base64,") == len(BRAND.fonts)
+
+
+def test_a_command_line_is_shown_whole(tmp_path: pathlib.Path) -> None:
+    command = "/opt/deep/install/prefix/bin/worker " + " ".join(f"--option-{n}=value" for n in range(30))
+    path = tmp_path / "long.jsonl"
+    write_log(path)
+    path.write_text(path.read_text().replace("python worker.py", command))
+
+    page = _page(str(path), tmp_path)
+
+    # In the biggest consumers lists and in the tracks table, never cut.
+    assert page.count(command) >= 3
 
 
 def test_the_page_says_what_ran_and_when(log: str, tmp_path: pathlib.Path) -> None:

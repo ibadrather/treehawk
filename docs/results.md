@@ -61,7 +61,7 @@ to bottom:
 | Key figures | peak and mean CPU, CPU time, peak memory, processes seen |
 | Warnings | a failed exit, an interrupted log, late samples, sleep, and the platform's notes |
 | Timeline | CPU, memory and processes alive over time; hover to read every series at one moment |
-| Biggest consumers | the processes that used the most CPU time and held the most memory |
+| Biggest consumers | the processes that used the most CPU time and held the most memory, each with its whole command line |
 | Process tracks | every process with a bar for when it was alive; click a column to sort |
 | Run details | sampling, host, boundary, memory measure and where the log came from |
 
@@ -73,7 +73,7 @@ and marked on the charts.
 ## The PDF report
 
 `--pdf` writes beside the log as `.pdf`, or wherever `-o` says.
-A workload log becomes eight pages, each answering one question.
+A workload log becomes nine pages, each answering one question.
 [Download a sample report](assets/output/sample-run.pdf).
 
 | Page | Question |
@@ -84,8 +84,8 @@ A workload log becomes eight pages, each answering one question.
 | Process lifetimes | Who was alive, when: one bar per process |
 | CPU by process | Which process was burning the CPU |
 | Memory by process | Which process was holding the memory |
-| Biggest consumers | The two league tables |
-| Sampling quality | Can you trust the other seven pages? |
+| Biggest consumers (×2) | Who used the most CPU time, then who held the most memory, each with its whole command line |
+| Sampling quality | Can you trust the other eight pages? |
 
 Pages that need per-process detail are left out of an `--aggregate-only` log
 rather than printed blank.

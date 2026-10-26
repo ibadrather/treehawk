@@ -25,3 +25,28 @@ class Palette:
         if 0 <= index < len(self.series):
             return self.series[index]
         return self.other
+
+
+@dataclass(frozen=True, slots=True)
+class Font:
+    """One bundled font file, and the weight it draws."""
+
+    family: str
+    weight: int
+    stem: str
+    """File name without its extension: there is a ``.ttf`` and a ``.woff2``."""
+
+
+@dataclass(frozen=True, slots=True)
+class Brand:
+    """The look of the docs site, which the HTML and PDF reports share."""
+
+    primary: str
+    primary_soft: str
+    """The primary, lifted to read on a dark surface."""
+    accent: str
+    cream: str
+    ink: str
+    sans: str
+    mono: str
+    fonts: tuple[Font, ...]

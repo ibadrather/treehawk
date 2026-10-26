@@ -1,7 +1,8 @@
 """Writing a :class:`~treehawk.htmlreport.models.Page` out as one HTML file.
 
-The file stands alone: the stylesheet, the script and every chart are inside
-it, so it opens offline, mails as an attachment and prints as it looks. Charts
+The file stands alone: the stylesheet, its fonts, the script and every chart
+are inside it, so it opens offline, mails as an attachment and prints as it
+looks. Charts
 are SVG drawn here, in Python - the script only adds the hover readout and
 table sorting, and the page reads the same without it.
 
@@ -11,6 +12,7 @@ markup; nothing else escapes, so nothing is escaped twice.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 from collections.abc import Callable, Iterable, Sequence
@@ -32,7 +34,7 @@ from treehawk.htmlreport.models import (
     Section,
     Tracks,
 )
-from treehawk.ui.theme import DISCOVERY_ORDER
+from treehawk.ui.theme import BRAND, DISCOVERY_ORDER, font_file
 
 WIDTH = 1000
 """The SVG's own width; it is stretched to the column, never read in pixels."""
@@ -70,7 +72,7 @@ def render(page: Page) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'<meta name="generator" content="treehawk {_text(__version__)}">\n'
         f"<title>{_text(page.title)}</title>\n"
-        f"<style>\n{_asset('report.css')}</style>\n"
+        f"<style>\n{_font_faces()}{_asset('report.css')}</style>\n"
         f'</head>\n<body>\n<main class="sheet">\n{body}\n</main>\n'
         f"<script>\n{_asset('report.js')}</script>\n</body>\n</html>\n"
     )
@@ -78,6 +80,18 @@ def render(page: Page) -> str:
 
 def _asset(name: str) -> str:
     return resources.files("treehawk.htmlreport").joinpath("assets", name).read_text(encoding="utf-8")
+
+
+def _font_faces() -> str:
+    """The brand fonts, inlined: a report never fetches anything to look right."""
+    faces: list[str] = []
+    for font in BRAND.fonts:
+        data = base64.b64encode(font_file(font, suffix=".woff2").read_bytes()).decode("ascii")
+        faces.append(
+            f'@font-face {{ font-family: "{font.family}"; font-weight: {font.weight}; font-display: swap; '
+            f'src: url(data:font/woff2;base64,{data}) format("woff2"); }}\n'
+        )
+    return "".join(faces)
 
 
 def _text(value: object) -> str:
@@ -294,15 +308,19 @@ def _overlay_labels(chart: Chart) -> str:
 # -- who did it --------------------------------------------------------------
 
 
-def _who(process: Process, *, width: int = 0) -> str:
+def _who(process: Process) -> str:
+    """A process' name, pid and how it was found, over its whole command line.
+
+    The command is never cut: the path of what ran is often the one thing that
+    tells two processes of the same name apart.
+    """
     found = ""
     if process.found:
         found = f'<span class="found" style="--c:var(--{_found_color(process.found)})">{_text(process.found)}</span>'
-    command = process.command if width <= 0 or len(process.command) <= width else process.command[: width - 1] + "…"
     return (
         f'<div class="who"><span class="name"><b>{_text(process.name)}</b>'
         f'<span class="pid">{process.pid}</span>{found}</span>'
-        f'<code title="{_text(process.command)}">{_text(command)}</code></div>'
+        f"<code>{_text(process.command)}</code></div>"
     )
 
 
@@ -313,7 +331,7 @@ def _found_color(found: str) -> str:
 def _ranking(ranking: Ranking) -> str:
     widest = max((entry.value for entry in ranking.entries), default=0.0)
     items = "".join(
-        f'<li>{_who(entry.process, width=160)}<span class="value">{_text(entry.text)}</span>'
+        f'<li>{_who(entry.process)}<span class="value">{_text(entry.text)}</span>'
         f'<span class="meter"><i style="width:{_pct(entry.value / widest if widest else 0.0)};'
         f'--c:var(--{_found_color(entry.process.found)})"></i></span></li>'
         for entry in ranking.entries
@@ -335,7 +353,7 @@ def _tracks(tracks: Tracks) -> str:
         life = track.lifetime
         color = _found_color(track.process.found)
         cells = (
-            f'<td class="proc" data-sort="{_text(track.process.name.lower())}">{_who(track.process, width=120)}</td>'
+            f'<td class="proc" data-sort="{_text(track.process.name.lower())}">{_who(track.process)}</td>'
             f'<td class="life" data-sort="{life.start:.6f}"><div class="life-track" title="{_text(life.label)}">'
             f'<i style="left:{_pct(life.start)};width:{_pct(max(life.end - life.start, 0.0))};--c:var(--{color})"></i>'
             "</div></td>"

@@ -1,16 +1,20 @@
-"""Matplotlib styling, derived from the shared palette.
+"""Matplotlib styling, derived from the shared palette and the brand.
 
 Everything visual is set here so the page functions contain plot calls and
 nothing else. The rules encoded below are the ones that make a chart readable
 rather than decorative: recessive axes, a grid behind the data, thin marks, and
-no chartjunk.
+no chartjunk. The page around the charts wears the docs site's brand: Poppins
+and Fira Code, bundled so every machine draws the same PDF, and headings in
+the brand purple.
 """
 
 from __future__ import annotations
 
 import sys
+from functools import cache
 from typing import TYPE_CHECKING
 
+from matplotlib import font_manager
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator
@@ -28,12 +32,30 @@ if TYPE_CHECKING:
 from treehawk.charts.constants import CHARTS
 from treehawk.core.humanize import format_bytes
 from treehawk.ui.models import Palette
-from treehawk.ui.theme import PRINT
+from treehawk.ui.theme import BRAND, PRINT, font_file
+
+FALLBACK_SANS = "DejaVu Sans"
+"""Ships with matplotlib, so a glyph the brand subset lacks still prints."""
+
+FALLBACK_MONO = "DejaVu Sans Mono"
+
+
+@cache
+def register_fonts() -> None:
+    """Make the bundled brand fonts available to matplotlib, once."""
+    for font in BRAND.fonts:
+        font_manager.fontManager.addfont(str(font_file(font, suffix=".ttf")))
 
 
 def rc_params(palette: Palette = PRINT) -> dict[RcKeyType, object]:
     """Global styling: recessive furniture, readable text, no clutter."""
+    register_fonts()
     return {
+        "font.family": [BRAND.sans, FALLBACK_SANS],
+        "font.monospace": [BRAND.mono, FALLBACK_MONO],
+        # TrueType, not Type 3: the text stays selectable and the file small.
+        "pdf.fonttype": 42,
+        "axes.unicode_minus": False,
         "figure.facecolor": palette.surface,
         "axes.facecolor": palette.surface,
         "savefig.facecolor": palette.surface,
@@ -67,9 +89,11 @@ def rc_params(palette: Palette = PRINT) -> dict[RcKeyType, object]:
 
 
 def draw_heading(fig: Figure, *, title: str, subtitle: str, palette: Palette = PRINT) -> None:
-    """Put a consistent heading on a page."""
-    fig.suptitle(title, x=0.06, y=0.965, ha="left", fontsize=16, fontweight="bold", color=palette.text_primary)
-    fig.text(0.06, 0.925, subtitle, ha="left", fontsize=9.5, color=palette.text_secondary)
+    """Put a consistent heading on a page, the title in the brand purple."""
+    # Placed by baseline: Poppins stands taller than a system font, and a title
+    # hung from its top would sit on the subtitle.
+    fig.suptitle(title, x=0.06, y=0.935, ha="left", va="baseline", fontsize=16, fontweight="bold", color=BRAND.primary)
+    fig.text(0.06, 0.905, subtitle, ha="left", va="baseline", fontsize=9.5, color=palette.text_secondary)
 
 
 def draw_footer(fig: Figure, *, left: str, right: str, palette: Palette = PRINT) -> None:
