@@ -56,7 +56,7 @@ workload finished while it is still burning a core. treehawk keeps it.
 | measure a command you are about to start | [`run`](workload.md#run-start-a-command) |
 | measure something that is already running | [`watch`](workload.md#watch-attach-to-a-running-process) |
 | follow the busiest processes of the whole machine, from boot if you like | [`top` and `service`](machine.md) |
-| look at a finished log | [`report` and `pdf`](results.md) |
+| look at a finished log | [`report`](results.md): HTML, PDF or the terminal |
 
 ## Quick tour
 
@@ -65,8 +65,9 @@ curl -LsSf https://github.com/ibadrather/treehawk/releases/latest/download/insta
 
 treehawk run -- python train.py         # start a command and follow it; exact
 treehawk watch train.py                 # attach to one that is already running
-treehawk report treehawk-*.jsonl        # summary in the terminal
-treehawk pdf treehawk-*.jsonl           # an 8-page PDF report
+treehawk report treehawk-*.jsonl        # an HTML report beside the log
+treehawk report treehawk-*.jsonl --pdf  # an 8-page PDF report
+treehawk report treehawk-*.jsonl --cli  # summary in the terminal
 treehawk top                            # the top processes of the whole machine
 ```
 

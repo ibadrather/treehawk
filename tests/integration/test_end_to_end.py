@@ -281,11 +281,18 @@ def test_report_round_trips_a_real_run(tmp_path: pathlib.Path) -> None:
         "1",
     )
 
-    result = treehawk("report", str(log))
+    result = treehawk("report", str(log), "--cli")
 
     assert result.returncode == 0
     assert "top by cpu time" in result.stdout
     assert "peak rss" in result.stdout
+
+    page = treehawk("report", str(log))
+
+    assert page.returncode == 0
+    text = (tmp_path / "run.html").read_text(encoding="utf-8")
+    assert "Process tracks" in text
+    assert "<svg" in text
 
 
 def test_csv_output_is_written_and_joinable(tmp_path: pathlib.Path) -> None:

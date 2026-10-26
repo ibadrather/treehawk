@@ -49,6 +49,24 @@ def memory_measure(header: Record) -> MemoryMeasure:
     return MEMORY_MEASURES.get(str(header.get("memory_kind") or PSS.key), PSS)
 
 
+def memory_subtitle(*, measure: MemoryMeasure, rss: bool, fair: bool, group: bool) -> str:
+    """Explain the memory series a chart shows - those, and no others.
+
+    A subtitle that describes a cgroup line on a macOS log, where there is no
+    cgroup, explains something the reader cannot find on the page.
+    """
+    parts: list[str] = []
+    if rss and (fair or group):
+        parts.append("rss counts shared pages once per process")
+    elif rss:
+        parts.append("summed rss counts shared pages once per process, so it reads high")
+    if fair:
+        parts.append(measure.blurb)
+    if group:
+        parts.append("cgroup is the kernel's own figure")
+    return "; ".join(parts)
+
+
 def memory_reading(*, record: Record, header: Record) -> MemoryReading:
     """The best memory figure in one sample, in the order we trust the measures.
 

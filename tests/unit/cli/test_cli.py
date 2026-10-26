@@ -9,6 +9,7 @@ starts a real process or waits on a real clock.
 
 from __future__ import annotations
 
+import gzip
 import pathlib
 import re
 import signal
@@ -318,8 +319,36 @@ def test_an_impossible_interval_is_refused() -> None:
     assert result.exit_code != 0
 
 
-def test_report_renders_a_log(log: str) -> None:
-    result = runner.invoke(app, ["report", log])
+def test_report_writes_an_html_page_beside_the_log_by_default(tmp_path: pathlib.Path) -> None:
+    log_path = write_log(tmp_path / "run.jsonl")
+    result = runner.invoke(app, ["report", log_path])
+    assert result.exit_code == 0, result.output
+    page = (tmp_path / "run.html").read_text(encoding="utf-8")
+    assert page.startswith("<!doctype html>")
+    assert "python train.py" in page
+    assert "run.html" in result.stdout
+
+
+def test_report_names_the_page_after_a_compressed_log(tmp_path: pathlib.Path) -> None:
+    plain = pathlib.Path(write_log(tmp_path / "run.jsonl"))
+    packed = tmp_path / "packed.jsonl.gz"
+    packed.write_bytes(gzip.compress(plain.read_bytes()))
+    result = runner.invoke(app, ["report", str(packed)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "packed.html").exists()
+
+
+def test_report_writes_html_where_it_is_told(tmp_path: pathlib.Path) -> None:
+    log_path = write_log(tmp_path / "run.jsonl")
+    destination = tmp_path / "out" / "page.html"
+    destination.parent.mkdir()
+    result = runner.invoke(app, ["report", log_path, "--html", "-o", str(destination)])
+    assert result.exit_code == 0, result.output
+    assert destination.exists()
+
+
+def test_report_renders_a_log_in_the_terminal(log: str) -> None:
+    result = runner.invoke(app, ["report", log, "--cli"])
     assert result.exit_code == 0
     assert "peak" in result.stdout
     assert "train.py" in result.stdout
@@ -331,21 +360,35 @@ def test_report_can_emit_json(log: str) -> None:
     assert '"summary"' in result.stdout
 
 
+def test_report_takes_one_format_at_a_time(log: str) -> None:
+    result = runner.invoke(app, ["report", log, "--pdf", "--cli"])
+    assert result.exit_code == 1
+    assert "just one of" in result.output
+
+
+def test_report_refuses_an_output_path_for_the_terminal(log: str, tmp_path: pathlib.Path) -> None:
+    result = runner.invoke(app, ["report", log, "--cli", "-o", str(tmp_path / "x.html")])
+    assert result.exit_code == 1
+    assert "--output" in result.output
+
+
 def test_report_on_a_missing_file_fails_clearly(tmp_path: pathlib.Path) -> None:
     result = runner.invoke(app, ["report", str(tmp_path / "nope.jsonl")])
     assert result.exit_code == 1
     assert "cannot read" in result.output
 
 
-def test_pdf_writes_next_to_the_log(tmp_path: pathlib.Path) -> None:
+def test_report_pdf_writes_next_to_the_log(tmp_path: pathlib.Path) -> None:
     log_path = write_log(tmp_path / "run.jsonl")
-    result = runner.invoke(app, ["pdf", log_path])
+    result = runner.invoke(app, ["report", log_path, "--pdf"])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "run.pdf").exists()
 
 
-def test_pdf_on_an_empty_log_fails_clearly(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize("fmt", ["--html", "--pdf"])
+def test_a_report_of_an_empty_log_fails_clearly(tmp_path: pathlib.Path, fmt: str) -> None:
     empty = tmp_path / "empty.jsonl"
     empty.write_text("")
-    result = runner.invoke(app, ["pdf", str(empty)])
+    result = runner.invoke(app, ["report", str(empty), fmt])
     assert result.exit_code == 1
+    assert "no samples" in result.output

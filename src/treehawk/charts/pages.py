@@ -32,8 +32,7 @@ from treehawk.core.humanize import (
     format_seconds,
     truncate,
 )
-from treehawk.core.models import MemoryMeasure
-from treehawk.core.records import memory_measure, peak_memory_reading
+from treehawk.core.records import memory_measure, memory_subtitle, peak_memory_reading
 from treehawk.core.values import as_float, as_mapping, as_sequence
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import DISCOVERY_ORDER, PRINT
@@ -652,24 +651,6 @@ def _widest_run(values: Sequence[float], *, threshold: float) -> tuple[int, int]
             best = (start, index - 1)
         start = None
     return best
-
-
-def memory_subtitle(*, measure: MemoryMeasure, rss: bool, fair: bool, group: bool) -> str:
-    """Explain the memory series a chart shows - those, and no others.
-
-    A subtitle that describes a cgroup line on a macOS log, where there is no
-    cgroup, explains something the reader cannot find on the page.
-    """
-    parts: list[str] = []
-    if rss and (fair or group):
-        parts.append("rss counts shared pages once per process")
-    elif rss:
-        parts.append("summed rss counts shared pages once per process, so it reads high")
-    if fair:
-        parts.append(measure.blurb)
-    if group:
-        parts.append("cgroup is the kernel's own figure")
-    return "; ".join(parts)
 
 
 def _timeline_axes(fig: Figure, *, rows: int) -> tuple[Axes, Axes]:

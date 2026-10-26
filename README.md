@@ -49,8 +49,9 @@ see [Install](https://ibadrather.github.io/treehawk/install/).
 ```bash
 treehawk run -- python train.py --epochs 10   # start a command and follow it; exact
 treehawk watch train.py                       # attach to one already running
-treehawk report treehawk-*.jsonl              # summary in the terminal
-treehawk pdf    treehawk-*.jsonl              # an 8-page PDF report
+treehawk report treehawk-*.jsonl              # an HTML report beside the log
+treehawk report treehawk-*.jsonl --pdf        # an 8-page PDF report
+treehawk report treehawk-*.jsonl --cli        # summary in the terminal
 
 treehawk top                                  # the top processes of the whole machine
 sudo "$(command -v treehawk)" service install # ... as a systemd service (Linux)
@@ -65,7 +66,7 @@ with `jq`.
 |---|---|
 | [Track a workload](https://ibadrather.github.io/treehawk/workload/) | `watch` and `run`, and their options |
 | [Track the whole machine](https://ibadrather.github.io/treehawk/machine/) | `top`, the service, spikes and leak suspects |
-| [Read the results](https://ibadrather.github.io/treehawk/results/) | `report`, `pdf`, and the log formats |
+| [Read the results](https://ibadrather.github.io/treehawk/results/) | `report` as HTML, PDF or in the terminal, and the log formats |
 | [How it works](https://ibadrather.github.io/treehawk/how-it-works/) | membership rules, memory measures, limitations |
 | [Platforms](https://ibadrather.github.io/treehawk/platforms/) | what Linux and macOS can and cannot report |
 

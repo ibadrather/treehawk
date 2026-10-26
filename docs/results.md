@@ -1,8 +1,9 @@
 ---
-title: CPU and memory usage report in the terminal or PDF
+title: CPU and memory usage report as HTML, PDF or in the terminal
 description: >-
-  Turn a treehawk log into a CPU and memory usage report: a terminal summary, JSON, or a PDF with charts of CPU and RAM usage over time.
+  Turn a treehawk log into a CPU and memory usage report: an HTML page with charts, a PDF, a terminal summary, or JSON.
 keywords:
+  - cpu usage report html
   - cpu usage report pdf
   - memory usage report
   - log cpu usage over time
@@ -12,16 +13,19 @@ keywords:
 
 # Read the results
 
-Every run leaves a log of CPU and memory usage over time. `report` summarises it
-in the terminal, and `pdf` turns it into a report with charts. Both work on either kind of log (a `watch`/`run` log or a
-`top` directory) and tell them apart by the log's header. They also work on the
-log of an interrupted run, because the summary is recomputed from the samples
-that were written.
+Every run leaves a log of CPU and memory usage over time. `report` turns it
+into an HTML page with charts, written beside the log; `--pdf` writes a PDF
+instead, and `--cli` or `--json` print a summary in the terminal. Every format
+works on either kind of log (a `watch`/`run` log or a `top` directory) and
+tells them apart by the log's header. They also work on the log of an
+interrupted run, because the summary is recomputed from the samples that were
+written.
 
 ```bash
-treehawk report run.jsonl            # summary in the terminal
+treehawk report run.jsonl            # writes run.html
+treehawk report run.jsonl --pdf      # writes run.pdf
+treehawk report run.jsonl --cli      # summary in the terminal
 treehawk report run.jsonl --json     # header and summary as JSON
-treehawk pdf run.jsonl               # writes run.pdf
 treehawk report treehawk-top --since 2h
 ```
 
@@ -29,24 +33,46 @@ treehawk report treehawk-top --since 2h
 
 ## report
 
-| Option | |
-|---|---|
-| `PATH` | a log file, or for `top` a log directory, boot directory or single file |
-| `--json` | print the summary as JSON instead of tables |
-| `--since TIME` | `top` logs only: start here |
-| `--until TIME` | `top` logs only: stop here |
-
-`TIME` is either a moment (`"2026-09-27 14:00"`, ISO 8601, local time unless a
-zone is given) or a span ago (`90`, `30m`, `2h`, `1d`).
-
-## pdf
-
 | Option | Default | |
 |---|---|---|
-| `PATH` | | as for `report` |
-| `-o`, `--output PATH` | beside the log, as `.pdf` | where to write the PDF |
-| `--since TIME`, `--until TIME` | | `top` logs only, as for `report` |
+| `PATH` | | a log file, or for `top` a log directory, boot directory or single file |
+| `--html` | yes | write an HTML page with charts |
+| `--pdf` | | write a multi-page PDF report |
+| `--cli` | | print the summary in the terminal |
+| `--json` | | print the summary as JSON |
+| `-o`, `--output PATH` | beside the log, as `.html` or `.pdf` | where to write the HTML or PDF |
+| `--since TIME` | | `top` logs only: start here |
+| `--until TIME` | | `top` logs only: stop here |
 
+Give at most one of `--html`, `--pdf`, `--cli` and `--json`. `TIME` is either a
+moment (`"2026-09-27 14:00"`, ISO 8601, local time unless a zone is given) or a
+span ago (`90`, `30m`, `2h`, `1d`).
+
+## The HTML report
+
+One self-contained file: the styles, the charts and a few lines of script are
+inside it, so it opens offline in any browser, mails as an attachment and
+follows the reader's light or dark setting. For a workload log it shows, top
+to bottom:
+
+| Part | What it holds |
+|---|---|
+| Header | the command, its exit status, the host, and when the run started and ended |
+| Key figures | peak and mean CPU, CPU time, peak memory, processes seen |
+| Warnings | a failed exit, an interrupted log, late samples, sleep, and the platform's notes |
+| Timeline | CPU, memory and processes alive over time; hover to read every series at one moment |
+| Biggest consumers | the processes that used the most CPU time and held the most memory |
+| Process tracks | every process with a bar for when it was alive; click a column to sort |
+| Run details | sampling, host, boundary, memory measure and where the log came from |
+
+A long run stays small: each chart is cut to a few hundred points, each the
+peak of its stretch, so a one-sample spike is never averaged away. A `top` log
+gets the same page on a wall-clock axis, with spikes and leak suspects listed
+and marked on the charts.
+
+## The PDF report
+
+`--pdf` writes beside the log as `.pdf`, or wherever `-o` says.
 A workload log becomes eight pages, each answering one question.
 [Download a sample report](assets/output/sample-run.pdf).
 

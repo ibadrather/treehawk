@@ -9,11 +9,23 @@ from dataclasses import dataclass, field
 from treehawk.cli.constants import CLI
 from treehawk.cli.service import ServiceManager, systemctl
 from treehawk.core.clock import SystemClock
+from treehawk.core.compat import StrEnum
 from treehawk.core.interfaces import Clock
 from treehawk.core.monitor import Monitor
 from treehawk.core.tracker import Tracker
 from treehawk.platforms.models import Platform
 from treehawk.platforms.registry import get_platform
+
+
+class ReportFormat(StrEnum):
+    """What ``treehawk report`` turns a log into."""
+
+    HTML = "html"
+    """A page with charts, written beside the log: the default."""
+    PDF = "pdf"
+    CLI = "cli"
+    """A summary printed in the terminal."""
+    JSON = "json"
 
 
 @dataclass(frozen=True, slots=True)

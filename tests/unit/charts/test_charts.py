@@ -15,13 +15,12 @@ from conftest import write_log
 from pypdf import PdfReader
 
 from treehawk.charts.models import Metric
-from treehawk.charts.pages import memory_subtitle
 from treehawk.charts.report import PAGES, write_pdf_report
 from treehawk.charts.series import load_series, stack_for, thin_stack
 from treehawk.charts.style import time_tick_step
 from treehawk.core.errors import ReportError
 from treehawk.core.humanize import format_duration_compact, format_seconds
-from treehawk.core.records import PHYS_FOOTPRINT, PSS
+from treehawk.core.records import PHYS_FOOTPRINT, PSS, memory_subtitle
 
 # -- reshaping ------------------------------------------------------------
 
