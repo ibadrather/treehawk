@@ -30,7 +30,8 @@ treehawk is a free, open-source resource usage monitor for Linux and macOS:
 - **Log resource usage over time** and get peak and average memory and CPU.
 - **Find memory leaks** and CPU spikes across the whole machine.
 - **Get a PDF report** with charts of CPU and memory usage.
-- Tracking GPU usage is planned.
+- **Track NVIDIA GPU usage**: GPU memory and compute time of the tracked
+  processes only.
 
 **Documentation: <https://ibadrather.github.io/treehawk/>**
 

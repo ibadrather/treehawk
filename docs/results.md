@@ -109,6 +109,7 @@ The fields you will reach for most:
 | `cpu_seconds_used` | CPU time since treehawk attached |
 | `rss_bytes`, `pss_bytes`, `swap_bytes` | memory; see [which one to trust](how-it-works.md#memory) |
 | `group_memory_bytes`, `group_memory_peak_bytes` | the kernel's own charge for the boundary; `null` without one, and always on macOS |
+| `gpu.memory_bytes`, `gpu.percent` | the workload's own NVIDIA GPU memory, and its share of GPU compute time (`100` is one GPU fully busy), summed across GPUs; other processes on the GPU are left out; absent without an NVIDIA driver or with `--no-gpu`, and not in CSV |
 | `overrun` | this sample arrived more than 1.5 intervals late |
 | `procs[].via` | which [membership rule](how-it-works.md#membership) found the process |
 

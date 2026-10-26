@@ -119,6 +119,7 @@ Advanced options, for awkward situations:
 | `-d`, `--duration SECONDS` | until the workload ends | stop after this long |
 | `--expand RULE` | all four | only let these [membership rules](how-it-works.md#membership) adopt processes: `tree`, `cgroup`, `session`, `orphan`; repeat for several |
 | `--no-pss` | | skip the fair-memory read (PSS on Linux, phys footprint on macOS); cheaper per sample, but summed RSS over-counts shared pages |
+| `--no-gpu` | | do not read NVIDIA GPU usage, which is otherwise logged whenever an NVIDIA driver is found |
 | `--aggregate-only` | | log only the workload total, not a row per process; much smaller logs for runs lasting days |
 | `--no-isolate` | | `run` only: do not ask for a cgroup, track through the process table |
 | `--no-capture` | | `run` only: let the command write to this terminal instead of the dashboard |

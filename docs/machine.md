@@ -45,6 +45,7 @@ treehawk top --top 20 --interval 1
 | `--keep SIZE` | `1G` | disk the log directory may use; the oldest files go first (`500M`, `2G`, ...) |
 | `--segment SPAN` | `1h` | time one log file covers before it is compressed and the next begins (`30m`, `1h`, `1d`, ...) |
 | `--no-pss` | | skip the fair-memory read for the top N; cheaper per sample |
+| `--no-gpu` | | do not read NVIDIA GPU memory per process, which otherwise fills `gpu_memory_bytes` and ranks processes by it |
 | `-d`, `--duration SECONDS` | until stopped | stop after this long |
 
 ## Run it as a service

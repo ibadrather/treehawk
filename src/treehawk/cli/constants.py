@@ -24,6 +24,9 @@ class CliConstants:
     """How far up the parent chain to walk before giving up. A process tree that
     deep is a loop we have failed to detect, not a real wrapper chain."""
 
+    gpu_collectors: tuple[str, ...] = ("nvidia",)
+    """Collectors ``watch`` and ``run`` try unless ``--no-gpu``; any whose hardware is missing is skipped."""
+
     advanced_panel: str = "Advanced"
     """The help panel for options that exist only for an awkward situation."""
 

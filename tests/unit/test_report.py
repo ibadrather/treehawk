@@ -159,3 +159,27 @@ def test_an_older_log_recovers_its_sleep_from_the_wall_clock(tmp_path: pathlib.P
 
     assert summary["duration_s"] == pytest.approx(603.0)
     assert summary["asleep_s"] == pytest.approx(600.0)
+
+
+def test_report_finds_the_gpu_peaks(tmp_path: pathlib.Path) -> None:
+    gpu = [
+        {"memory_bytes": 300, "percent": 20.0},
+        {"memory_bytes": 500, "percent": 95.0},
+        {"memory_bytes": 100, "percent": None},
+    ]
+    path = write_log(
+        tmp_path / "run.jsonl", [HEADER, *({**sample(seq, 10.0, 1000), "gpu": usage} for seq, usage in enumerate(gpu))]
+    )
+
+    summary = build_report(path)["summary"]
+
+    assert summary["peak_gpu_memory_bytes"] == 500
+    assert summary["peak_gpu_percent"] == pytest.approx(95.0)
+
+
+def test_a_log_without_gpu_figures_reports_none(tmp_path: pathlib.Path) -> None:
+    path = write_log(tmp_path / "run.jsonl", [HEADER, sample(0, 10.0, 1000)])
+
+    summary = build_report(path)["summary"]
+
+    assert summary["peak_gpu_memory_bytes"] is None
