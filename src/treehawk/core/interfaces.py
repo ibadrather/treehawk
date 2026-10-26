@@ -233,7 +233,13 @@ class Sink(Protocol):
 class Clock(Protocol):
     """Time and sleeping, injected so the sampling loop is testable."""
 
-    def monotonic(self) -> float: ...
+    def monotonic(self) -> float:
+        """Seconds the machine has been awake: paces samples and divides CPU deltas."""
+        ...
+
+    def continuous(self) -> float:
+        """Like :meth:`monotonic`, but still counting while the machine sleeps: the run's timeline."""
+        ...
 
     def now_iso(self) -> str: ...
 

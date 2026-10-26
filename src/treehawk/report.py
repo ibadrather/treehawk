@@ -20,9 +20,9 @@ from typing import Final, TypedDict
 from treehawk.core.aggregate import cpu_seconds_of, peak_rss_of
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
-from treehawk.core.values import as_float, as_int, as_record, as_records, peak_of
+from treehawk.core.values import as_float, as_int, as_record, as_records, epoch_of, peak_of
 
-__all__ = ["Report", "ReportError", "build_report", "log_files", "peek_header", "read_records"]
+__all__ = ["Report", "ReportError", "SleepTimeline", "build_report", "log_files", "peek_header", "read_records"]
 
 LOG_SUFFIXES: Final = (".jsonl", ".jsonl.gz")
 """What counts as a log when a directory is read."""
@@ -30,12 +30,45 @@ LOG_SUFFIXES: Final = (".jsonl", ".jsonl.gz")
 GZIP_CHUNK: Final = 65536
 """Compressed bytes read at a time."""
 
+SLEEP_FLOOR: Final = 5.0
+"""Seconds the wall clock must run ahead of an old log's ``t`` to count as sleep.
+Less is noise: ``ts`` is stamped after a sample's scan and ``t`` before it."""
+
 
 class Report(TypedDict):
     """A log, read back: the run's metadata and its computed figures."""
 
     header: Record
     summary: Record
+
+
+class SleepTimeline:
+    """Places samples on a timeline that counts the time the machine slept.
+
+    A sample records ``asleep_s``, and its ``t`` already includes the sleep.
+    Logs from before that have ``t`` in awake seconds only - hours short of the
+    wall clock on a laptop that slept - so their sleep is recovered from each
+    sample's wall-clock ``ts``: whatever the wall clock ran ahead of ``t``.
+    """
+
+    def __init__(self) -> None:
+        self._wall_origin: float | None = None
+        self._recovered = 0.0
+
+    def place(self, record: Record) -> tuple[float, float]:
+        """``(t, asleep_s)`` of a sample: seconds since the start, and how many of them were asleep."""
+        t = as_float(record.get("t")) or 0.0
+        recorded = as_float(record.get("asleep_s"))
+        if recorded is not None:
+            return t, recorded
+        wall = epoch_of(record.get("ts"))
+        if wall is not None:
+            if self._wall_origin is None:
+                self._wall_origin = wall - t
+            ahead = wall - self._wall_origin - t
+            if ahead > self._recovered + SLEEP_FLOOR:
+                self._recovered = ahead
+        return t + self._recovered, self._recovered
 
 
 def read_records(path: str) -> Iterator[Record]:
@@ -119,6 +152,8 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
     summary: Record = {}
     samples = 0
     duration = 0.0
+    asleep = 0.0
+    timeline = SleepTimeline()
     cpu_seconds_used = 0.0
     peak_n_procs = 0
     peak_cpu: float | None = None
@@ -137,7 +172,7 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
             summary = record
         elif kind == "sample":
             samples += 1
-            duration = as_float(record.get("t")) or 0.0
+            duration, asleep = timeline.place(record)
             cpu_seconds_used = as_float(record.get("cpu_seconds_used")) or 0.0
             peak_n_procs = max(peak_n_procs, as_int(record.get("n_procs")) or 0)
             cpu = as_float(record.get("cpu_percent"))
@@ -162,9 +197,14 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
         "peak_n_procs": peak_n_procs,
         "cpu_seconds_used": cpu_seconds_used,
         "duration_s": duration,
+        "asleep_s": round(asleep, 3),
         "mean_cpu_percent": round(cpu_sum / cpu_n, 2) if cpu_n else None,
         "samples": samples,
     }
+    if samples and "asleep_s" not in summary:
+        # Written before sleep was recorded: the summary's duration is awake
+        # time only, the samples' is the wall clock's.
+        summary = {key: value for key, value in summary.items() if key != "duration_s"}
     merged: Record = {**recomputed, **{k: v for k, v in summary.items() if v is not None}}
     merged.pop("type", None)
 

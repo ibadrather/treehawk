@@ -113,3 +113,49 @@ def test_missing_and_empty_logs_fail_clearly(tmp_path: pathlib.Path) -> None:
     empty.write_text("")
     with pytest.raises(ReportError, match="no samples"):
         build_report(str(empty))
+
+
+def stamped(seq: int, *, t: float, wall: float, asleep: float | None = None) -> Record:
+    """A sample taken ``t`` seconds into the run, ``wall`` seconds after it began by the wall clock."""
+    record = {**sample(seq, 50.0, 1000), "t": t, "ts": f"2026-01-01T00:{int(wall // 60):02d}:{wall % 60:06.3f}Z"}
+    if asleep is not None:
+        record["asleep_s"] = asleep
+    return record
+
+
+def test_the_duration_counts_the_time_the_machine_slept(tmp_path: pathlib.Path) -> None:
+    path = write_log(
+        tmp_path / "run.jsonl",
+        [
+            HEADER,
+            stamped(0, t=0.0, wall=0.0, asleep=0.0),
+            stamped(1, t=1.0, wall=1.0, asleep=0.0),
+            stamped(2, t=602.0, wall=602.0, asleep=600.0),
+            {"type": "summary", "samples": 3, "duration_s": 602.0, "asleep_s": 600.0},
+        ],
+    )
+
+    summary = build_report(path)["summary"]
+
+    assert summary["duration_s"] == pytest.approx(602.0)
+    assert summary["asleep_s"] == pytest.approx(600.0)
+
+
+def test_an_older_log_recovers_its_sleep_from_the_wall_clock(tmp_path: pathlib.Path) -> None:
+    """Before ``asleep_s``, ``t`` stopped while the machine slept, and the summary did too."""
+    path = write_log(
+        tmp_path / "run.jsonl",
+        [
+            HEADER,
+            stamped(0, t=0.0, wall=0.0),
+            stamped(1, t=1.0, wall=1.2),  # a slow scan, not a sleep
+            stamped(2, t=2.0, wall=602.0),
+            stamped(3, t=3.0, wall=603.0),
+            {"type": "summary", "samples": 4, "duration_s": 3.0},
+        ],
+    )
+
+    summary = build_report(path)["summary"]
+
+    assert summary["duration_s"] == pytest.approx(603.0)
+    assert summary["asleep_s"] == pytest.approx(600.0)

@@ -133,6 +133,8 @@ class Snapshot:
     seq: int
     t: float
     timestamp: str
+    asleep_s: float = 0.0
+    """Of ``t``, the seconds the machine spent asleep (system sleep, not idle)."""
     procs: list[ProcSample] = field(default_factory=list)
     cpu_percent: float | None = None
     cpu_percent_norm: float | None = None
@@ -184,6 +186,8 @@ class RunSummary:
 
     samples: int = 0
     duration_s: float = 0.0
+    asleep_s: float = 0.0
+    """Of ``duration_s``, the seconds the machine spent asleep."""
     peak_cpu_percent: float | None = None
     mean_cpu_percent: float | None = None
     peak_n_procs: int = 0

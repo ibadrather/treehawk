@@ -135,10 +135,13 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
             (f"  {format_bytes(group_peak)} peak cgroup" if group_peak is not None else "", palette.text_secondary),
         ),
     )
+    asleep = as_float(summary.get("asleep_s"))
     table.add_row(
         "run",
         f"{summary.get('samples', 0)} samples over "
-        f"{format_seconds(as_float(summary.get('duration_s')))} · "
+        f"{format_seconds(as_float(summary.get('duration_s')))}"
+        + (f" ({format_seconds(asleep)} of it asleep)" if asleep else "")
+        + " · "
         f"{summary.get('total_procs_seen', '?')} processes seen, "
         f"peak {summary.get('peak_n_procs', '?')} at once",
     )

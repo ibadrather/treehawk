@@ -1,6 +1,6 @@
 [project]
 name = "treehawk"
-version = "0.9.0"
+version = "0.9.1"
 description = "Track CPU and RAM usage of a process and every process it spawns, detached or not. A resource usage monitor for Linux and macOS."
 readme = "README.md"
 license = "MIT"

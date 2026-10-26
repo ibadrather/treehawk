@@ -30,7 +30,8 @@ class Aggregator:
 
     CPU is derived from counter *deltas*, never from an instantaneous reading:
 
-    * per process - delta of its own CPU ticks over the elapsed wall time,
+    * per process - delta of its own CPU ticks over the time the machine was
+      awake since the last sample (``dt``: a process cannot run while it sleeps),
       ``None`` on the first sighting because there is nothing to subtract from.
     * for the workload - delta of the total CPU seconds, which already includes
       processes that exited during the interval (the tracker carries their final
@@ -52,6 +53,7 @@ class Aggregator:
         elapsed: float,
         dt: float,
         timestamp: str,
+        asleep: float = 0.0,
         refresh: RefreshResult,
         samples: list[ProcSample],
         group: GroupMetrics | None = None,
@@ -61,6 +63,7 @@ class Aggregator:
         snap = Snapshot(
             seq=seq,
             t=round(elapsed, 6),
+            asleep_s=round(asleep, 3),
             timestamp=timestamp,
             procs=samples,
             group=group,
@@ -122,6 +125,7 @@ class SummaryAccumulator:
         summary = self._summary
         summary.samples += 1
         summary.duration_s = round(snapshot.t, 3)
+        summary.asleep_s = snapshot.asleep_s
         summary.cpu_seconds_total = snapshot.cpu_seconds_total
         summary.cpu_seconds_used = snapshot.cpu_seconds_used
         summary.peak_n_procs = max(summary.peak_n_procs, snapshot.n_procs)

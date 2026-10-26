@@ -13,14 +13,15 @@ from treehawk.charts.models import Metric, ProcessTrack, RunSeries
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
 from treehawk.core.values import as_float, as_int, as_records
-from treehawk.report import read_records
+from treehawk.report import SleepTimeline, read_records
 
 
 def load_series(path: str) -> RunSeries:
     """Read a log into a :class:`RunSeries`, tolerating a truncated tail."""
     series = RunSeries(header={}, summary={})
     tracks: dict[tuple[int, int], ProcessTrack] = {}
-    previous_t: float | None = None
+    timeline = SleepTimeline()
+    previous: tuple[float, float] | None = None
     samples = 0
 
     for record in read_records(path):
@@ -35,7 +36,7 @@ def load_series(path: str) -> RunSeries:
             continue
 
         samples += 1
-        t = as_float(record.get("t")) or 0.0
+        t, asleep = timeline.place(record)
         series.t.append(t)
         series.cpu_percent.append(as_float(record.get("cpu_percent")))
         series.cpu_percent_norm.append(as_float(record.get("cpu_percent_norm")))
@@ -46,9 +47,15 @@ def load_series(path: str) -> RunSeries:
         series.n_procs.append(as_int(record.get("n_procs")) or 0)
         if record.get("overrun"):
             series.overrun_t.append(t)
-        if previous_t is not None:
-            series.gaps.append(t - previous_t)
-        previous_t = t
+        if previous is not None:
+            previous_t, previous_asleep = previous
+            # Sampling quality is about the sampler: the machine sleeping is
+            # not a late sample, so the gap is measured in awake time.
+            series.gaps.append((t - asleep) - (previous_t - previous_asleep))
+            if asleep > previous_asleep:
+                series.sleeps.append((previous_t, t))
+        series.asleep_s = asleep
+        previous = (t, asleep)
 
         rows = as_records(record.get("procs"))
         series.procs_cpu_total.append(sum(as_float(proc.get("cpu_percent")) or 0.0 for proc in rows))

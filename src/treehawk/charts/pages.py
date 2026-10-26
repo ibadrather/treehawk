@@ -107,7 +107,7 @@ class OverviewPage(Page):
         rows = [
             ("mode", str(header.get("mode", "?"))),
             ("started", str(header.get("started_at", "?"))),
-            ("duration", format_seconds(series.duration)),
+            ("duration", format_seconds(series.duration) + _asleep_note(series)),
             ("interval", f"{series.interval}s requested"),
             (
                 "samples",
@@ -204,8 +204,9 @@ class CpuPage(Page):
 
         t = series.t
         color = palette.slot(0)
-        top.plot(t, _with_gaps(series.cpu_percent), color=color)
-        top.fill_between(t, 0, _with_gaps(series.cpu_percent), color=color, alpha=0.12)
+        broken_t, broken_cpu = _broken_at_sleeps(series, series.cpu_percent)
+        top.plot(broken_t, broken_cpu, color=color)
+        top.fill_between(broken_t, 0, broken_cpu, color=color, alpha=0.12)
 
         present = [(x, y) for x, y in zip(t, series.cpu_percent, strict=True) if y is not None]
         if present:
@@ -232,6 +233,9 @@ class CpuPage(Page):
             )
         for moment in series.overrun_t:
             top.axvline(moment, color=palette.warning, linewidth=1, alpha=0.5)
+        for start, end in series.sleeps:
+            for ax in (top, bottom):
+                ax.axvspan(start, end, color=palette.text_muted, alpha=0.12, linewidth=0)
 
         # The machine's full capacity is only worth drawing when the workload
         # came near it; on a 32-core box a 300% peak would otherwise be a flat
@@ -267,13 +271,13 @@ class CpuPage(Page):
         bottom.set_ylabel("cpu time (s)")
         bottom.set_ylim(bottom=0)
         style.format_time_axis(bottom, duration=series.duration)
+        notes = []
         if series.overrun_t:
-            style.draw_footer(
-                fig,
-                left=f"{len(series.overrun_t)} sample(s) took longer than the {series.interval}s interval (marked)",
-                right="",
-                palette=palette,
-            )
+            notes.append(f"{len(series.overrun_t)} sample(s) took longer than the {series.interval}s interval (marked)")
+        if series.sleeps:
+            notes.append(f"the machine slept for {format_seconds(series.asleep_s)} (shaded)")
+        if notes:
+            style.draw_footer(fig, left="; ".join(notes), right="", palette=palette)
         return True
 
 
@@ -680,6 +684,29 @@ def _timeline_axes(fig: Figure, *, rows: int) -> tuple[Axes, Axes]:
     count_bottom = max(0.10, top - 0.09 - count_height)
     count = fig.add_axes((0.22, count_bottom, 0.73, count_height), sharex=gantt)
     return gantt, count
+
+
+def _asleep_note(series: RunSeries) -> str:
+    """How much of the duration the machine slept through, when it did."""
+    return f" · {format_seconds(series.asleep_s)} asleep" if series.sleeps else ""
+
+
+def _broken_at_sleeps(series: RunSeries, values: Sequence[float | int | None]) -> tuple[list[float], list[float]]:
+    """``(t, values)`` with a break inside each sleep, so no line is drawn across it.
+
+    Nothing was measured while the machine slept; a line from the last reading
+    before to the first after would invent a slope.
+    """
+    starts = dict(series.sleeps)
+    t: list[float] = []
+    out: list[float] = []
+    for moment, value in zip(series.t, _with_gaps(values), strict=True):
+        t.append(moment)
+        out.append(value)
+        if moment in starts:
+            t.append((moment + starts[moment]) / 2)
+            out.append(float("nan"))
+    return t, out
 
 
 def _with_gaps(values: Sequence[float | int | None]) -> list[float]:

@@ -75,11 +75,13 @@ class ConsoleSink(BaseSink):
 
     @override
     def close(self, summary: Record) -> None:
+        asleep = as_float(summary.get("asleep_s"))
         self._write_line("")
         self._write_line(
             f"samples={summary.get('samples')} "
             f"duration={format_seconds(as_float(summary.get('duration_s')))} "
-            f"processes_seen={summary.get('total_procs_seen')} "
+            + (f"asleep={format_seconds(asleep)} " if asleep else "")
+            + f"processes_seen={summary.get('total_procs_seen')} "
             f"peak_procs={summary.get('peak_n_procs')}"
         )
         self._write_line(

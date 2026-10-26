@@ -117,6 +117,72 @@ def test_sampling_uses_absolute_deadlines_so_drift_cannot_accumulate(
     assert clock.sleeps == [0.0, 0.5, 1.0, 1.5]
 
 
+class SleepingClock(FakeClock):
+    """A clock whose machine sleeps for ``seconds`` while the loop waits for ``deadline``."""
+
+    def __init__(self, *, deadline: float, seconds: float) -> None:
+        super().__init__()
+        self._deadline = deadline
+        self._seconds = seconds
+
+    @override
+    def sleep_until(self, deadline: float) -> None:
+        if deadline == self._deadline:
+            self.asleep += self._seconds
+        super().sleep_until(deadline)
+
+
+def test_time_the_machine_slept_is_part_of_the_duration(proc_root: pathlib.Path, config: WatchConfig) -> None:
+    write_proc(proc_root, 100, cmdline="python train.py")
+    config.max_samples = 3
+    sink = RecordingSink()
+    clock = SleepingClock(deadline=2.0, seconds=600.0)
+    monitor = build_monitor(ScriptedSource(proc_root), config, sink, clock=clock)
+
+    monitor.run()
+
+    assert [r["t"] for r in sink.samples] == [0.0, 1.0, 602.0]
+    assert [r["asleep_s"] for r in sink.samples] == [0.0, 0.0, 600.0]
+    assert sink.summary is not None
+    assert sink.summary["duration_s"] == pytest.approx(602.0)
+    assert sink.summary["asleep_s"] == pytest.approx(600.0)
+
+
+def test_sleep_is_neither_an_overrun_nor_followed_by_catch_up_samples(
+    proc_root: pathlib.Path, config: WatchConfig
+) -> None:
+    write_proc(proc_root, 100, cmdline="python train.py")
+    config.max_samples = 4
+    sink = RecordingSink()
+    clock = SleepingClock(deadline=2.0, seconds=600.0)
+    monitor = build_monitor(ScriptedSource(proc_root), config, sink, clock=clock)
+
+    monitor.run()
+
+    assert clock.sleeps == [0.0, 1.0, 2.0, 3.0]
+    assert not any(r["overrun"] for r in sink.samples)
+
+
+def test_cpu_across_a_sleep_is_a_rate_over_the_time_awake(proc_root: pathlib.Path, config: WatchConfig) -> None:
+    """A process cannot run while the machine sleeps, so the sleep must not dilute its rate."""
+    config.max_samples = 3
+    sink = RecordingSink()
+    clock = SleepingClock(deadline=2.0, seconds=600.0)
+    # One scan seeds the tracker, then one per sample: the last edit lands
+    # just before the sample taken after the sleep.
+    script = [
+        lambda: write_proc(proc_root, 100, cmdline="python train.py", utime=0),
+        lambda: None,
+        lambda: None,
+        lambda: write_proc(proc_root, 100, cmdline="python train.py", utime=100),
+    ]
+    monitor = build_monitor(ScriptedSource(proc_root, script), config, sink, clock=clock)
+
+    monitor.run()
+
+    assert sink.samples[2]["cpu_percent"] == pytest.approx(100.0)
+
+
 def test_the_run_ends_when_the_last_process_exits(proc_root: pathlib.Path, config: WatchConfig) -> None:
     import shutil
 

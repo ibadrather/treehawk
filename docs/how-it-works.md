@@ -97,6 +97,14 @@ arrives more than 1.5 intervals late is flagged `overrun`, counted in the
 summary, and marked on the CPU chart. `cpu_percent` is CPU time over the last
 interval, where `100` is one core; it is `null` in the first sample.
 
+A laptop that sleeps mid-run is not a late sample. The timeline (`t`, and the
+run's duration) counts the time asleep, so it matches the wall clock, and
+`asleep_s` says how much of it was sleep; the reports state it and shade it on
+the CPU chart. Pacing and `cpu_percent` use awake time only, because nothing
+runs while the machine sleeps: waking up neither flags an overrun nor dilutes
+the CPU rate. Logs written before 0.9.1 have no `asleep_s`; for those the sleep
+is recovered from each sample's wall-clock `ts`.
+
 ## Whole-machine tracking
 
 `top` reads every process once per sample, which costs one `stat` read per

@@ -7,6 +7,7 @@ did the right pages appear" - pixels are judged by eye, not by assertion.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
@@ -259,3 +260,26 @@ def test_a_stack_already_short_enough_is_left_alone() -> None:
     t, rows = [0.0, 1.0, 2.0], [[1.0, 2.0, 3.0]]
 
     assert thin_stack(t=t, rows=rows, limit=100) == (t, rows)
+
+
+def test_a_sleep_is_placed_on_the_time_axis_but_not_counted_as_a_late_sample(tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "slept.jsonl"
+    write_log(path, samples=4, interval=1.0)
+    lines = path.read_text().splitlines()
+    records = [json.loads(line) for line in lines]
+    for record in records:
+        if record["type"] == "sample":
+            asleep = 600.0 if record["seq"] >= 2 else 0.0
+            record["t"] += asleep
+            record["asleep_s"] = asleep
+            record["overrun"] = False
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+
+    series = load_series(str(path))
+
+    assert series.t == [0.0, 1.0, 602.0, 603.0]
+    assert series.gaps == pytest.approx([1.0, 1.0, 1.0])
+    assert series.sleeps == [(1.0, 602.0)]
+    assert series.asleep_s == pytest.approx(600.0)
+    assert series.duration == pytest.approx(603.0)
+    assert write_pdf_report(log_path=str(path), destination=str(tmp_path / "slept.pdf"))
