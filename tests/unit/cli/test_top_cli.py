@@ -91,10 +91,10 @@ def test_top_writes_a_readable_log_directory(tmp_path: pathlib.Path) -> None:
     assert kinds >= {"header", "proc", "sample", "event", "summary"}
 
 
-def test_report_and_pdf_read_a_top_directory(tmp_path: pathlib.Path) -> None:
+def test_every_report_format_reads_a_top_directory(tmp_path: pathlib.Path) -> None:
     logs = tmp_path / "logs"
     run_top(logs)
-    report = runner.invoke(app, ["report", str(logs)], env={"COLUMNS": "140"})
+    report = runner.invoke(app, ["report", str(logs), "--cli"], env={"COLUMNS": "140"})
     assert report.exit_code == 0, report.output
     assert "top by cpu time while ranked" in report.output
     assert "/usr/bin/busy" in report.output
@@ -104,9 +104,15 @@ def test_report_and_pdf_read_a_top_directory(tmp_path: pathlib.Path) -> None:
     assert '"top_by_memory"' in as_json.output
 
     destination = tmp_path / "machine.pdf"
-    pdf = runner.invoke(app, ["pdf", str(logs), "-o", str(destination)])
+    pdf = runner.invoke(app, ["report", str(logs), "--pdf", "-o", str(destination)])
     assert pdf.exit_code == 0, pdf.output
     assert destination.stat().st_size > 1000
+
+    page = runner.invoke(app, ["report", str(logs)])
+    assert page.exit_code == 0, page.output
+    text = (tmp_path / "logs.html").read_text(encoding="utf-8")
+    assert "/usr/bin/busy" in text
+    assert "Process tracks" in text
 
 
 def test_a_window_with_nothing_in_it_says_so(tmp_path: pathlib.Path) -> None:

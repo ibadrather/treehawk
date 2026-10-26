@@ -32,10 +32,13 @@ from treehawk.charts.pages import (
     Page,
     RankingPage,
     SamplingPage,
+    by_cpu_seconds,
+    by_peak_rss,
 )
 from treehawk.charts.series import load_series
 from treehawk.charts.top_pages import TOP_PAGES, TopPage
 from treehawk.charts.top_series import load_top_series
+from treehawk.core.humanize import format_bytes, format_seconds
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import PRINT
 
@@ -46,7 +49,16 @@ PAGES: Final[tuple[Page, ...]] = (
     LifetimePage(),
     CpuByProcessPage(),
     MemoryByProcessPage(),
-    RankingPage(),
+    RankingPage(
+        subtitle="by cpu time, totalled over the whole run",
+        rank=by_cpu_seconds,
+        formatter=format_seconds,
+    ),
+    RankingPage(
+        subtitle="by peak rss, the most resident memory each process held at once",
+        rank=by_peak_rss,
+        formatter=format_bytes,
+    ),
     SamplingPage(),
 )
 """In reading order: what happened, then cpu, then memory, then who did it,

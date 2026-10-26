@@ -10,9 +10,9 @@ It is also the only place that handles errors. Everything underneath raises a
 :class:`TreehawkError` and lets it travel; :func:`_guard` turns it into a line
 of text and an exit code here, once, rather than at forty catch sites.
 
-Four commands, and the default behaviour of each is the one you want most of
-the time: ``watch`` and ``run`` sample until the workload ends, ``report`` and
-``pdf`` read a finished log back.
+The default behaviour of each command is the one you want most of the time:
+``watch`` and ``run`` sample until the workload ends, ``top`` follows the whole
+machine until stopped, and ``report`` reads a finished log back as an HTML page.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from rich.console import Console
 
 from treehawk import __version__
 from treehawk.cli.constants import CLI
-from treehawk.cli.models import Runtime
+from treehawk.cli.models import ReportFormat, Runtime
 from treehawk.cli.options import (
     AggregateOnly,
     Csv,
@@ -71,8 +71,9 @@ from treehawk.core.matchers import build_matcher
 from treehawk.core.models import LaunchedWorkload
 from treehawk.core.monitor import Monitor
 from treehawk.gpu import Nvml, build_collectors
+from treehawk.htmlreport import write_html_report, write_top_html_report
 from treehawk.platforms.models import Platform
-from treehawk.report import Report, build_report, peek_header
+from treehawk.report import LOG_SUFFIXES, Report, build_report, peek_header
 from treehawk.sinks import CompositeSink, build_file_sink, build_screen_sink
 from treehawk.sinks.constants import SINKS
 from treehawk.sinks.segmented import SegmentedJsonlSink
@@ -339,54 +340,105 @@ Until = Annotated[
 def report(
     path: Annotated[Path, typer.Argument(help="A log written by a previous run, or a top log directory.")],
     *,
+    html: Annotated[bool, typer.Option("--html", help="Write an HTML page with charts (the default).")] = False,
+    pdf: Annotated[bool, typer.Option("--pdf", help="Write a multi-page PDF report.")] = False,
+    cli: Annotated[bool, typer.Option("--cli", help="Print the summary in the terminal.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Print the summary as JSON.")] = False,
-    since: Since = None,
-    until: Until = None,
-) -> None:
-    """Summarise a finished run, or what a machine did under [bold]top[/bold]."""
-    if _is_top_log(path):
-        start, end = _window(since=since, until=until)
-        history = load_history(str(path), since=start, until=end)
-        if as_json:
-            stdout_console.print_json(json.dumps(history_record(history), default=str))
-            return
-        stdout_console.print(render_top_report(history=history, palette=PALETTE, title=path.name))
-        return
-    _no_window(since=since, until=until)
-    data: Report = build_report(str(path))
-    if as_json:
-        stdout_console.print_json(json.dumps(data, default=str))
-        return
-    header, summary = data["header"], data["summary"]
-    stdout_console.print(render_header_facts(header=header, palette=PALETTE))
-    stdout_console.print(render_summary(summary=summary, header=header, palette=PALETTE, title=path.name))
-
-
-@app.command()
-@_guard
-def pdf(
-    path: Annotated[Path, typer.Argument(help="A log written by a previous run, or a top log directory.")],
     output: Annotated[
         Path | None,
-        typer.Option("--output", "-o", help="Where to write the PDF. Default: alongside the log."),
+        typer.Option("--output", "-o", help="Where to write the HTML or PDF. Default: beside the log."),
     ] = None,
     since: Since = None,
     until: Until = None,
 ) -> None:
-    """Render a finished run, or a [bold]top[/bold] log, as a multi-page PDF report."""
-    if _is_top_log(path):
+    """Report on a finished run, or on what a machine did under [bold]top[/bold].
+
+    Writes an HTML page beside the log by default; [bold]--pdf[/bold] writes a
+    PDF instead, and [bold]--cli[/bold] or [bold]--json[/bold] print to the terminal.
+
+    [dim]treehawk report run.jsonl
+    treehawk report run.jsonl --pdf -o run.pdf
+    treehawk report treehawk-top --since 2h --cli[/dim]
+    """
+    fmt = _report_format(html=html, pdf=pdf, cli=cli, as_json=as_json)
+    if output is not None and fmt in {ReportFormat.CLI, ReportFormat.JSON}:
+        raise ConfigError("--output applies to the HTML and PDF reports only")
+    top_log = _is_top_log(path)
+    if top_log:
+        start, end = _window(since=since, until=until)
+    else:
+        _no_window(since=since, until=until)
+        start, end = None, None
+
+    if fmt is ReportFormat.HTML:
+        destination = output or _beside(path, suffix=".html")
+        if top_log:
+            write_top_html_report(log_path=str(path), destination=str(destination), since=start, until=end)
+        else:
+            write_html_report(log_path=str(path), destination=str(destination))
+        # Never wrapped: a path broken across lines cannot be copied or clicked.
+        stdout_console.print(f"wrote [bold]{destination}[/bold]", soft_wrap=True)
+        stdout_console.print(f"[dim]open it:[/dim] {destination.resolve().as_uri()}", soft_wrap=True)
+    elif fmt is ReportFormat.PDF:
+        destination = output or _beside(path, suffix=".pdf")
+        pages = _write_pdf(path=path, destination=destination, top_log=top_log, since=start, until=end)
+        stdout_console.print(f"wrote [bold]{destination}[/bold] ({pages} pages)", soft_wrap=True)
+    elif top_log:
+        history = load_history(str(path), since=start, until=end)
+        if fmt is ReportFormat.JSON:
+            stdout_console.print_json(json.dumps(history_record(history), default=str))
+        else:
+            stdout_console.print(render_top_report(history=history, palette=PALETTE, title=path.name))
+    else:
+        data: Report = build_report(str(path))
+        if fmt is ReportFormat.JSON:
+            stdout_console.print_json(json.dumps(data, default=str))
+        else:
+            header, summary = data["header"], data["summary"]
+            stdout_console.print(render_header_facts(header=header, palette=PALETTE))
+            stdout_console.print(render_summary(summary=summary, header=header, palette=PALETTE, title=path.name))
+
+
+def _report_format(*, html: bool, pdf: bool, cli: bool, as_json: bool) -> ReportFormat:
+    chosen = [
+        fmt
+        for fmt, flag in (
+            (ReportFormat.HTML, html),
+            (ReportFormat.PDF, pdf),
+            (ReportFormat.CLI, cli),
+            (ReportFormat.JSON, as_json),
+        )
+        if flag
+    ]
+    if len(chosen) > 1:
+        raise ConfigError("give just one of --html, --pdf, --cli or --json")
+    return chosen[0] if chosen else ReportFormat.HTML
+
+
+def _beside(path: Path, *, suffix: str) -> Path:
+    """Where a report on ``path`` goes by default: next to it, named after it.
+
+    ``run.jsonl`` and ``run.jsonl.gz`` both give ``run<suffix>``; a ``top``
+    directory gives ``<directory><suffix>`` beside the directory.
+    """
+    if path.is_dir():
+        return path.parent / f"{path.name}{suffix}"
+    name = path.name
+    for log_suffix in sorted(LOG_SUFFIXES, key=len, reverse=True):
+        if name.endswith(log_suffix):
+            return path.with_name(name[: -len(log_suffix)] + suffix)
+    return path.with_suffix(suffix)
+
+
+def _write_pdf(*, path: Path, destination: Path, top_log: bool, since: float | None, until: float | None) -> int:
+    """Write the PDF report. matplotlib is imported here, and only here."""
+    if top_log:
         from treehawk.charts.report import write_top_pdf_report
 
-        destination = output or (path.with_suffix(".pdf") if path.is_file() else path.parent / f"{path.name}.pdf")
-        start, end = _window(since=since, until=until)
-        pages = write_top_pdf_report(log_path=str(path), destination=str(destination), since=start, until=end)
-    else:
-        from treehawk.charts.report import write_pdf_report
+        return write_top_pdf_report(log_path=str(path), destination=str(destination), since=since, until=until)
+    from treehawk.charts.report import write_pdf_report
 
-        _no_window(since=since, until=until)
-        destination = output or path.with_suffix(".pdf")
-        pages = write_pdf_report(log_path=str(path), destination=str(destination))
-    stdout_console.print(f"wrote [bold]{destination}[/bold] ({pages} pages)")
+    return write_pdf_report(log_path=str(path), destination=str(destination))
 
 
 # --------------------------------------------------------------------------

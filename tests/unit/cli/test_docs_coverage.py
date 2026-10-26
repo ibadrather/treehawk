@@ -57,7 +57,7 @@ OPTIONS = sorted(
 
 def test_the_cli_is_walked() -> None:
     names = {" ".join(path) for path, _ in CLI_COMMANDS}
-    assert {"watch", "run", "top", "report", "pdf", "service install", "service status"} <= names
+    assert {"watch", "run", "top", "report", "service install", "service status"} <= names
 
 
 @pytest.mark.parametrize(("command", "flag"), OPTIONS)

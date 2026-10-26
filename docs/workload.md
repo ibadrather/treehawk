@@ -14,7 +14,7 @@ keywords:
 # Track a workload
 
 `watch` and `run` track the CPU and memory usage of one workload, meaning a
-process and everything it spawns, and write a log you read back with [`report` and `pdf`](results.md).
+process and everything it spawns, and write a log you read back with [`report`](results.md).
 Both sample until the workload ends. `Ctrl-C` or a `SIGTERM` stops them early,
 and the log still ends with a complete summary.
 

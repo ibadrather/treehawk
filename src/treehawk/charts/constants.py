@@ -67,7 +67,30 @@ class ChartConstants:
     """Lifetime bars that fit legibly on one page before the rest is summarised."""
 
     ranking_rows: int = 10
-    """Processes in each league table on the "biggest consumers" page."""
+    """Processes in each league table on the "biggest consumers" pages."""
+
+    ranking_top: float = 0.87
+    """Where the first row of a league table starts, as a share of the page."""
+
+    ranking_bottom: float = 0.07
+    """Rows stop above this, clear of the footer."""
+
+    ranking_left: float = 0.085
+    """Where a row's name, command and bar start; its rank sits just left."""
+
+    ranking_row_points: float = 46.0
+    """Height of a league-table row without its command, in points: the name
+    line, the bar and the space around them."""
+
+    command_line_points: float = 10.5
+    """Height of one line of a command, in points."""
+
+    command_width: int = 155
+    """Characters of a command that fit across the page in 7.5pt Fira Code."""
+
+    command_lines: int = 6
+    """Most lines a command is given on a league table. The path of what ran is
+    in the first line; only an enormous argument list reaches this."""
 
     top_points: int = 2000
     """Time buckets a ``top`` chart is reduced to, however long the log."""

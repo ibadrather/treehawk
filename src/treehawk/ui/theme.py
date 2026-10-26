@@ -20,9 +20,10 @@ that uses them ships direct labels or an accompanying table.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Final
 
-from treehawk.ui.models import Palette
+from treehawk.ui.models import Brand, Font, Palette
 
 PRINT: Final = Palette(
     surface="#fcfcfb",
@@ -53,6 +54,31 @@ TERMINAL: Final = Palette(
 """Stepped for a dark terminal: the live dashboard."""
 
 PALETTE: Final = TERMINAL
+
+BRAND: Final = Brand(
+    primary="#4531cc",
+    primary_soft="#7f6df9",
+    accent="#448882",
+    cream="#fcf3d1",
+    ink="#0c0c0c",
+    sans="Poppins",
+    mono="Fira Code",
+    fonts=(
+        Font(family="Poppins", weight=400, stem="Poppins-Regular"),
+        Font(family="Poppins", weight=600, stem="Poppins-SemiBold"),
+        Font(family="Poppins", weight=700, stem="Poppins-Bold"),
+        Font(family="Fira Code", weight=400, stem="FiraCode-Regular"),
+    ),
+)
+"""The docs site's brand: purple, teal and cream, set in Poppins and Fira Code.
+The data colours above stay as they are - they are validated for charts, and a
+brand hue is not - so the brand dresses the page around the data."""
+
+
+def font_file(font: Font, *, suffix: str) -> Path:
+    """The bundled file for ``font``: ``.ttf`` for the PDF, ``.woff2`` for HTML."""
+    return Path(__file__).parent / "assets" / "fonts" / f"{font.stem}{suffix}"
+
 
 DISCOVERY_GROUPS: Final[Mapping[str, str]] = {
     "match": "matched",

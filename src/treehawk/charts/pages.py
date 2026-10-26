@@ -18,7 +18,9 @@ from operator import itemgetter
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch, Rectangle
+from matplotlib.text import Annotation
 
 from treehawk.charts import style
 from treehawk.charts.constants import CHARTS
@@ -32,8 +34,7 @@ from treehawk.core.humanize import (
     format_seconds,
     truncate,
 )
-from treehawk.core.models import MemoryMeasure
-from treehawk.core.records import memory_measure, peak_memory_reading
+from treehawk.core.records import memory_measure, memory_subtitle, peak_memory_reading
 from treehawk.core.values import as_float, as_mapping, as_sequence
 from treehawk.ui.models import Palette
 from treehawk.ui.theme import DISCOVERY_ORDER, PRINT
@@ -464,74 +465,100 @@ class MemoryByProcessPage(_StackedPage):
 
 
 class RankingPage(Page):
-    """The two league tables."""
+    """One league table, each process on a row of its own across the page.
 
-    title = "Biggest consumers"
-    subtitle = "totals over the whole run, not a single instant"
+    A row carries the process' whole command line, wrapped rather than cut:
+    the path of what ran is often all that tells two processes of the same name
+    apart.
+    """
+
+    def __init__(self, *, subtitle: str, rank: Ranking, formatter: Callable[[float], str]) -> None:
+        self.title = "Biggest consumers"
+        self.subtitle = subtitle
+        self._rank = rank
+        self._formatter = formatter
 
     @override
     def draw(self, fig: Figure, *, series: RunSeries, palette: Palette = PRINT) -> bool:
         if not series.has_per_process:
             return False
         style.draw_heading(fig, title=self.title, subtitle=self.subtitle, palette=palette)
-        rows = min(CHARTS.ranking_rows, len(series.tracks))
-        height = min(0.66, 0.055 * rows + 0.05)
-        bottom = 0.82 - height
-        left = fig.add_axes((0.15, bottom, 0.31, height))
-        right = fig.add_axes((0.64, bottom, 0.31, height))
-
-        self._bars(
-            left,
-            tracks=series.top_tracks(rank=by_cpu_seconds, limit=CHARTS.ranking_rows),
-            measure=by_cpu_seconds,
-            title="cpu time (s)",
-            formatter=format_seconds,
-            palette=palette,
-            bytes_axis=False,
-        )
-        self._bars(
-            right,
-            tracks=series.top_tracks(rank=by_peak_rss, limit=CHARTS.ranking_rows),
-            measure=by_peak_rss,
-            title="peak rss",
-            formatter=format_bytes,
-            palette=palette,
-            bytes_axis=True,
-        )
+        tracks = series.top_tracks(rank=self._rank, limit=CHARTS.ranking_rows)
+        widest = max((self._rank(track) for track in tracks), default=0.0)
+        point = 1 / (CHARTS.page_size[1] * 72)
+        y = CHARTS.ranking_top
+        shown = 0
+        for number, track in enumerate(tracks, start=1):
+            lines = _command_lines(track.cmdline or track.name)
+            height = (CHARTS.ranking_row_points + len(lines) * CHARTS.command_line_points) * point
+            if shown and y - height < CHARTS.ranking_bottom:
+                break
+            share = self._rank(track) / widest if widest else 0.0
+            self._row(fig, track=track, number=number, lines=lines, share=share, y=y, point=point, palette=palette)
+            y -= height
+            shown += 1
+        fig.add_artist(Line2D([CHARTS.ranking_left - 0.025, 0.94], [y, y], color=palette.grid, linewidth=0.8))
+        if shown < len(tracks):
+            style.draw_footer(fig, left=f"{shown} of the top {len(tracks)} fit on this page", right="", palette=palette)
         return True
 
-    def _bars(
+    def _row(
         self,
-        ax: Axes,
+        fig: Figure,
         *,
-        tracks: Sequence[ProcessTrack],
-        measure: Ranking,
-        title: str,
-        formatter: Callable[[float], str],
+        track: ProcessTrack,
+        number: int,
+        lines: Sequence[str],
+        share: float,
+        y: float,
+        point: float,
         palette: Palette,
-        bytes_axis: bool,
     ) -> None:
-        if not tracks:
-            style.draw_placeholder(ax, message="nothing recorded", palette=palette)
-            return
-        values = [measure(track) for track in tracks]
-        colors = [palette.slot(DISCOVERY_ORDER.index(track.group)) for track in tracks]
-        positions = range(len(tracks))
-        ax.barh(
-            list(positions), values, color=colors, height=0.62, edgecolor=palette.surface, linewidth=CHARTS.surface_gap
+        left = CHARTS.ranking_left
+        color = palette.slot(DISCOVERY_ORDER.index(track.group))
+        fig.add_artist(Line2D([left - 0.025, 0.94], [y, y], color=palette.grid, linewidth=0.8))
+        baseline = y - 20 * point
+        fig.text(left - 0.025, baseline, str(number), fontsize=9, color=palette.text_muted)
+        name = fig.text(left, baseline, track.name, fontsize=10.5, fontweight="bold", color=palette.text_primary)
+        pid = Annotation(
+            str(track.pid),
+            xy=(1, baseline),
+            xycoords=(name, "figure fraction"),
+            xytext=(6, 0),
+            textcoords="offset points",
+            fontsize=8.5,
+            color=palette.text_muted,
         )
-        if bytes_axis:
-            # Otherwise matplotlib labels it 0.2 ... 1.0 with a stray "1e8".
-            style.format_bytes_axis(ax, horizontal=True)
-        ax.set_ylim(len(tracks) - 0.5, -0.5)
-        ax.set_yticks(list(positions))
-        ax.set_yticklabels([truncate(track.label, width=24) for track in tracks], fontsize=8)
-        ax.grid(axis="y", visible=False)
-        ax.set_title(title)
-        ax.set_xlim(0, max(values) * 1.25 if max(values) else 1)
-        widest = max(values)
-        for index, value in enumerate(values):
-            ax.text(value + widest * 0.03, index, formatter(value), va="center", fontsize=8, color=palette.text_primary)
+        fig.add_artist(pid)
+        fig.add_artist(
+            Annotation(
+                track.group.upper(),
+                xy=(1, baseline),
+                xycoords=(pid, "figure fraction"),
+                xytext=(6, 0),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                color=color,
+            )
+        )
+        fig.text(
+            0.94,
+            baseline,
+            self._formatter(self._rank(track)),
+            ha="right",
+            fontsize=12,
+            fontweight="bold",
+            color=palette.text_primary,
+        )
+        line_y = baseline - 15 * point
+        for line in lines:
+            fig.text(left, line_y, line, fontsize=7.5, family="monospace", color=palette.text_secondary)
+            line_y -= CHARTS.command_line_points * point
+        bar = line_y + CHARTS.command_line_points * point - 9 * point
+        width = 0.94 - left
+        fig.add_artist(Rectangle((left, bar), width, 3 * point, color=palette.grid, linewidth=0))
+        fig.add_artist(Rectangle((left, bar), width * share, 3 * point, color=color, linewidth=0))
 
 
 class SamplingPage(Page):
@@ -654,24 +681,6 @@ def _widest_run(values: Sequence[float], *, threshold: float) -> tuple[int, int]
     return best
 
 
-def memory_subtitle(*, measure: MemoryMeasure, rss: bool, fair: bool, group: bool) -> str:
-    """Explain the memory series a chart shows - those, and no others.
-
-    A subtitle that describes a cgroup line on a macOS log, where there is no
-    cgroup, explains something the reader cannot find on the page.
-    """
-    parts: list[str] = []
-    if rss and (fair or group):
-        parts.append("rss counts shared pages once per process")
-    elif rss:
-        parts.append("summed rss counts shared pages once per process, so it reads high")
-    if fair:
-        parts.append(measure.blurb)
-    if group:
-        parts.append("cgroup is the kernel's own figure")
-    return "; ".join(parts)
-
-
 def _timeline_axes(fig: Figure, *, rows: int) -> tuple[Axes, Axes]:
     """A lifetime chart sized to its content, with the population below it."""
     height = min(0.58, 0.032 * rows + 0.05)
@@ -684,6 +693,24 @@ def _timeline_axes(fig: Figure, *, rows: int) -> tuple[Axes, Axes]:
     count_bottom = max(0.10, top - 0.09 - count_height)
     count = fig.add_axes((0.22, count_bottom, 0.73, count_height), sharex=gantt)
     return gantt, count
+
+
+def _command_lines(command: str) -> list[str]:
+    """A command line wrapped to the page, with only a pathological one cut.
+
+    It breaks at spaces where it can and inside a long path where it must; past
+    :attr:`CHARTS.command_lines` lines the rest is left to the HTML report,
+    which shows it all - the path of what ran is in the first line regardless.
+    """
+    lines = textwrap.wrap(command, width=CHARTS.command_width, break_long_words=True, break_on_hyphens=False) or [
+        command
+    ]
+    if len(lines) > CHARTS.command_lines:
+        lines = [
+            *lines[: CHARTS.command_lines - 1],
+            truncate(lines[CHARTS.command_lines - 1], width=CHARTS.command_width - 1) + "…",
+        ]
+    return lines
 
 
 def _asleep_note(series: RunSeries) -> str:

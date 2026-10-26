@@ -28,6 +28,7 @@ treehawk-*.procs.csv
 treehawk-*.header.json
 treehawk-*.summary.json
 treehawk-*.pdf
+treehawk-*.html
 
 # Editors / OS
 .vscode/

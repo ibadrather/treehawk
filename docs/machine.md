@@ -122,14 +122,14 @@ sudo systemctl enable --now treehawk
 
 ## Reading it back
 
-Point [`report` or `pdf`](results.md) at the log directory, a boot directory or
+Point [`report`](results.md) at the log directory, a boot directory or
 a single file. `--since` and `--until` select a time window:
 
 ```bash
 treehawk report /var/lib/treehawk                  # everything kept
 treehawk report /var/lib/treehawk --since 2h       # the last two hours
 treehawk report /var/lib/treehawk --since "2026-09-27 14:00" --until "2026-09-27 15:00"
-treehawk pdf    /var/lib/treehawk -o machine.pdf   # charts
+treehawk report /var/lib/treehawk --pdf -o machine.pdf
 ```
 
 The report lists the top consumers, the largest CPU and memory spikes (when,
