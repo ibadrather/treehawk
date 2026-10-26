@@ -7,6 +7,7 @@ Everything else is a unit test of one piece of that.
 
 from __future__ import annotations
 
+import ctypes.util
 import json
 import os
 import pathlib
@@ -17,9 +18,11 @@ import sys
 import pytest
 
 from treehawk.core.interfaces import Record
-from treehawk.core.values import as_float, as_records, as_sequence
+from treehawk.core.values import as_float, as_mapping, as_records, as_sequence
+from treehawk.gpu import Nvml
 
 WORKLOAD = str(pathlib.Path(__file__).parent / "workload.py")
+GPU_WORKLOAD = str(pathlib.Path(__file__).parent / "gpu_workload.py")
 pytestmark = pytest.mark.integration
 
 
@@ -389,3 +392,36 @@ def test_no_capture_leaves_the_workload_the_terminal(tmp_path: pathlib.Path) -> 
 
     assert not log.with_suffix(".out").exists()
     assert "parent pid=" in drawn  # it reached the terminal directly
+
+
+def test_run_mode_records_the_workload_s_gpu_usage(tmp_path: pathlib.Path) -> None:
+    nvml = Nvml.open()
+    if nvml is None or ctypes.util.find_library("cuda") is None:
+        pytest.skip("needs an NVIDIA GPU and driver")
+    nvml.close()
+    log = tmp_path / "run.jsonl"
+
+    result = treehawk("run", "-i", "0.25", "-q", "-o", str(log), "--", sys.executable, GPU_WORKLOAD, "3", "256")
+
+    assert result.returncode == 0, result.stderr
+    _, samples, summary = read_log(str(log))
+    usage = [as_mapping(s.get("gpu")) for s in samples]
+    peak = max(as_float(u.get("memory_bytes")) or 0.0 for u in usage)
+    # Its own allocation plus the CUDA context - and nothing from whatever else
+    # shares the GPU, such as the desktop.
+    assert 256 * 1024 * 1024 <= peak < 1024 * 1024 * 1024
+    assert max(as_float(u.get("percent")) or 0.0 for u in usage) > 0
+    assert summary["exit_code"] == 0
+
+    report = treehawk("report", str(log))
+    assert "peak memory" in report.stdout
+
+
+def test_no_gpu_leaves_gpu_figures_out(tmp_path: pathlib.Path) -> None:
+    log = tmp_path / "run.jsonl"
+
+    result = treehawk("run", "-i", "0.25", "-q", "--no-gpu", "-o", str(log), "--", sys.executable, "-c", "pass")
+
+    assert result.returncode == 0, result.stderr
+    _, samples, _ = read_log(str(log))
+    assert all("gpu" not in s for s in samples)

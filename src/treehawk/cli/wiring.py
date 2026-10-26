@@ -10,11 +10,13 @@ own PID are all handed in, so the wiring is tested against a fake one.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from treehawk.cli.constants import CLI
 from treehawk.cli.models import Session
 from treehawk.core.aggregate import Aggregator
 from treehawk.core.config import CpuSource, TopConfig, WatchConfig
-from treehawk.core.interfaces import Clock, ProcessMatcher, ProcessSource, Sink
+from treehawk.core.interfaces import Clock, MetricCollector, ProcessGpuSource, ProcessMatcher, ProcessSource, Sink
 from treehawk.core.monitor import Monitor
 from treehawk.core.strategies import build_strategies
 from treehawk.core.tracker import Tracker
@@ -36,6 +38,7 @@ def build_session(
     argv: list[str] | None = None,
     pinned_group: str | None = None,
     marker: str | None = None,
+    collectors: Iterable[MetricCollector] | None = None,
     notes: tuple[str, ...] = (),
 ) -> Session:
     host = platform.host_info()
@@ -72,7 +75,7 @@ def build_session(
         config=config,
         host=host,
         groups=platform.group_source,
-        collectors=build_collectors(config.collectors),
+        collectors=build_collectors(config.collectors) if collectors is None else collectors,
         mode=mode,
         matcher=matcher.describe(),
         argv=argv,
@@ -89,6 +92,7 @@ def build_top_monitor(
     config: TopConfig,
     sink: Sink,
     clock: Clock,
+    gpu: ProcessGpuSource | None = None,
     notes: tuple[str, ...] = (),
 ) -> TopMonitor:
     """Whole-machine tracking, wired to ``platform``."""
@@ -104,6 +108,7 @@ def build_top_monitor(
         host=platform.host_info(),
         system=platform.system_source,
         pacing=build_pacing(config),
+        gpu=gpu,
         memory_kind=platform.memory_kind,
         notes=notes_out,
     )

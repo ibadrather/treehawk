@@ -135,6 +135,16 @@ def _summary_facts(*, summary: Record, header: Record, palette: Palette) -> Rend
             (f"  {format_bytes(group_peak)} peak cgroup" if group_peak is not None else "", palette.text_secondary),
         ),
     )
+    gpu_memory_peak = as_float(summary.get("peak_gpu_memory_bytes"))
+    if gpu_memory_peak is not None:
+        # Only the tracked processes' share: other users of the GPU are not in it.
+        table.add_row(
+            "gpu",
+            Text.assemble(
+                (f"{format_bytes(gpu_memory_peak)} peak memory", f"bold {palette.slot(1)}"),
+                (f"  {format_percent(as_float(summary.get('peak_gpu_percent')))} peak busy", palette.text_secondary),
+            ),
+        )
     asleep = as_float(summary.get("asleep_s"))
     table.add_row(
         "run",

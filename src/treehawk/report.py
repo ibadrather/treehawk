@@ -20,7 +20,7 @@ from typing import Final, TypedDict
 from treehawk.core.aggregate import cpu_seconds_of, peak_rss_of
 from treehawk.core.errors import ReportError
 from treehawk.core.interfaces import Record
-from treehawk.core.values import as_float, as_int, as_record, as_records, epoch_of, peak_of
+from treehawk.core.values import as_float, as_int, as_mapping, as_record, as_records, epoch_of, peak_of
 
 __all__ = ["Report", "ReportError", "SleepTimeline", "build_report", "log_files", "peek_header", "read_records"]
 
@@ -160,6 +160,8 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
     peak_rss: int | None = None
     peak_pss: int | None = None
     peak_group_memory: int | None = None
+    peak_gpu_memory: int | None = None
+    peak_gpu: float | None = None
     cpu_sum = 0.0
     cpu_n = 0
     procs: dict[tuple[object, object], Record] = {}
@@ -180,6 +182,9 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
             peak_rss = peak_of(current=peak_rss, candidate=as_int(record.get("rss_bytes")))
             peak_pss = peak_of(current=peak_pss, candidate=as_int(record.get("pss_bytes")))
             peak_group_memory = peak_of(current=peak_group_memory, candidate=as_int(record.get("group_memory_bytes")))
+            gpu = as_mapping(record.get("gpu"))
+            peak_gpu_memory = peak_of(current=peak_gpu_memory, candidate=as_int(gpu.get("memory_bytes")))
+            peak_gpu = peak_of(current=peak_gpu, candidate=as_float(gpu.get("percent")))
             if cpu is not None:
                 cpu_sum += cpu
                 cpu_n += 1
@@ -194,6 +199,8 @@ def build_report(path: str, *, top_n: int = 5) -> Report:
         "peak_rss_bytes": peak_rss,
         "peak_pss_bytes": peak_pss,
         "peak_group_memory_bytes": peak_group_memory,
+        "peak_gpu_memory_bytes": peak_gpu_memory,
+        "peak_gpu_percent": peak_gpu,
         "peak_n_procs": peak_n_procs,
         "cpu_seconds_used": cpu_seconds_used,
         "duration_s": duration,

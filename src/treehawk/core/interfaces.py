@@ -123,11 +123,7 @@ class SystemSource(Protocol):
 
 @runtime_checkable
 class ProcessGpuSource(Protocol):
-    """Reads per-process GPU usage.
-
-    No implementation ships yet; ``top`` ranks by GPU memory as soon as one is
-    registered, without any change to the ranking itself.
-    """
+    """Reads per-process GPU usage (NVIDIA: :class:`treehawk.gpu.Nvml`)."""
 
     def read(self) -> Mapping[int, GpuUsage]:
         """``{pid: usage}`` for every process using a GPU right now."""

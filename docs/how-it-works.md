@@ -162,5 +162,7 @@ named again only after growing another 25%.
   treehawk keeps on screen and for the summary is capped.
 - A spike needs 15 s of history for that process, and a leak suspect needs 30
   minutes of steady growth.
-- Tracking GPU usage is planned but not collected yet. The `top` log already
-  has a column for it.
+- GPU usage is read for NVIDIA GPUs only, through the driver's own NVML
+  library, and only for the tracked processes: the GPU memory they hold and
+  their share of GPU compute time. A GPU that cannot report compute time per
+  process logs `null` for it. AMD, Intel and Apple GPUs are not read yet.
